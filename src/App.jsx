@@ -32,6 +32,7 @@ const SpeakingPractice = lazy(() =>
 const Vocabulary = lazy(() => import("@/pages/Vocabulary"));
 const ThaiCorpus = lazy(() => import("@/pages/ThaiCorpus"));
 const NewsListening = lazy(() => import("@/pages/NewsListening"));
+const NewsArticle = lazy(() => import("@/pages/NewsArticle"));
 const LessonText = lazy(() => import("@/pages/LessonText"));
 const Conversation = lazy(() => import("@/pages/Conversation"));
 const Plan = lazy(() => import("@/pages/Plan"));
@@ -349,6 +350,15 @@ export default function App() {
           element={
             <MainLayout>
               <NewsListening />
+            </MainLayout>
+          }
+        />
+
+        <Route
+          path="/corpus/read"
+          element={
+            <MainLayout>
+              <NewsArticle />
             </MainLayout>
           }
         />

@@ -516,3 +516,19 @@ function doSpeakThai(text, options = {}) {
     stopActiveAudio();
   };
 }
+
+/* ============================================================
+   从混合文本中提取泰语片段（用于朗读 AI 回复的泰语部分）
+   返回最长的泰语片段；无泰语返回空串
+============================================================ */
+export function extractThaiText(text) {
+  const matches =
+    String(text || "").match(
+      /[\u0E00-\u0E7F][\u0E00-\u0E7F\s\u0E31\u0E34-\u0E3A\u0E47-\u0E4E.,!?;:()'\-]*/g
+    ) || [];
+  const cleaned = matches
+    .map((m) => m.trim())
+    .filter((m) => m.length >= 2);
+  if (cleaned.length === 0) return "";
+  return cleaned.sort((a, b) => b.length - a.length)[0];
+}

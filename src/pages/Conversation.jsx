@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { conversationScenes, CONVERSATION_CONFIG } from "@/data/conversations";
 import { getConversationScenes } from "@/api/vocabulary";
+import { askAiTeacher, getAiTeacherQuota } from "@/api/aiTeacher";
 import { ThaiRoof } from "@/components/common/ThaiMotifs";
 import { ThaiCorner, ParticleField } from "@/components/common/ThaiDecor";
 import { speakThai, stopThaiAudio } from "@/lib/thaiSpeech";
@@ -54,6 +55,8 @@ export default function Conversation() {
   const [currentDialogueIndex, setCurrentDialogueIndex] = useState(0);
   const [score, setScore] = useState({ vocabLearned: 0, stagesComplete: 0 });
   const [completed, setCompleted] = useState(false);
+  const [quota, setQuota] = useState(null);       // { freeChatDaily, usedToday, remainingToday, isVip }
+  const [aiNotice, setAiNotice] = useState("");   // AI 模式状态提示（不可用/配额用尽）
 
   const [scenes, setScenes] = useState(conversationScenes);
   const bottomRef = useRef(null);
@@ -86,6 +89,7 @@ export default function Conversation() {
     setCurrentDialogueIndex(0);
     setScore({ vocabLearned: 0, stagesComplete: 0 });
     setCompleted(false);
+    setAiNotice("");
   }, []);
 
   const closeScene = useCallback(() => {
@@ -126,26 +130,113 @@ export default function Conversation() {
     return null;
   }, [activeScene]);
 
+  /* ── AI 自由对话（DeepSeek 结构化回复）──
+       成功返回 { thai, roman, chinese, vocab, grammar, culturalNote, nextStage }
+       失败（网络 / 未配置 / 配额用尽）返回 null，调用方回退脚本 */
+  const tryAiReply = useCallback(async (text, dialogue) => {
+    try {
+      // 最近 8 条对话作为上下文
+      const history = messages.slice(-8).map((m) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.text || "",
+      }));
+
+      const res = await askAiTeacher({
+        message: text,
+        action: "conversation",
+        scene: {
+          id: activeScene.id,
+          title: activeScene.title,
+          description: activeScene.description,
+          sceneTip: activeScene.sceneTip,
+        },
+        stage: dialogue
+          ? { stage: dialogue.stage, prompt: dialogue.prompt }
+          : { stage: currentStage, prompt: "" },
+        history,
+      });
+
+      const data = res?.data;
+      if (data?.thai) return data;
+      return null;
+    } catch (err) {
+      // 429：免费配额用尽
+      if (err?.response?.status === 429) {
+        setAiNotice("今日 AI 自由对话次数已用完，正在用内置脚本回复。开通 VIP 即可无限自由对话。");
+        setQuota((q) => (q ? { ...q, remainingToday: 0 } : q));
+      } else if (err?.response?.status === 503 || err?.response?.status === 502 || err?.code === "ERR_NETWORK") {
+        setAiNotice("AI 老师暂时不可用，正在用内置脚本回复。");
+      }
+      return null;
+    }
+  }, [activeScene, currentStage, messages]);
+
+  /* ── 应用 AI 回复：渲染 + 评分 + 阶段推进 ── */
+  const applyAiReply = useCallback((data, dialogue) => {
+    setMessages((prev) => [...prev, {
+      id: `ai-${Date.now()}`,
+      role: "ai",
+      text: data.thai,
+      roman: data.roman,
+      chinese: data.chinese,
+      vocab: data.vocab,
+      grammar: data.grammar,
+      culturalNote: data.culturalNote,
+      isAI: true,
+    }]);
+    setScore((prev) => ({
+      vocabLearned: prev.vocabLearned + (data.vocab?.length || 0),
+      stagesComplete: prev.stagesComplete + 1,
+    }));
+
+    // AI 判断对话自然进入下一话题 → 推进阶段；否则停留当前话题继续自由对话
+    if (data.nextStage && dialogue?.nextStage) {
+      setTimeout(() => {
+        setCurrentStage(dialogue.nextStage);
+        setCurrentDialogueIndex((prev) => prev + 1);
+        setTyping(false);
+      }, 400);
+    } else if (data.nextStage && !dialogue?.nextStage) {
+      setTyping(false);
+      setTimeout(() => setCompleted(true), 1200);
+    } else {
+      setTyping(false);
+    }
+  }, []);
+
   /* ── 发送消息 ── */
-  const sendMessage = useCallback((raw) => {
+  const sendMessage = useCallback(async (raw) => {
     const text = (raw ?? input).trim();
     if (!text || !activeScene || typing || completed) return;
 
     const dialogue = getCurrentDialogue();
-    const response = matchResponse(dialogue, text);
 
     // 用户消息
     const userMsg = { id: `u-${Date.now()}`, role: "user", text };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setTyping(true);
+
+    // 1) 优先 AI 自由对话（AI 可用时）
+    const aiReply = await tryAiReply(text, dialogue);
+    if (aiReply) {
+      applyAiReply(aiReply, dialogue);
+      // 回复成功后刷新剩余配额
+      getAiTeacherQuota()
+        .then((res) => setQuota(res?.data || null))
+        .catch(() => {});
+      return;
+    }
+
+    // 2) 回退内置脚本（AI 不可用 / 配额用尽 / 网络失败）
+    const response = matchResponse(dialogue, text);
 
     const { min, max } = CONVERSATION_CONFIG.typingDelay;
     const delay = min + Math.random() * (max - min);
 
     setTimeout(() => {
       if (response) {
-        // 匹配成功 → AI 回复
+        // 匹配成功 → 脚本 AI 回复
         const aiMsg = {
           id: `ai-${Date.now()}`,
           role: "ai",
@@ -157,8 +248,8 @@ export default function Conversation() {
           culturalNote: response.culturalNote,
           isNewStage: true,
         };
-        setMessages(prev => [...prev, aiMsg]);
-        setScore(prev => ({
+        setMessages((prev) => [...prev, aiMsg]);
+        setScore((prev) => ({
           vocabLearned: prev.vocabLearned + (response.vocab?.length || 0),
           stagesComplete: prev.stagesComplete + 1,
         }));
@@ -167,7 +258,7 @@ export default function Conversation() {
         if (dialogue?.nextStage) {
           setTimeout(() => {
             setCurrentStage(dialogue.nextStage);
-            setCurrentDialogueIndex(prev => prev + 1);
+            setCurrentDialogueIndex((prev) => prev + 1);
             setTyping(false);
           }, 500);
         } else {
@@ -178,7 +269,7 @@ export default function Conversation() {
       } else {
         // 未匹配 → fallback
         const fb = activeScene.fallback;
-        setMessages(prev => [...prev, {
+        setMessages((prev) => [...prev, {
           id: `fb-${Date.now()}`,
           role: "ai",
           text: fb.thai,
@@ -190,7 +281,7 @@ export default function Conversation() {
         setTyping(false);
       }
     }, delay);
-  }, [input, activeScene, typing, completed, getCurrentDialogue, matchResponse]);
+  }, [input, activeScene, typing, completed, getCurrentDialogue, matchResponse, tryAiReply, applyAiReply]);
 
   /* ── 滚动到底部 ── */
   useEffect(() => {
@@ -198,6 +289,17 @@ export default function Conversation() {
   }, [messages, typing, completed]);
 
   useEffect(() => () => stopThaiAudio(), []);
+
+  /* ── 拉取 AI 老师对话配额（判断自由对话是否可用）── */
+  useEffect(() => {
+    let cancelled = false;
+    getAiTeacherQuota()
+      .then((res) => {
+        if (!cancelled) setQuota(res?.data || null);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   /* ════════════════════════════════════════
      场景选择页
@@ -227,9 +329,21 @@ export default function Conversation() {
         <div className="flex items-start gap-3 rounded-2xl border border-yellow-300/[0.08] bg-gradient-to-r from-yellow-300/[0.05] via-white/[0.02] to-emerald-400/[0.04] p-4">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-300/70" />
           <p className="text-xs leading-relaxed text-white/40">
-            <span className="font-semibold text-white/70">Demo 模式</span>
-            {" · "}
-            当前回复来自内置多轮对话脚本，每个场景包含 4 轮渐进式对话。未来接入真实 AI 后自动替换。
+            {quota?.isVip || (quota && quota.remainingToday > 0) ? (
+              <>
+                <span className="font-semibold text-emerald-300/80">AI 自由对话</span>
+                {" · "}
+                已接入 DeepSeek，AI 老师会根据场景自由接话；AI 不可用时自动回退内置脚本。
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-white/70">内置对话脚本</span>
+                {" · "}
+                {quota && !quota.isVip && quota.remainingToday <= 0
+                  ? "今日 AI 自由对话次数已用完，开通 VIP 后可无限自由对话。"
+                  : "当前回复来自内置多轮对话脚本，每个场景包含 4 轮渐进式对话。"}
+              </>
+            )}
           </p>
         </div>
 
@@ -345,6 +459,31 @@ export default function Conversation() {
         {dialogue?.prompt && !completed && (
           <p className="mt-2 text-[10px] text-white/20">💡 {dialogue.prompt}</p>
         )}
+        {aiNotice && (
+          <p className="mt-2 text-[10px] text-yellow-200/70">⚠️ {aiNotice}</p>
+        )}
+      </div>
+
+      {/* AI 自由对话状态条 */}
+      <div className="flex items-center justify-between gap-2 rounded-2xl border border-emerald-300/[0.08] bg-emerald-400/[0.04] px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300/50" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300" />
+          </span>
+          {quota?.isVip ? (
+            <span className="text-xs text-emerald-200/90">AI 自由对话 · VIP 无限</span>
+          ) : quota && quota.remainingToday > 0 ? (
+            <span className="text-xs text-emerald-100/70">
+              AI 自由对话 · 今日剩余 <b className="text-emerald-200">{quota.remainingToday}</b> / {quota.freeChatDaily} 次
+            </span>
+          ) : quota ? (
+            <span className="text-xs text-yellow-200/70">AI 自由对话次数已用完 · 正在使用内置脚本</span>
+          ) : (
+            <span className="text-xs text-white/35">连接 AI 老师中...</span>
+          )}
+        </div>
+        <span className="text-[10px] text-white/25">AI 老师会根据场景自由接话</span>
       </div>
 
       {/* 场景提示 */}

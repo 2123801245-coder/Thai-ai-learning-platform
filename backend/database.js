@@ -256,6 +256,20 @@ db.serialize(() => {
   `);
 
   // ================================
+  // 新闻整篇阅读缓存表
+  //（按需抓取 ThaiPBS 文章正文，同一篇只抓取一次；
+  //  value 存 JSON：{title, summary, paragraphs[], zh[], roman[], url, date}）
+  // ================================
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS news_articles (
+      id TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // ================================
   // 新闻听力练习记录表
   //（每日新闻听力：每天练习的新闻数 / 填空正确率 / 跟读平均分）
   // 每次练习写一行：date 为泰国时区日期（YYYY-MM-DD），
@@ -411,6 +425,33 @@ db.serialize(() => {
       usage_date TEXT NOT NULL,
       word_count INTEGER DEFAULT 0,
       PRIMARY KEY (user_id, usage_date)
+    )
+  `);
+
+  // ================================
+  // AI 泰语老师对话配额表
+  //（免费用户每日限 N 次对话，VIP 无限；按泰国时区日期归档）
+  // ================================
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS ai_teacher_usage (
+      user_id INTEGER NOT NULL,
+      usage_date TEXT NOT NULL,
+      message_count INTEGER DEFAULT 0,
+      PRIMARY KEY (user_id, usage_date)
+    )
+  `);
+
+  // ================================
+  // AI 泰语老师长期记忆表
+  //（记住学生名字/水平/兴趣/常见错误，跨会话生效）
+  // ================================
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS ai_teacher_memory (
+      user_id INTEGER PRIMARY KEY,
+      memory TEXT DEFAULT '{}',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 

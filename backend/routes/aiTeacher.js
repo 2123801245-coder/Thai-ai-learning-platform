@@ -11,7 +11,10 @@
 
 import express from "express";
 import dotenv from "dotenv";
+import db from "../database.js";
 import { authenticate } from "./auth.js";
+import { getQuotaSetting } from "./features.js";
+import { createNotification } from "./notifications.js";
 
 dotenv.config();
 
@@ -24,6 +27,199 @@ const TIMEOUT_MS = 45000;
 
 export function isAiTeacherEnabled() {
   return !!API_KEY;
+}
+
+/* ============================================================
+   AI 老师免费对话额度
+   （免费用户每日限 N 次对话，VIP 无限。）
+   优先级：设置中心管理员配置 > 环境变量 AI_TEACHER_FREE_DAILY > 默认 10
+============================================================ */
+
+function getFreeChatDaily() {
+  return getQuotaSetting(
+    "aiTeacherFreeDaily",
+    Number(process.env.AI_TEACHER_FREE_DAILY) || 10
+  );
+}
+
+function isVipActive(user) {
+  if (!user || !user.is_vip) return false;
+  if (!user.vip_expires_at) return false;
+  const expiry = new Date(String(user.vip_expires_at).replace(" ", "T") + "Z");
+  if (Number.isNaN(expiry.getTime())) return false;
+  return expiry.getTime() > Date.now();
+}
+
+function todayBangkok() {
+  return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function getChatUsage(userId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      "SELECT message_count FROM ai_teacher_usage WHERE user_id = ? AND usage_date = ?",
+      [userId, todayBangkok()],
+      (err, row) => {
+        if (err) return reject(err);
+        resolve(row ? row.message_count : 0);
+      }
+    );
+  });
+}
+
+function incrementChatUsage(userId) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO ai_teacher_usage (user_id, usage_date, message_count)
+       VALUES (?, ?, 1)
+       ON CONFLICT(user_id, usage_date)
+       DO UPDATE SET message_count = message_count + 1`,
+      [userId, todayBangkok()],
+      (err) => (err ? reject(err) : resolve())
+    );
+  });
+}
+
+function getVipUser(userId) {
+  return new Promise((resolve) => {
+    db.get("SELECT is_vip, vip_expires_at FROM users WHERE id = ?", [userId], (err, row) =>
+      err ? resolve(null) : resolve(row || null)
+    );
+  });
+}
+
+async function quotaPayload(userId) {
+  const used = await getChatUsage(userId);
+  const freeChatDaily = await getFreeChatDaily();
+  const vipUser = await getVipUser(userId);
+  return {
+    freeChatDaily,
+    usedToday: used,
+    remainingToday: Math.max(0, freeChatDaily - used),
+    isVip: isVipActive(vipUser),
+  };
+}
+
+/* ============================================================
+   学生长期记忆（跨会话）
+   记住学生名字/水平/兴趣/常见错误，每次对话注入 system prompt
+============================================================ */
+
+function getAiMemory(userId) {
+  return new Promise((resolve) => {
+    db.get(
+      "SELECT memory FROM ai_teacher_memory WHERE user_id = ?",
+      [userId],
+      (err, row) => {
+        if (err || !row) return resolve(null);
+        try {
+          const m = JSON.parse(row.memory);
+          resolve(m && typeof m === "object" ? m : null);
+        } catch {
+          resolve(null);
+        }
+      }
+    );
+  });
+}
+
+function saveAiMemory(userId, memory) {
+  return new Promise((resolve) => {
+    db.run(
+      `INSERT INTO ai_teacher_memory (user_id, memory, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE
+         SET memory = excluded.memory, updated_at = excluded.updated_at`,
+      [userId, JSON.stringify(memory || {}), new Date().toISOString()],
+      () => resolve()
+    );
+  });
+}
+
+/* 构建带学生画像 + 长期记忆的 system prompt */
+function buildTeacherSystemPrompt(action, profile, memory) {
+  const base = SYSTEM_PROMPTS[action] || SYSTEM_PROMPTS.chat;
+  const parts = [base];
+
+  const profileLines = [];
+  if (profile?.name) profileLines.push(`名字：${profile.name}`);
+  if (profile?.level) profileLines.push(`当前水平：${profile.level}`);
+  if (profile?.streak) profileLines.push(`连续学习：${profile.streak} 天`);
+  if (profile?.mastered) profileLines.push(`已掌握词汇：约 ${profile.mastered} 词`);
+  if (profileLines.length > 0) {
+    parts.push(
+      `【学生画像】\n${profileLines.join("，")}\n请根据学生水平调整讲解深度：水平低多用简单句、多重复、少一次讲太多；水平高可以多讲地道表达和细微差别。`
+    );
+  }
+
+  if (memory && Object.keys(memory).length > 0) {
+    const lines = [];
+    if (memory.studentName) lines.push(`学生名字：${memory.studentName}`);
+    if (memory.genderHint) lines.push(`性别线索：${memory.genderHint}（影响句尾礼貌词 ครับ/ค่ะ 的选择）`);
+    if (memory.level) lines.push(`学生水平评估：${memory.level}`);
+    if (memory.interests?.length) lines.push(`学生兴趣：${memory.interests.slice(0, 4).join("、")}`);
+    if (memory.goals?.length) lines.push(`学生学习目标：${memory.goals.slice(0, 3).join("、")}`);
+    if (memory.mistakes?.length) lines.push(`学生常见错误：${memory.mistakes.slice(0, 4).join("；")}（纠正时先肯定再温柔提示）`);
+    if (memory.preferences?.length) lines.push(`学生偏好：${memory.preferences.slice(0, 4).join("、")}`);
+    if (lines.length > 0) {
+      parts.push(
+        `【长期记忆（跨会话）】\n${lines.join("\n")}\n请自然地使用这些记忆：用学生熟悉的话题举例、避免重复解释已掌握的内容、纠正已知错误时说鼓励的话。不要向学生提及「记忆」这个词。`
+      );
+    }
+  }
+
+  return parts.join("\n\n");
+}
+
+/* 每 5 轮对话后，用 DeepSeek 总结并更新学生长期记忆（异步，失败不影响主对话） */
+async function summarizeAndSaveMemory(userId, history) {
+  try {
+    const current = (await getAiMemory(userId)) || {};
+    const system = `你是 AI 泰语老师的记忆系统。下面是学生说过的话，请提取学生的长期记忆信息。
+
+必须只返回一个 JSON 对象（不要输出任何其他文字），结构如下：
+{
+  "studentName": "学生名字（未提到则 null）",
+  "genderHint": "性别线索：男生写\"男性（用ครับ）\"，女生写\"女性（用ค่ะ）\"，未知 null",
+  "level": "水平评估：beginner / elementary / intermediate / advanced",
+  "interests": ["兴趣主题"],
+  "goals": ["学习目标"],
+  "mistakes": ["最近反复出现的泰语错误"],
+  "preferences": ["表达偏好"]
+}
+示例输出：{"studentName":"李明","genderHint":"男性（用ครับ）","level":"beginner","interests":["美食","旅游"],"goals":["去泰国自由行"],"mistakes":[],"preferences":[]}
+
+已有记忆：${JSON.stringify(current)}
+规则：只保留长期有效的重要信息；与已有记忆冲突时以新信息为准；没有新信息就保持原值；interests/goals/mistakes 可以合并新旧值并去重。`;
+    // 只传学生消息（assistant 回复不参与记忆提取，避免格式干扰）
+    const userOnly = history
+      .filter((h) => h?.role === "user")
+      .slice(-15)
+      .map((h) => ({
+        role: "user",
+        content: String(h?.content || "").slice(0, 500),
+      }));
+    const messages = [
+      { role: "system", content: system },
+      ...userOnly,
+    ];
+    // 不用 json_object（历史是纯文本，模型更容易模仿输出格式），靠 few-shot + 宽容解析
+    const raw = await callDeepSeekMessages(messages, 0.2, 600);
+    const parsed = parseRawJson(raw);
+    if (parsed && typeof parsed === "object") {
+      const merged = { ...current };
+      for (const key of Object.keys(parsed)) {
+        const v = parsed[key];
+        if (v === null || v === undefined || v === "") continue;
+        if (Array.isArray(v) && v.length === 0) continue;
+        merged[key] = v;
+      }
+      await saveAiMemory(userId, merged);
+    }
+  } catch (e) {
+    // 记忆总结失败不影响主对话（打日志便于排查）
+    console.warn("[aiTeacher] 记忆总结失败:", e?.message || e);
+  }
 }
 
 /* ============================================================
@@ -66,6 +262,117 @@ const SYSTEM_PROMPTS = {
 
 要求：实用、地道、鼓励为主，讲解简洁不啰嗦。`,
 };
+
+/* ============================================================
+   对话练习（conversation）—— 结构化自由对话
+   返回严格 JSON：thai/roman/chinese/vocab/grammar/culturalNote/nextStage
+============================================================ */
+
+function buildConversationSystemPrompt(scene, stage) {
+  const sceneTitle = scene?.title || "日常交流";
+  const sceneDesc = scene?.description || "";
+  const sceneTip = scene?.sceneTip || "";
+  const stagePrompt = stage?.prompt || "";
+  return `你叫「阿泰」，是 ThaiAI 学习平台的 AI 泰语老师。学生正在「对话练习」页面和你进行场景化自由对话。
+
+【当前场景】${sceneTitle}${sceneDesc ? " - " + sceneDesc : ""}
+${sceneTip ? "【场景提示】" + sceneTip : ""}
+${stagePrompt ? "【当前对话目标】" + stagePrompt : ""}
+
+要求：
+- 用泰语回复为主，泰语必须自然地道，符合当前场景。
+- 必须返回【严格 JSON】，不要输出任何 JSON 之外的文字，不要用 markdown 代码围栏。
+- JSON 结构（所有字段必须有）：
+{
+  "thai": "泰语回复（1-3 句，自然口语）",
+  "roman": "整句罗马音注音（RTGS 风格，带声调符号如 sà-wàt-dii）",
+  "chinese": "整句中文翻译",
+  "vocab": [{"th": "生词", "roman": "注音", "cn": "中文", "example": "含该词的短句（可选）"}],
+  "grammar": "本句语法/用法讲解（中文，1-2 句；没有可留空字符串）",
+  "culturalNote": "相关泰国文化小知识（中文，1-2 句；没有可留空字符串）",
+  "nextStage": true 或 false
+}
+- vocab 只列 1-3 个最有教学价值的新词，避免重复已有词汇。
+- 判断 nextStage：当学生已经自然完成当前对话目标、且对话可以进入下一话题时返回 true（对话推进）；学生还在练习当前话题时返回 false。
+- 学生说中文时，先给出对应的泰语表达再继续对话；学生说泰语时，先纠正明显错误（如果有），再自然接话。
+- 保持人设：耐心、幽默、鼓励，像真人老师一样追问，不要一次倒完所有信息。
+- 不要编造泰语词汇，不确定时在 chinese 里说明。`;
+}
+
+/* 通用 JSON 提取：返回原始对象（不经过字段白名单），供记忆总结等使用 */
+function parseRawJson(content) {
+  let text = String(content || "").trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("未找到 JSON 对象");
+  }
+  const parsed = JSON.parse(text.slice(start, end + 1));
+  return parsed && typeof parsed === "object" ? parsed : null;
+}
+
+/* 从 DeepSeek 回复中提取 JSON（容忍 ```json 围栏与前后杂文） */
+function parseJsonResponse(content) {
+  let text = String(content || "").trim();
+  // 去掉 markdown 代码围栏
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+  // 提取第一个 { ... } 块
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("AI 未返回 JSON 结构");
+  }
+  const parsed = JSON.parse(text.slice(start, end + 1));
+  return {
+    thai: String(parsed.thai || "").trim(),
+    roman: String(parsed.roman || "").trim(),
+    chinese: String(parsed.chinese || "").trim(),
+    vocab: Array.isArray(parsed.vocab) ? parsed.vocab : [],
+    grammar: parsed.grammar ? String(parsed.grammar).trim() : "",
+    culturalNote: parsed.culturalNote ? String(parsed.culturalNote).trim() : "",
+    nextStage: parsed.nextStage === true,
+  };
+}
+
+/* DeepSeek 调用（支持完整 messages 数组） */
+async function callDeepSeekMessages(messages, temperature = 0.8, maxTokens = 1200, jsonMode = false) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+        stream: false,
+        ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`DeepSeek HTTP ${res.status}: ${body.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error("DeepSeek 返回内容为空");
+    return content.trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /* ============================================================
    DeepSeek 调用（OpenAI 兼容 chat completions）
@@ -143,13 +450,128 @@ router.post("/teacher", authenticate, async (req, res) => {
       });
     }
 
-    const systemPrompt =
-      SYSTEM_PROMPTS[action] || SYSTEM_PROMPTS.chat;
+    // ── 免费对话配额：非 VIP 每日限 N 次，VIP 无限 ──
+    const vipUser = await getVipUser(req.userId);
+    const isVip = isVipActive(vipUser);
+    if (!isVip) {
+      const used = await getChatUsage(req.userId);
+      const freeChatDaily = await getFreeChatDaily();
+      if (used >= freeChatDaily) {
+        /* 每日免费额度用尽提醒（同 key 去重：更新原通知而非堆积） */
+        createNotification({
+          userId: req.userId,
+          type: "额度提醒",
+          title: "今日 AI 老师免费次数已用完",
+          content: `今日免费对话 ${freeChatDaily} 次已用完，开通 VIP 即可无限与 AI 老师对话`,
+          icon: "🧑‍🏫",
+          action: "ai-teacher-quota-exhausted",
+          key: "ai-teacher-quota-exhausted",
+        });
+        return res.status(429).json({
+          message: `今日免费对话次数已用完（${freeChatDaily} 次），开通 VIP 即可无限练习`,
+          used,
+          limit: freeChatDaily,
+          limitExceeded: true,
+        });
+      }
+    }
 
-    const response = await callDeepSeek(
-      systemPrompt,
-      message
-    );
+    // ── conversation：场景化自由对话（结构化 JSON 输出）──
+    if (action === "conversation") {
+      const scene = req.body?.scene || {};
+      const stage = req.body?.stage || {};
+      const history = Array.isArray(req.body?.history)
+        ? req.body.history.slice(-8)
+        : [];
+
+      const systemPrompt = buildConversationSystemPrompt(scene, stage);
+      const messages = [
+        { role: "system", content: systemPrompt },
+        ...history.map((h) => ({
+          role: h?.role === "user" ? "user" : "assistant",
+          content: String(h?.content || "").slice(0, 500),
+        })),
+        { role: "user", content: message },
+      ];
+
+      // json_object 模式强制 JSON 输出；模型偶发网络抖动/非 JSON 时重试一次
+      let raw = null;
+      let parsed = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          raw = await callDeepSeekMessages(messages, attempt === 0 ? 0.8 : 0.4, 1000, true);
+          parsed = parseJsonResponse(raw);
+          break;
+        } catch (attemptErr) {
+          if (attempt === 1) throw attemptErr;
+        }
+      }
+
+      // 兜底：极端情况下仍无 JSON，把原始回复作为泰语文本包装（保证对话不中断）
+      if (!parsed || !parsed.thai) {
+        if (raw && raw.trim().length > 0) {
+          parsed = {
+            thai: raw.trim().slice(0, 300),
+            roman: "",
+            chinese: "",
+            vocab: [],
+            grammar: "",
+            culturalNote: "",
+            nextStage: false,
+          };
+        } else {
+          throw new Error("AI 未返回有效泰语回复");
+        }
+      }
+
+      // 成功才扣减
+      if (!isVip) {
+        await incrementChatUsage(req.userId).catch(() => {});
+      }
+
+      return res.json({ success: true, ...parsed });
+    }
+
+    // ── chat / pronunciation / speaking：注入学生画像 + 长期记忆 + 多轮历史 ──
+    const profile = req.body?.profile || {};
+    const history = Array.isArray(req.body?.history)
+      ? req.body.history.slice(-12)
+      : [];
+
+    const memory = await getAiMemory(req.userId);
+    const systemPrompt = buildTeacherSystemPrompt(action, profile, memory);
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...history.map((h) => ({
+        role: h?.role === "user" ? "user" : "assistant",
+        content: String(h?.content || "").slice(0, 1000),
+      })),
+      { role: "user", content: message },
+    ];
+
+    const response = await callDeepSeekMessages(messages, 0.7, 1200);
+
+    // 成功返回才扣减（超时/失败不浪费用户次数）
+    if (!isVip) {
+      await incrementChatUsage(req.userId).catch(() => {});
+    }
+
+    // 每 5 轮对话后异步总结并更新学生长期记忆（不阻塞回复）
+    const userMsgCount =
+      history.filter((h) => h?.role === "user").length + 1;
+    if (userMsgCount >= 5 && userMsgCount % 5 === 0) {
+      summarizeAndSaveMemory(
+        req.userId,
+        [
+          ...history.map((h) => ({
+            role: h?.role === "user" ? "user" : "assistant",
+            content: String(h?.content || ""),
+          })),
+          { role: "user", content: message },
+        ]
+      ).catch(() => {});
+    }
 
     return res.json({
       success: true,
@@ -169,6 +591,54 @@ router.post("/teacher", authenticate, async (req, res) => {
         ? "AI 老师响应超时，请稍后再试"
         : "AI 老师暂时没有回应，请稍后再试",
     });
+  }
+});
+
+/* ============================================================
+   GET /api/ai/teacher/memory
+   学生长期记忆摘要（前端展示「老师记得你」）
+============================================================ */
+
+router.get("/teacher/memory", authenticate, async (req, res) => {
+  try {
+    const memory = (await getAiMemory(req.userId)) || {};
+    const hasMemory = Object.keys(memory).length > 0;
+    res.json({
+      success: true,
+      memory,
+      hasMemory,
+      summary: hasMemory
+        ? [
+            memory.studentName ? `名字：${memory.studentName}` : null,
+            memory.level ? `水平：${memory.level}` : null,
+            memory.interests?.length
+              ? `兴趣：${memory.interests.slice(0, 3).join("、")}`
+              : null,
+            memory.goals?.length
+              ? `目标：${memory.goals.slice(0, 2).join("、")}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : "",
+    });
+  } catch (error) {
+    console.error("[aiTeacher] memory error:", error);
+    res.status(500).json({ message: "查询记忆失败" });
+  }
+});
+
+/* ============================================================
+   GET /api/ai/teacher/quota
+   今日 AI 老师免费对话额度
+============================================================ */
+
+router.get("/teacher/quota", authenticate, async (req, res) => {
+  try {
+    res.json(await quotaPayload(req.userId));
+  } catch (error) {
+    console.error("[aiTeacher] quota error:", error);
+    res.status(500).json({ message: "查询额度失败" });
   }
 });
 

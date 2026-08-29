@@ -145,3 +145,111 @@ export async function translateNewsBatch(items) {
   }
   return out;
 }
+
+
+/* ============================================================
+   整篇文章翻译（新闻正文）：把泰语段落数组翻成中文 + 罗马音
+   输入: paragraphs: string[]（泰语段落）
+   输出: { zh: string[], roman: string[] }（与输入同序；失败的段落留空串）
+   未配置 key 时返回 null。
+============================================================ */
+
+async function translateArticleChunk(paragraphs) {
+  const payload = paragraphs.map((p, i) => ({ id: i, text: p }));
+
+  const systemPrompt = `你是资深泰语教学专家，精通泰语→简体中文翻译与泰语罗马音注音。
+
+任务：把给定的泰语新闻段落逐段翻译成简体中文，并为每段生成罗马音注音。
+
+罗马音注音要求：
+- 使用 RTGS 风格的拉丁字母转写，标注声调符号（如 níi、mâak、khráp、săi），
+  风格与常见泰语教材一致。
+- 词与词之间用空格分隔。
+- 泰语固有词按读音转写，外来语保留其罗马拼写风格。
+- 段落里如果包含数字、日期、专名，按实际读音转写。
+
+输出要求：
+- 只输出一个 JSON 对象，不要任何额外文字或 Markdown 代码块标记。
+- JSON 结构必须是：{"items":[{"id":0,"zh":"...","roman":"..."}]}
+- 数组顺序与输入完全一致，id 与输入对应。
+- 输入段落为空字符串时，对应 zh、roman 也必须是空字符串。
+- zh 使用简体中文，自然、通顺、符合新闻语体，逐段对应翻译，不要合并或拆分段落。`;
+
+  const userPrompt = `请翻译以下泰语新闻段落：\n${JSON.stringify(payload, null, 2)}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`${BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`DeepSeek HTTP ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error("DeepSeek 返回为空");
+    const parsed = JSON.parse(content);
+    const list = parsed?.items || [];
+    if (!Array.isArray(list) || list.length !== paragraphs.length) {
+      throw new Error(`DeepSeek 返回条数不符: ${list.length} != ${paragraphs.length}`);
+    }
+    const zh = [];
+    const roman = [];
+    for (let i = 0; i < paragraphs.length; i++) {
+      const row = list.find((r) => r && r.id === i) || {};
+      zh.push((row.zh || "").trim());
+      roman.push((row.roman || "").trim());
+    }
+    return { zh, roman };
+  } catch (err) {
+    console.error(`[translate] 整篇翻译失败: ${err.name === "AbortError" ? "超时" : err.message}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function translateArticleBody(paragraphs) {
+  if (!isTranslateEnabled() || !Array.isArray(paragraphs) || !paragraphs.length) {
+    return null;
+  }
+  const total = paragraphs.length;
+  const BATCH = 8;
+  const zh = new Array(total).fill("");
+  const roman = new Array(total).fill("");
+  for (let i = 0; i < total; i += BATCH) {
+    const chunk = paragraphs.slice(i, i + BATCH);
+    let result = await translateArticleChunk(chunk);
+    if (!result) {
+      await sleep(1200);
+      result = await translateArticleChunk(chunk);
+    }
+    if (result) {
+      for (let j = 0; j < chunk.length; j++) {
+        if (i + j < total) {
+          zh[i + j] = result.zh[j] || "";
+          roman[i + j] = result.roman[j] || "";
+        }
+      }
+    }
+  }
+  const anyTranslated = zh.some((t) => t);
+  if (!anyTranslated) return null;
+  return { zh, roman };
+}

@@ -18,7 +18,7 @@ import db from "../database.js";
 import { authenticate } from "./auth.js";
 import { getQuotaSetting } from "./features.js";
 import { createNotification } from "./notifications.js";
-import { translateNewsBatch, isTranslateEnabled } from "../translate.js";
+import { translateNewsBatch, translateArticleBody, isTranslateEnabled } from "../translate.js";
 
 const router = Router();
 
@@ -224,6 +224,123 @@ function parseNewsPage(html) {
   });
 
   return items.slice(0, 20);
+}
+
+/* ============================================================
+   整篇正文：按需抓取单篇文章（news/content/{id}）
+   解析 <article> 内 aside 摘要 + item-description 的 <p> 正文段落
+   失败返回 null（调用方按原样返回，不阻塞）
+============================================================ */
+
+const ARTICLE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 天
+
+async function fetchArticlePage(id) {
+  const url = `https://www.thaipbs.or.th/news/content/${id}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    hms(`抓取正文 ${id}...`);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept-Language": "th-TH,th;q=0.9",
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    return parseArticlePage(html, id, url);
+  } catch (err) {
+    hms(`抓取正文失败 ${id}: ${err.message}`);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function stripTags(htmlStr) {
+  return (htmlStr || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .trim();
+}
+
+function parseArticlePage(html, id, url) {
+  // 文章主体在 <article> 标签内
+  const artMatch = html.match(/<article[\s\S]*?<\/article>/i);
+  const block = artMatch ? artMatch[0] : html;
+
+  // 标题：优先 h1，回退页面 <title>（去掉站点后缀）
+  let title = "";
+  const h1 = block.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1) title = stripTags(h1[1]);
+  if (!title) {
+    const t = html.match(/<title>([\s\S]*?)<\/title>/i);
+    if (t) title = stripTags(t[1]).replace(/\s*\|\s*Thai PBS News.*$/i, "");
+  }
+
+  // 摘要（สรุปประเด็นสำคัญ）
+  let summary = "";
+  const aside = block.match(/<aside[\s\S]*?<\/aside>/i);
+  if (aside) {
+    const strong = aside[0].match(/<strong[^>]*>([\s\S]*?)<\/strong>/i);
+    if (strong) summary = stripTags(strong[1]);
+  }
+
+  // 正文段落：定位 item-description，取其后的 <p> 文本（跳过图片容器）
+  let bodyHtml = "";
+  const descIdx = block.indexOf('id="item-description"');
+  if (descIdx >= 0) {
+    bodyHtml = block.slice(descIdx);
+  } else {
+    bodyHtml = block;
+  }
+  const paragraphs = [];
+  const pRe = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+  let m;
+  while ((m = pRe.exec(bodyHtml)) !== null) {
+    const text = stripTags(m[1]).replace(/\s+/g, " ");
+    if (text) paragraphs.push(text);
+    if (paragraphs.length >= 40) break;
+  }
+
+  if (!title && !paragraphs.length) return null;
+  return { id: String(id), url, title, summary, paragraphs };
+}
+
+function getArticleCache(id) {
+  return new Promise((resolve) => {
+    db.get(
+      "SELECT value, fetched_at FROM news_articles WHERE id = ?",
+      [String(id)],
+      (err, row) => {
+        if (err || !row) return resolve(null);
+        try {
+          resolve({ data: JSON.parse(row.value), fetched_at: row.fetched_at });
+        } catch (e) {
+          resolve(null);
+        }
+      }
+    );
+  });
+}
+
+function putArticleCache(id, data) {
+  return new Promise((resolve) => {
+    db.run(
+      "INSERT OR REPLACE INTO news_articles (id, value, fetched_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+      [String(id), JSON.stringify(data)],
+      (err) => resolve(!err)
+    );
+  });
 }
 
 /* ============================================================
@@ -648,3 +765,63 @@ if (isMain && process.argv.includes("--self-test")) {
   };
   runSelfTest();
 }
+
+
+/* ============================================================
+   整篇阅读：GET /api/news/article?id={id}
+   - 缓存优先（news_articles 表，1 天 TTL）
+   - 未缓存 → 按需抓取正文 + DeepSeek 整篇翻译（中文 + 罗马音）后写缓存
+   - 缓存有正文但无译文 → 补翻译后写回
+   - 抓取/翻译失败 → 返回已有数据或错误信息，不抛 500
+============================================================ */
+
+router.get("/news/article", async (req, res) => {
+  const rawId = String(req.query.id || "").trim();
+  // 兼容 "thaipbs-510066" / "510066" 两种 id
+  const id = rawId.replace(/^thaipbs-/i, "").trim();
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: "无效的新闻 ID" });
+  }
+
+  // 1) 缓存优先
+  const cached = await getArticleCache(id);
+  const cacheValid =
+    cached &&
+    Date.now() - new Date(cached.fetched_at).getTime() < ARTICLE_CACHE_TTL_MS;
+  if (cached && cacheValid && cached.data.paragraphs?.length) {
+    // 已翻译直接返回
+    if (cached.data.zh && cached.data.zh.some((t) => t)) {
+      return res.json({ ...cached.data, cached: true, fetched_at: cached.fetched_at });
+    }
+    // 有正文无译文 → 补翻译
+    const translated = await translateArticleBody(cached.data.paragraphs);
+    if (translated) {
+      cached.data.zh = translated.zh;
+      cached.data.roman = translated.roman;
+      await putArticleCache(id, cached.data);
+    }
+    return res.json({ ...cached.data, cached: true, fetched_at: cached.fetched_at });
+  }
+
+  // 2) 按需抓取
+  const article = await fetchArticlePage(id);
+  if (!article) {
+    // 抓取失败：若有过期缓存仍可兜底展示
+    if (cached && cached.data.paragraphs?.length) {
+      return res.json({ ...cached.data, cached: true, fetched_at: cached.fetched_at, stale: true });
+    }
+    return res.status(502).json({ error: "暂时无法抓取该文章，请稍后重试" });
+  }
+
+  // 3) 整篇翻译（失败不影响展示，前端显示暂无译文）
+  const translated = await translateArticleBody(article.paragraphs);
+  if (translated) {
+    article.zh = translated.zh;
+    article.roman = translated.roman;
+  } else {
+    article.zh = [];
+    article.roman = [];
+  }
+  await putArticleCache(id, article);
+  return res.json({ ...article, cached: false, fetched_at: new Date().toISOString() });
+});

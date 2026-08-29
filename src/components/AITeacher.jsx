@@ -17,8 +17,9 @@ import {
   ArrowLeft,
 } from "lucide-react";
 
-import { speakThai, stopThaiAudio } from "@/lib/thaiSpeech";
-import { askAiTeacher } from "@/api/aiTeacher";
+import { speakThai, stopThaiAudio, extractThaiText } from "@/lib/thaiSpeech";
+import { askAiTeacher, getAiTeacherQuota, getAiTeacherMemory } from "@/api/aiTeacher";
+import VipPanel from "@/components/common/VipPanel";
 
 export default function AITeacher() {
   const [view, setView] = useState("promo");
@@ -28,6 +29,17 @@ export default function AITeacher() {
   const [loading, setLoading] = useState(false);
   const [speakingId, setSpeakingId] = useState(null);
   const [error, setError] = useState("");
+  const [quota, setQuota] = useState(null); // { freeChatDaily, usedToday, remainingToday, isVip }
+  const [memory, setMemory] = useState(null); // { hasMemory, summary, memory }
+  const [listening, setListening] = useState(false); // 语音输入（Web Speech API）
+  const [voiceSupported] = useState(() =>
+    typeof window !== "undefined" &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition)
+      ? true
+      : false
+  );
+  const recognitionRef = useRef(null);
+  const [vipOpen, setVipOpen] = useState(false);
 
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -46,6 +58,38 @@ export default function AITeacher() {
       },
     ]);
   }, []);
+
+  /* ==========================================
+     拉取今日免费对话额度（未登录静默跳过）
+  ========================================== */
+
+  useEffect(() => {
+    let cancelled = false;
+    getAiTeacherQuota()
+      .then((res) => {
+        if (!cancelled) setQuota(res?.data || null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [vipOpen]);
+
+  /* ==========================================
+     拉取学生长期记忆（老师记得你）
+  ========================================== */
+
+  useEffect(() => {
+    let cancelled = false;
+    getAiTeacherMemory()
+      .then((res) => {
+        if (!cancelled) setMemory(res?.data || null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [vipOpen]);
 
   // ==========================================
   // 自动滚动
@@ -152,6 +196,13 @@ export default function AITeacher() {
 
     setError("");
 
+    // ── 免费额度用尽：前端提前拦截，引导开通 VIP ──
+    if (quota && !quota.isVip && quota.remainingToday <= 0) {
+      setError(`今日免费对话次数已用完（${quota.freeChatDaily} 次），开通 VIP 即可无限与 AI 老师对话。`);
+      setVipOpen(true);
+      return;
+    }
+
     const userMessage = {
       id: `${Date.now()}-user`,
       role: "user",
@@ -166,11 +217,40 @@ export default function AITeacher() {
     setInput("");
     setLoading(true);
 
+    // 构建学生画像（名字 / 水平 / 学习天数 / 已掌握词汇）
+    let profile = {};
+    try {
+      const user = JSON.parse(
+        localStorage.getItem("thaiai_user") || "{}"
+      );
+      const prog = JSON.parse(
+        localStorage.getItem("thai_ai_learning_progress") || "{}"
+      );
+      profile = {
+        name: user.nickname || (user.email || "").split("@")[0] || "",
+        level: prog.level_name || "",
+        streak: prog.learning_streak || 0,
+        mastered: prog.total_vocabulary || 0,
+      };
+    } catch {
+      profile = {};
+    }
+
+    // 多轮上下文：最近 12 条对话历史
+    const history = messages
+      .filter(
+        (m) => m.role === "user" || m.role === "assistant"
+      )
+      .slice(-12)
+      .map((m) => ({ role: m.role, content: m.content }));
+
     try {
       const result =
         await askAiTeacher({
           message: text,
           action: currentMode.action,
+          profile,
+          history,
         });
 
       const response =
@@ -192,16 +272,47 @@ export default function AITeacher() {
         ...prev,
         assistantMessage,
       ]);
+
+      // 对话中老师可能记住了新信息，静默刷新记忆摘要
+      getAiTeacherMemory()
+        .then((res) => setMemory(res?.data || null))
+        .catch(() => {});
+
+      // 自动朗读回复中的泰语部分（语音回复）
+      const thaiReply = extractThaiText(response);
+      if (thaiReply) {
+        const replyId = `${Date.now()}-assistant`;
+        speakThai(thaiReply, {
+          rate: 0.75,
+          onStart: () => setSpeakingId(replyId),
+          onEnd: () => setSpeakingId(null),
+          onError: () => setSpeakingId(null),
+        });
+        setSpeakingId(replyId);
+      }
     } catch (err) {
       console.error(
         "AI Thai Tutor error:",
         err
       );
 
-      setError(
-        err?.message ||
-          "AI 老师暂时没有回应，请稍后再试。"
-      );
+      // 后端 429：免费额度用尽，弹 VIP 面板引导开通
+      if (err?.response?.status === 429) {
+        setError(
+          err?.response?.data?.message ||
+            "今日免费对话次数已用完，开通 VIP 即可无限练习。"
+        );
+        setQuota((q) =>
+          q ? { ...q, remainingToday: 0 } : q
+        );
+        setVipOpen(true);
+      } else {
+        setError(
+          err?.response?.data?.message ||
+            err?.message ||
+            "AI 老师暂时没有回应，请稍后再试。"
+        );
+      }
     } finally {
       setLoading(false);
 
@@ -235,7 +346,10 @@ export default function AITeacher() {
       return;
     }
 
-    speakThai(text, {
+    // 只朗读泰语部分（回复中混合了中文讲解）
+    const thaiPart = extractThaiText(text) || text;
+
+    speakThai(thaiPart, {
       rate: 0.78,
       onStart: () => setSpeakingId(id),
       onEnd: () => setSpeakingId(null),
@@ -244,6 +358,74 @@ export default function AITeacher() {
 
     setSpeakingId(id);
   };
+
+  // ==========================================
+  // 语音输入（Web Speech API，th-TH）
+  // ==========================================
+
+  const toggleVoiceInput = () => {
+    if (!voiceSupported) {
+      setError("当前浏览器不支持语音输入，请使用 Chrome / Edge 访问。");
+      return;
+    }
+
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    const SR =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SR();
+    recognition.lang = "th-TH";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 3;
+
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => setListening(true);
+
+    recognition.onresult = (event) => {
+      let interim = "";
+      let final = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) final += transcript;
+        else interim += transcript;
+      }
+      const current = (final || interim).trim();
+      if (current) {
+        setInput(current);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      setListening(false);
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setError("无法使用麦克风，请在浏览器设置中允许访问。");
+      } else if (event.error === "no-speech") {
+        setError("没有听到声音，请再试一次。");
+      }
+    };
+
+    recognition.onend = () => setListening(false);
+
+    try {
+      recognition.start();
+    } catch {
+      setListening(false);
+      setError("语音识别启动失败，请重试。");
+    }
+  };
+
+  /* 卸载时停止识别 */
+  useEffect(() => () => {
+    recognitionRef.current?.stop();
+    stopThaiAudio();
+  }, []);
+
 
   // ==========================================
   // 清空对话
@@ -597,6 +779,65 @@ export default function AITeacher() {
       </div>
 
       {/* ========================================
+          免费对话配额条（chat 视图顶部）
+      ======================================== */}
+
+      {quota && (
+        <div className="relative z-20 px-5 pt-3 sm:px-6">
+          {quota.isVip ? (
+            <div className="flex items-center gap-2 rounded-xl border border-yellow-300/20 bg-yellow-300/[0.06] px-3.5 py-2 text-xs text-yellow-100/90">
+              <span className="h-1.5 w-1.5 rounded-full bg-yellow-300" />
+              VIP 会员 · 与 AI 老师无限对话
+            </div>
+          ) : quota.remainingToday > 0 ? (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-300/15 bg-emerald-400/[0.06] px-3.5 py-2 text-xs text-emerald-100/85">
+              <span className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                今日免费剩余
+                <b className="text-emerald-100">
+                  {quota.remainingToday}
+                </b>
+                / {quota.freeChatDaily} 次对话
+              </span>
+              <button
+                type="button"
+                onClick={() => setVipOpen(true)}
+                className="rounded-full border border-yellow-300/30 bg-yellow-300/10 px-2.5 py-0.5 text-[11px] text-yellow-200 transition hover:bg-yellow-300/20"
+              >
+                升级 VIP 无限练
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-yellow-300/25 bg-yellow-300/[0.07] px-3.5 py-2 text-xs text-yellow-100/90">
+              <span>今日免费次数已用完 · 开通 VIP 无限对话</span>
+              <button
+                type="button"
+                onClick={() => setVipOpen(true)}
+                className="rounded-full border border-yellow-300/40 bg-yellow-300/15 px-2.5 py-0.5 text-[11px] font-semibold text-yellow-100 transition hover:bg-yellow-300/25"
+              >
+                开通 VIP
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================
+          老师记得你（学生长期记忆徽章）
+      ======================================== */}
+
+      {memory?.hasMemory && (
+        <div className="relative z-20 flex items-center gap-2 px-5 pt-3 sm:px-6">
+          <div className="flex items-center gap-2 rounded-full border border-violet-300/15 bg-violet-400/[0.06] px-3 py-1.5">
+            <Sparkles className="h-3 w-3 text-violet-300" />
+            <span className="text-[11px] text-violet-200/80">
+              老师记得你 · {memory.summary}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================
           模式按钮
       ======================================== */}
 
@@ -894,6 +1135,28 @@ export default function AITeacher() {
             focus-within:shadow-[0_0_30px_rgba(16,185,129,.06)]
           "
         >
+          <motion.button
+            type="button"
+            onClick={toggleVoiceInput}
+            disabled={loading}
+            whileTap={{ scale: 0.92 }}
+            title={listening ? "点击停止语音输入" : "语音输入（说泰语）"}
+            className={
+              listening
+                ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-400/20 text-red-300 shadow-lg shadow-red-900/20"
+                : "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white/40 transition hover:border-emerald-300/20 hover:bg-emerald-400/[0.08] hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+            }
+          >
+            {listening ? (
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400/70" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-red-400" />
+              </span>
+            ) : (
+              <Mic2 className="h-4 w-4" />
+            )}
+          </motion.button>
+
           <textarea
             ref={inputRef}
             value={input}
@@ -976,6 +1239,7 @@ export default function AITeacher() {
         <div className="mt-2 flex items-center justify-between px-1">
           <span className="text-[10px] text-white/20">
             Enter 发送 · Shift + Enter 换行
+            {listening && " · 🎤 正在听你说泰语..."}
           </span>
 
           <span className="text-[10px] text-white/20">
@@ -1005,6 +1269,15 @@ export default function AITeacher() {
 
         </>
       )}
+
+      {/* ========================================
+          VIP 开通面板（免费额度用尽时）
+      ======================================== */}
+
+      <VipPanel
+        open={vipOpen}
+        onClose={() => setVipOpen(false)}
+      />
 
     </section>
   );

@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Search, Volume2, Tag, Newspaper, ExternalLink, Headphones } from "lucide-react";
+import { BookOpen, Search, Volume2, Tag, Newspaper, BookOpenText, Headphones } from "lucide-react";
 import {
   searchThaiCorpus,
   getThaiCorpusStats,
@@ -90,33 +90,32 @@ export default function ThaiCorpus() {
                   翻译暂不可用
                 </span>
               )}
-              <span className="text-[11px] text-white/40">每日自动更新 · 点击阅读原文</span>
+              <span className="text-[11px] text-white/40">每日自动更新 · 点击「阅读全文」站内阅读</span>
             </div>
           </div>
           <div className="grid gap-2.5">
             {news.map((item) => (
-              <a
+              <div
                 key={item.id}
-                href={item.url}
-                target="_blank"
-                rel="noreferrer"
                 className="card-lift group flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 transition hover:border-emerald-300/30 hover:bg-white/[0.06]"
               >
                 <button
                   type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); speakThai(item.title); }}
+                  onClick={() => speakThai(item.title)}
                   aria-label={`播放：${item.title}`}
                   className="mt-0.5 shrink-0 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-2 text-emerald-200 transition hover:bg-emerald-400/20 active:scale-95"
                 >
                   <Volume2 className="h-3.5 w-3.5" />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] text-emerald-200/70">
                       {item.category || "ข่าว"}
                     </span>
-                    <ListeningLink item={item} />
-                    <ExternalLink className="h-3.5 w-3.5 text-white/30 transition group-hover:text-emerald-200" />
+                    <span className="flex items-center gap-1.5">
+                      <ReadLink item={item} />
+                      <ListeningLink item={item} />
+                    </span>
                   </div>
                   <p className="mt-2 font-thai-serif text-lg leading-relaxed text-white">{item.title}</p>
                   {item.roman_title && (
@@ -145,7 +144,7 @@ export default function ThaiCorpus() {
                     <p className="mt-0.5 line-clamp-1 text-[11px] italic leading-5 text-emerald-200/40">{item.roman_lede}</p>
                   )}
                 </div>
-              </a>
+              </div>
             ))}
           </div>
         </section>
@@ -229,6 +228,23 @@ export default function ThaiCorpus() {
 
 function Stat({ value, label }) {
   return <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2"><div className="text-xl font-semibold text-white">{value}</div><div className="mt-1 text-[10px] text-white/40">{label}</div></div>;
+}
+
+function ReadLink({ item }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigate(`/corpus/read?news=${encodeURIComponent(item.id)}`);
+      }}
+      className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[11px] text-white/75 transition hover:border-emerald-300/30 hover:bg-emerald-400/10 hover:text-emerald-100"
+    >
+      <BookOpenText className="h-3 w-3" /> 阅读全文
+    </button>
+  );
 }
 
 function ListeningLink({ item }) {

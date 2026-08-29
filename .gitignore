@@ -33,7 +33,7 @@ base44/.app.jsonc
 
 # 部署
 certs/
-data/
+/data/
 backend/users.db
 backend/uploads
 

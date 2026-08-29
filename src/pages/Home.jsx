@@ -738,7 +738,8 @@ function LegacyHome() {
     if (
       item.action === "vip" ||
       item.action === "news-quota-exhausted" ||
-      item.action === "speaking-quota-exhausted"
+      item.action === "speaking-quota-exhausted" ||
+      item.action === "ai-teacher-quota-exhausted"
     ) {
       setShowNotifications(false);
       markRead(item.id);
