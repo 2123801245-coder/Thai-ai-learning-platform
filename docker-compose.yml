@@ -1,0 +1,73 @@
+# ============================================================
+# ThaiAI 生产部署（国内服务器 / 微信支付宝）
+#
+# 使用：
+#   1. 复制 .env.example 为 .env 并填好所有密钥
+#   2. 把 SSL 证书放到 ./certs/（thaiai.crt / thaiai.key）
+#      或先注释 443 端口、用 certbot 自动签发后再放开
+#   3. docker compose up -d --build
+# ============================================================
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # SQLite 数据库路径指向持久化卷
+      DB_PATH: /data/users.db
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAILS: ${ADMIN_EMAILS}
+      # 在线支付（易支付聚合：微信 + 支付宝）
+      PAY_EPAY_MCHID: ${PAY_EPAY_MCHID}
+      PAY_EPAY_KEY: ${PAY_EPAY_KEY}
+      PAY_EPAY_GATEWAY: ${PAY_EPAY_GATEWAY}
+      PAY_NOTIFY_BASE: ${PAY_NOTIFY_BASE}
+      # Stripe 兜底（可选）
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # 语音评测（Azure Speech）
+      SPEECH_KEY: ${SPEECH_KEY}
+      SPEECH_REGION: ${SPEECH_REGION}
+      # AI 对话（如启用）
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_MODEL: ${AI_MODEL:-}
+      # 前端域名（CORS，逗号分隔）
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://your-domain.com}
+      # 激活码（可选，管理员页也可生成）
+      VIP_CODES: ${VIP_CODES:-}
+      # 套餐价格（元，可选）
+      VIP_PLAN_30_CNY: ${VIP_PLAN_30_CNY:-49}
+      VIP_PLAN_90_CNY: ${VIP_PLAN_90_CNY:-128}
+      VIP_PLAN_365_CNY: ${VIP_PLAN_365_CNY:-399}
+    volumes:
+      # SQLite 数据 + 上传头像持久化
+      - ./data:/data
+      - ./data/uploads:/app/backend/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # SSL 证书（按需挂载；用 certbot 时路径不同）
+      - ./certs:/etc/nginx/certs:ro
+
+networks:
+  default:
+    driver: bridge

@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+dist
+backend/users.db
+backend/uploads
+.freebuff
+_extract
+base44
+.git
+.DS_Store
+.env
+*.log

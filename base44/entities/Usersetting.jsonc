@@ -1,0 +1,36 @@
+{
+  "name": "UserSettings",
+  "type": "object",
+  "properties": {
+    "daily_word_goal": {
+      "type": "number",
+      "default": 20,
+      "title": "Daily Word Goal"
+    },
+    "push_notifications": {
+      "type": "boolean",
+      "default": false,
+      "title": "Push Notifications"
+    },
+    "reminder_time": {
+      "type": "string",
+      "default": "20:00",
+      "title": "Reminder Time"
+    }
+  },
+  "required": [],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

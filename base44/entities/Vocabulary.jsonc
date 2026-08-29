@@ -1,0 +1,74 @@
+{
+  "name": "Vocabulary",
+  "type": "object",
+  "properties": {
+    "thai_word": {
+      "type": "string",
+      "title": "Thai Word"
+    },
+    "chinese_meaning": {
+      "type": "string",
+      "title": "Chinese Meaning"
+    },
+    "pronunciation": {
+      "type": "string",
+      "title": "Pronunciation"
+    },
+    "example_thai": {
+      "type": "string",
+      "title": "Example Sentence (Thai)"
+    },
+    "example_chinese": {
+      "type": "string",
+      "title": "Example Sentence (Chinese)"
+    },
+    "category": {
+      "type": "string",
+      "title": "Category"
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": [
+        "beginner",
+        "intermediate",
+        "advanced"
+      ],
+      "default": "beginner",
+      "title": "Difficulty"
+    }
+  },
+  "required": [
+    "thai_word",
+    "chinese_meaning"
+  ],
+  "rls": {
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "read": null,
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

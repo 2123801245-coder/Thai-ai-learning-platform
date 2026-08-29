@@ -1,0 +1,59 @@
+{
+  "name": "WrongNotebook",
+  "type": "object",
+  "properties": {
+    "vocabulary_id": {
+      "type": "string",
+      "title": "Vocabulary ID"
+    },
+    "thai_word": {
+      "type": "string",
+      "title": "Thai Word"
+    },
+    "chinese_meaning": {
+      "type": "string",
+      "title": "Chinese Meaning"
+    },
+    "pronunciation": {
+      "type": "string",
+      "title": "Pronunciation"
+    },
+    "example_thai": {
+      "type": "string",
+      "title": "Example Thai"
+    },
+    "wrong_count": {
+      "type": "number",
+      "default": 1,
+      "title": "Wrong Count"
+    },
+    "last_wrong_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Last Wrong Date"
+    },
+    "removed": {
+      "type": "boolean",
+      "default": false,
+      "title": "Removed"
+    }
+  },
+  "required": [
+    "thai_word",
+    "chinese_meaning"
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

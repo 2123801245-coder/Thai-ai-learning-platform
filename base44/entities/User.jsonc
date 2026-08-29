@@ -1,0 +1,47 @@
+{
+  "properties": {
+    "role": {
+      "type": "string",
+      "description": "用户角色",
+      "enum": [
+        "admin",
+        "user"
+      ]
+    },
+    "nickname": {
+      "type": "string",
+      "description": "用户昵称"
+    },
+    "avatar": {
+      "type": "string",
+      "description": "用户头像"
+    },
+    "email": {
+      "type": "string",
+      "description": "用户邮箱"
+    },
+    "learning_level": {
+      "type": "string",
+      "description": "泰语学习等级",
+      "enum": [
+        "beginner",
+        "elementary",
+        "intermediate",
+        "advanced"
+      ]
+    },
+    "total_words": {
+      "type": "number",
+      "description": "累计学习单词数量"
+    },
+    "total_practice": {
+      "type": "number",
+      "description": "累计口语练习次数"
+    }
+  },
+  "required": [
+    "role"
+  ],
+  "name": "User",
+  "type": "object"
+}

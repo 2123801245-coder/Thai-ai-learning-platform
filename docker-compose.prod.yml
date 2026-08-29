@@ -1,0 +1,57 @@
+# ============================================================
+# ThaiAI 生产部署（纯 HTTP，无域名用 IP 直接访问）
+#
+# 使用：
+#   1. 复制 .env.example 为 .env 并填好密钥
+#   2. docker compose up -d --build
+# ============================================================
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_PATH: /data/users.db
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAILS: ${ADMIN_EMAILS}
+      # 语音评测（Azure Speech）
+      SPEECH_KEY: ${SPEECH_KEY:-}
+      SPEECH_REGION: ${SPEECH_REGION:-eastasia}
+      # AI 对话（可选）
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_MODEL: ${AI_MODEL:-}
+      # 每日新闻 AI 译文（DeepSeek，可选）
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      # 前端域名（CORS，部署 IP 时用 * 或具体 IP）
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      # 激活码（可选）
+      VIP_CODES: ${VIP_CODES:-}
+    volumes:
+      - ./data:/data
+      - ./data/uploads:/app/backend/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+networks:
+  default:
+    driver: bridge

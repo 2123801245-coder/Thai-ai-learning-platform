@@ -1,0 +1,70 @@
+{
+  "name": "LearningProgress",
+  "type": "object",
+  "properties": {
+    "today_words": {
+      "type": "number",
+      "default": 0,
+      "title": "Today's Words"
+    },
+    "total_vocabulary": {
+      "type": "number",
+      "default": 0,
+      "title": "Total Vocabulary"
+    },
+    "accuracy_rate": {
+      "type": "number",
+      "default": 0,
+      "title": "Accuracy Rate"
+    },
+    "learning_streak": {
+      "type": "number",
+      "default": 0,
+      "title": "Learning Streak (days)"
+    },
+    "level": {
+      "type": "string",
+      "default": "beginner",
+      "title": "Learning Level"
+    },
+    "daily_history": {
+      "type": "array",
+      "title": "Daily History",
+      "items": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "words": {
+            "type": "number"
+          },
+          "accuracy": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "last_study_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Last Study Date"
+    }
+  },
+  "required": [],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}
