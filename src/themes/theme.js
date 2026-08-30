@@ -99,21 +99,6 @@ export const THEMES = {
       text: "#FFFFFF",
     },
   },
-  pearl: {
-    id: "pearl",
-    name: "Minimal Pearl",
-    nameCn: "极简珍珠",
-    tag: "Luxury SaaS",
-    base: "light",
-    colors: {
-      primary: "#0F766E",
-      secondary: "#C9A227",
-      accent: "#B8860B",
-      background: "#F7F5F2",
-      surface: "#FFFFFF",
-      text: "#1F2937",
-    },
-  },
   cyber: {
     id: "cyber",
     name: "Cyber Thai",
@@ -137,7 +122,6 @@ export const THEME_ORDER = [
   "bangkok",
   "chiangmai",
   "ocean",
-  "pearl",
   "cyber",
 ];
 
