@@ -211,3 +211,92 @@ html[data-bgeffect="thai"] .thai-gold-line { opacity: 0.35; }
 /* 星空（默认即保留，仅在 star 时强化） */
 html[data-bgeffect="star"] .noise-overlay { opacity: 0.5; }
 html[data-bgeffect="star"] .site-bg-a { filter: brightness(1.06); }
+
+/* ============================================================
+   纯黑白配色模式（data-mode）
+   - 深色 = 纯黑底 + 白字
+   - 浅色 = 纯白底 + 黑字
+   - 预设/自定义色只负责强调色（主色/辅助/金色）
+   ============================================================ */
+
+/* ---- 深色：隐藏背景图，纯黑 ---- */
+html.theme-custom[data-mode="dark"] .theme-site-backdrop .site-bg-a,
+html.theme-custom[data-mode="dark"] .theme-site-backdrop .site-bg-b {
+  opacity: 0 !important;
+}
+html.theme-custom[data-mode="dark"] .theme-site-backdrop::after {
+  background: #000;
+}
+html.theme-custom[data-mode="dark"] .home-theme-image {
+  opacity: 0 !important;
+}
+
+/* ---- 浅色：隐藏背景图，纯白 ---- */
+html.theme-custom[data-mode="light"] .theme-site-backdrop .site-bg-a,
+html.theme-custom[data-mode="light"] .theme-site-backdrop .site-bg-b {
+  opacity: 0 !important;
+}
+html.theme-custom[data-mode="light"] .theme-site-backdrop::after {
+  background: #fff;
+}
+html.theme-custom[data-mode="light"] .home-theme-image {
+  opacity: 0 !important;
+}
+html.theme-custom[data-mode="light"] .home-theme-root {
+  background: #fff !important;
+  color: #111 !important;
+}
+
+/* 浅色：Sidebar 转白底 + 深色文字 */
+html.theme-custom[data-mode="light"] .theme-sidebar {
+  background-color: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  color: #111 !important;
+}
+
+/* 浅色：把全站硬编码白字统一转为深色（属性前缀批量覆盖）
+   顺序：先兜底纯 text-white，再覆盖带透明度的 text-white/xx */
+html.theme-custom[data-mode="light"] [class*="text-white"] {
+  color: #161616 !important;
+}
+html.theme-custom[data-mode="light"] [class*="text-white/"] {
+  color: rgba(22, 22, 22, 0.78) !important;
+}
+
+/* 浅色：硬编码白卡（bg-white/x）转浅灰底，保持层次 */
+html.theme-custom[data-mode="light"] [class*="bg-white"] {
+  background-color: rgba(0, 0, 0, 0.045) !important;
+}
+html.theme-custom[data-mode="light"] [class*="bg-white/"] {
+  background-color: rgba(0, 0, 0, 0.045) !important;
+}
+
+/* 浅色：硬编码白边转浅灰边 */
+html.theme-custom[data-mode="light"] [class*="border-white"] {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+html.theme-custom[data-mode="light"] [class*="border-white/"] {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* 浅色：premium-glass 卡转白底深字 */
+html.theme-custom[data-mode="light"] .premium-glass,
+html.theme-custom[data-mode="light"] .premium-glass-strong {
+  background: rgba(255, 255, 255, 0.75) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  color: #161616 !important;
+  backdrop-filter: none !important;
+}
+
+/* 浅色：移动端顶栏转白 */
+html.theme-custom[data-mode="light"] header[class*="safe-area-top"] {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 浅色：金色渐变文字转深金，保持可读 */
+html.theme-custom[data-mode="light"] .gold-gradient-text {
+  background-image: linear-gradient(90deg, #b8860b, #8a5e30) !important;
+}
+
+/* 深色：白色系维持原样（不额外处理） */

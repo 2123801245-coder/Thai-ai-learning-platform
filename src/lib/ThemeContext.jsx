@@ -73,13 +73,37 @@ export function ThemeProvider({ children }) {
     root.classList.toggle("dark", dark);
 
     // 2) 颜色变量
+    //    主题模式（深色/浅色）强制纯黑白底色；预设/自定义色负责强调色。
+    //    mode=system 时跟随系统偏好。
+    let resolvedBg, resolvedText, resolvedCard;
+    if (forceLight || m === "light") {
+      resolvedBg = "#FFFFFF";
+      resolvedText = "#111111";
+      resolvedCard = "rgba(0,0,0,0.05)";
+    } else if (m === "dark") {
+      resolvedBg = "#000000";
+      resolvedText = "#FFFFFF";
+      resolvedCard = "rgba(255,255,255,0.07)";
+    } else {
+      // system：跟随系统
+      const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (sysDark) {
+        resolvedBg = "#000000";
+        resolvedText = "#FFFFFF";
+        resolvedCard = "rgba(255,255,255,0.07)";
+      } else {
+        resolvedBg = "#FFFFFF";
+        resolvedText = "#111111";
+        resolvedCard = "rgba(0,0,0,0.05)";
+      }
+    }
     const colorMap = {
       "--tp-primary": effective.primary,
       "--tp-secondary": effective.secondary,
       "--tp-accent": effective.accent,
-      "--tp-bg": effective.background,
-      "--tp-card": effective.surface,
-      "--tp-text": effective.text,
+      "--tp-bg": resolvedBg,
+      "--tp-card": resolvedCard,
+      "--tp-text": resolvedText,
     };
     Object.entries(colorMap).forEach(([k, v]) => (v ? root.style.setProperty(k, v) : root.style.removeProperty(k)));
 
@@ -93,15 +117,18 @@ export function ThemeProvider({ children }) {
 
     // 5) 玻璃效果
     root.style.setProperty("--tp-glass", g ? "1" : "0");
+    root.setAttribute("data-glass", g ? "on" : "off");
 
     // 6) 背景氛围
     root.style.setProperty("--tp-bg-effect", be);
 
     // 7) 自定义标记（供 theme.css remap）
-    const custom = isCustom(themeId, customColors);
+    //    深/浅模式都强制纯黑白 → 一律启用 theme-custom（默认 Emerald 也走纯黑/纯白）
+    const custom = true;
     root.classList.toggle("theme-custom", custom);
     root.setAttribute("data-theme", themeId);
     root.setAttribute("data-bgeffect", be);
+    root.setAttribute("data-mode", forceLight || m === "light" ? "light" : m === "dark" ? "dark" : dark ? "dark" : "light");
   }, [resolved, themeId, customColors]);
 
   // 持久化
