@@ -36,6 +36,7 @@ import {
   getQuotaSettings,
   updateQuotaSettings,
 } from "@/lib/quotaSettings";
+import AppearanceSettings from "@/components/theme/AppearanceSettings";
 
 const sections = [
   {
@@ -342,6 +343,7 @@ function AdminQuotaPanel() {
   const [loaded, setLoaded] = useState(false);
   const [speakingInput, setSpeakingInput] = useState("");
   const [newsInput, setNewsInput] = useState("");
+  const [aiInput, setAiInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -361,6 +363,8 @@ function AdminQuotaPanel() {
         setSettings(data || {});
         setSpeakingInput(data?.speakingFreeDaily ?? "");
         setNewsInput(data?.newsListeningFreeDaily ?? "");
+      setAiInput(data?.aiTeacherFreeDaily ?? "");
+        setAiInput(data?.aiTeacherFreeDaily ?? "");
       })
       .catch(() => {
         if (!alive) return;
@@ -404,6 +408,18 @@ function AdminQuotaPanel() {
       patch.newsListeningFreeDaily = n;
     } else {
       patch.newsListeningFreeDaily = null;
+    }
+
+    if (aiInput.trim() !== "") {
+      const n = Number(aiInput);
+      if (!Number.isInteger(n) || n < 0) {
+        setMessage({ type: "error", text: "AI 老师每日对话次数必须是非负整数" });
+        setSaving(false);
+        return;
+      }
+      patch.aiTeacherFreeDaily = n;
+    } else {
+      patch.aiTeacherFreeDaily = null;
     }
 
     try {
@@ -502,6 +518,15 @@ function AdminQuotaPanel() {
               settings?.newsListeningFreeDaily != null
             )}
 
+            {quotaRow(
+              "AI 老师（自由对话）",
+              "免费用户每天可自由对话的次数，超出提示开通 VIP；VIP 无限。",
+              Bot,
+              aiInput,
+              setAiInput,
+              settings?.aiTeacherFreeDaily != null
+            )}
+
             <div className="flex items-center gap-2 pt-1">
               <button
                 type="button"
@@ -565,6 +590,10 @@ export default function Settings() {
           管理你的 ThaiAI 学习体验
         </p>
       </motion.div>
+
+      {/* 外观与主题（Theme Studio） */}
+
+      <AppearanceSettings />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <button type="button" onClick={() => navigate("/plan")} className="premium-glass card-lift flex items-center justify-between rounded-2xl p-4 text-left">

@@ -1,0 +1,213 @@
+/* ============================================================
+   ThaiAI Theme Studio — 主题变量层
+   - 默认值 = 当前墨绿风格（视觉零变化）
+   - 仅当 <html class="theme-custom"> 时才重映射常见强调色，
+     保证默认主题完全不动
+   ============================================================ */
+
+:root {
+  --tp-primary: #10B981;
+  --tp-secondary: #0F766E;
+  --tp-accent: #F5C451;
+  --tp-bg: #0f1a1e;
+  --tp-card: rgba(255, 255, 255, 0.06);
+  --tp-text: #ffffff;
+  --tp-font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --tp-radius: 16px;
+  --tp-glass: 1;
+  --tp-bg-effect: none;
+  --tp-glow: rgba(16, 185, 129, 0.25);
+  --tp-glow-accent: rgba(245, 196, 81, 0.22);
+}
+
+/* 全局字体 */
+html.theme-applied *,
+html:has([data-theme]) body { font-family: var(--tp-font-family); }
+html[data-theme] body {
+  font-family: var(--tp-font-family);
+}
+
+/* 全站平滑过渡（限主题相关属性） */
+html[data-theme] body,
+html[data-theme] .page-shell,
+html[data-theme] .premium-glass,
+html[data-theme] .premium-glass-strong {
+  transition: background-color 300ms ease, color 300ms ease, border-color 300ms ease;
+}
+
+/* ============================================================
+   强调色 / 常用色重映射（仅 custom 主题启用）
+   默认主题不带 .theme-custom，以下规则全部不生效
+   ============================================================ */
+.theme-custom {
+  /* 全局文字 */
+  color: var(--tp-text);
+}
+
+/* 统一圆角（仅 custom 主题） */
+.theme-custom .rounded-2xl,
+.theme-custom .rounded-3xl,
+.theme-custom .premium-glass,
+.theme-custom .premium-glass-strong,
+.theme-custom .premium-glass-gold {
+  border-radius: var(--tp-radius);
+}
+
+/* 玻璃 vs 纯色卡片（仅 custom 主题） */
+html.theme-custom[data-glass="off"] .premium-glass {
+  backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.045) !important;
+}
+
+/* ============================================================
+   全站背景图跟随主题（仅 custom 主题）
+   - 背景图降为极淡装饰，主体底色改用 --tp-bg
+   - 使 Bangkok / Cyber / Pearl 等预设真正改变整体色调
+   ============================================================ */
+.theme-custom .theme-site-backdrop .site-bg-a,
+.theme-custom .theme-site-backdrop .site-bg-b {
+  opacity: 0.14 !important;
+  filter: saturate(1.15) brightness(0.9);
+}
+.theme-custom .theme-site-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--tp-bg) 88%, black),
+    color-mix(in srgb, var(--tp-bg) 78%, var(--tp-secondary))
+  );
+  opacity: 0.92;
+}
+
+/* 主页（独立壳层）背景图同样降噪，底色跟随主题 */
+.theme-custom .home-theme-root {
+  background: var(--tp-bg) !important;
+}
+.theme-custom .home-theme-image {
+  opacity: 0.1 !important;
+  filter: saturate(1.15) brightness(0.9);
+}
+.theme-custom .home-theme-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    120% 90% at 78% 12%,
+    color-mix(in srgb, var(--tp-secondary) 28%, transparent),
+    transparent 60%
+  );
+}
+
+/* Sidebar 背景跟随主题背景色（仅 custom 主题） */
+.theme-custom .theme-sidebar {
+  background-color: color-mix(in srgb, var(--tp-bg) 82%, black);
+}
+
+/* 首页 Hero 佛像背景跟随主题背景色（仅 custom 主题） */
+.theme-custom .theme-hero-overlay-x {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--tp-bg) 82%, black),
+    color-mix(in srgb, var(--tp-bg) 55%, transparent),
+    transparent
+  ) !important;
+}
+.theme-custom .theme-hero-overlay-y {
+  background-image: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--tp-bg) 62%, black),
+    transparent 55%,
+    color-mix(in srgb, var(--tp-bg) 28%, transparent)
+  ) !important;
+}
+.theme-custom .theme-hero-glow {
+  background-color: color-mix(in srgb, var(--tp-primary) 22%, transparent) !important;
+}
+
+/* 主要红色系：emerald / jade 风格的常用 Tailwind 色统一映射到主/辅色 */
+.theme-custom .text-emerald-300,
+.theme-custom .text-emerald-200,
+.theme-custom .text-emerald-400,
+.theme-custom .text-teal-300 { color: var(--tp-primary) !important; }
+.theme-custom .text-emerald-500 { color: var(--tp-secondary) !important; }
+.theme-custom .from-emerald-400,
+.theme-custom .to-emerald-400,
+.theme-custom .from-emerald-500,
+.theme-custom .to-emerald-500 {
+  background-image: linear-gradient(to right, var(--tp-primary), var(--tp-secondary));
+}
+.theme-custom .bg-emerald-400\/\[0\.08\],
+.theme-custom .bg-emerald-400\/\[0\.07\] { background-color: color-mix(in srgb, var(--tp-primary) 10%, transparent); }
+.theme-custom .border-emerald-300\/20,
+.theme-custom .border-emerald-300\/15 { border-color: color-mix(in srgb, var(--tp-primary) 25%, transparent); }
+.theme-custom .shadow-emerald-400\/10 { box-shadow: 0 10px 30px -12px var(--tp-primary); }
+
+/* 金色系 */
+.theme-custom .text-yellow-200,
+.theme-custom .text-amber-200,
+.theme-custom .text-yellow-300 { color: var(--tp-accent) !important; }
+.theme-custom .border-yellow-300\/25,
+.theme-custom .border-yellow-300\/40 {
+  border-color: color-mix(in srgb, var(--tp-accent) 30%, transparent);
+}
+
+/* ============================================================
+   背景氛围效果（data-bgeffect）
+   ============================================================ */
+html[data-bgeffect="none"] .thai-ambient-foreground { display: none; }
+
+/* 柔和渐变 */
+html[data-bgeffect="soft"] .thai-ambient-foreground::after {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(60% 50% at 80% 20%, var(--tp-glow-accent), transparent 60%),
+              radial-gradient(50% 40% at 10% 85%, var(--tp-glow), transparent 60%);
+  opacity: 0.5;
+}
+
+/* 光晕 */
+html[data-bgeffect="glow"] .site-bg-a { opacity: 0.9; }
+html[data-bgeffect="glow"] .thai-ambient-foreground::after {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(55% 45% at 78% 18%, var(--tp-glow-accent), transparent 62%);
+  opacity: 0.45;
+}
+
+/* 静电/粒子氛围由 body::before 简单模拟 */
+html[data-bgeffect="particle"] body::before {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, color-mix(in srgb, var(--tp-accent) 60%, transparent), transparent),
+    radial-gradient(1px 1px at 70% 60%, color-mix(in srgb, var(--tp-primary) 60%, transparent), transparent),
+    radial-gradient(1px 1px at 45% 85%, color-mix(in srgb, var(--tp-secondary) 60%, transparent), transparent);
+  background-size: 180px 180px;
+  opacity: 0.4;
+  animation: tp-drift 22s linear infinite;
+}
+@keyframes tp-drift {
+  from { background-position: 0 0; }
+  to { background-position: 360px 180px; }
+}
+
+/* 泰式文化氛围 */
+html[data-bgeffect="thai"] .site-bg-a { filter: saturate(1.2) brightness(1.05); }
+html[data-bgeffect="thai"] .thai-ambient-foreground::after {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background:
+    radial-gradient(50% 40% at 82% 12%, var(--tp-glow-accent), transparent 60%),
+    radial-gradient(45% 40% at 12% 88%, var(--tp-glow), transparent 60%);
+  opacity: 0.4;
+}
+html[data-bgeffect="thai"] .thai-gold-line { opacity: 0.35; }
+
+/* 星空（默认即保留，仅在 star 时强化） */
+html[data-bgeffect="star"] .noise-overlay { opacity: 0.5; }
+html[data-bgeffect="star"] .site-bg-a { filter: brightness(1.06); }

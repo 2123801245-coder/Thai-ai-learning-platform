@@ -21,6 +21,11 @@ export const SUPPORT_CONFIG = {
     "感谢购买 ThaiAI VIP 🎉\n你的激活码：{CODE}\n开通方式：登录后 → 我的 → VIP 会员 → 激活码 → 粘贴输入 → 立即开通\n有问题随时找我！",
 };
 
+/* 在线购买链接（独角数卡/爱发卡等自动发卡平台）
+   留空则不显示「在线购买」按钮，只保留客服引导 */
+export const PURCHASE_URL = "";
+// 示例："https://dujoka.com/store/your-store-id"
+
 /* 默认价格表（元）——在线支付可用时以后端套餐价为准；
    后端未配置时使用此默认价（与后端 VIP_PLANS 默认一致） */
 export const FIRST_PURCHASE_PLAN = {

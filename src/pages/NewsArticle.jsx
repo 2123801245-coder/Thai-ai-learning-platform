@@ -11,10 +11,16 @@ import {
   ExternalLink,
   Loader2,
   AlertTriangle,
+  X,
+  Check,
+  Plus,
 } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api";
 import { speakThaiWithLocal, stopThaiAudio } from "@/lib/thaiSpeech";
 import { splitNewsSentences } from "@/lib/newsListening";
+import { segmentThaiText } from "@/lib/thaiWordLookup";
+import { recordWrongWord } from "@/lib/wordBooks";
+import { useToast } from "@/components/ui/use-toast";
 
 const SPEED_OPTIONS = [
   { label: "0.65x", value: 0.65 },
@@ -22,6 +28,69 @@ const SPEED_OPTIONS = [
   { label: "1.0x", value: 1.0 },
   { label: "1.2x", value: 1.2 },
 ];
+
+// 读取 SSE 流并分派事件。返回是否正常读完（完整读到 complete / 服务端关闭）。
+async function readSSE(res, handlers, isAborted) {
+  try {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      if (isAborted()) {
+        try { await reader.cancel(); } catch (e) {}
+        return false;
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep;
+      while ((sep = buffer.indexOf("\n\n")) >= 0) {
+        const raw = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        let event = "message";
+        const dataLines = [];
+        for (const line of raw.split("\n")) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+        }
+        if (dataLines.length) {
+          try {
+            const obj = JSON.parse(dataLines.join("\n"));
+            if (handlers[event]) handlers[event](obj);
+          } catch (e) {}
+        }
+      }
+    }
+    return true; // 流正常读完
+  } catch (e) {
+    return false; // 读取失败 → 调用方回退标准接口
+  }
+}
+
+// 把一段文本渲染成可点词：命中词典的泰语词高亮可点，其余原样显示
+function ThaiWords({ text, onWordClick }) {
+  const spans = useMemo(() => segmentThaiText(text || ""), [text]);
+  return (
+    <>
+      {spans.map((sp, i) =>
+        sp.thai && sp.info ? (
+          <button
+            key={i}
+            type="button"
+            onClick={(e) => onWordClick && onWordClick(sp.info, e.currentTarget)}
+            title={sp.info.chinese}
+            className="mx-0.5 inline rounded-sm decoration-emerald-300/30 underline decoration-dotted underline-offset-2 transition hover:text-emerald-100 hover:decoration-emerald-300/80"
+            style={{ cursor: "help" }}
+          >
+            {sp.text}
+          </button>
+        ) : (
+          <span key={i}>{sp.text}</span>
+        )
+      )}
+    </>
+  );
+}
 
 export default function NewsArticle() {
   const [params] = useSearchParams();
@@ -39,49 +108,152 @@ export default function NewsArticle() {
   const [playingAll, setPlayingAll] = useState(false);
   const stopRef = useRef(false);
   const playingIdRef = useRef(null);
+  const articleRef = useRef(null);
 
-  // 并行：加载 daily 拿标题兜底 + 请求整篇正文
+  // 点词查释义 + 生词本
+  const { toast } = useToast();
+  const [activeWord, setActiveWord] = useState(null); // { info, anchorX, anchorY, placement, added }
+  const [addedWords, setAddedWords] = useState(() => new Set());
+
+  const openWord = (info, el) => {
+    const r = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const anchorX = Math.max(160, Math.min(vw - 160, r.left + r.width / 2));
+    setActiveWord({
+      info,
+      anchorX,
+      anchorY: r.top,
+      placement: r.top > 240 ? "above" : "below",
+      added: addedWords.has(info.thai),
+    });
+  };
+
+  const closeWord = () => setActiveWord(null);
+
+  const addWordToBook = async () => {
+    if (!activeWord?.info) return;
+    const w = activeWord.info;
+    try {
+      await recordWrongWord({
+        thai: w.thai,
+        chinese: w.chinese,
+        roman: w.roman,
+        sentence: w.sentence,
+        sentenceCn: w.sentenceCn,
+      });
+      setAddedWords((prev) => new Set(prev).add(w.thai));
+      setActiveWord((prev) => (prev ? { ...prev, added: true } : prev));
+      toast({ title: "已加入生词本", description: `「${w.thai}」已保存到生词本练习` });
+    } catch (e) {
+      toast({ title: "操作失败", variant: "destructive" });
+    }
+  };
+
+  const speakWord = (thai) => speakThaiWithLocal(thai, { rate: speed });
+
+  // 并行：加载 daily 拿标题兜底 + 整篇正文（优先 SSE 流式，失败回退标准接口）
   useEffect(() => {
     if (!newsId) {
       setError("缺少新闻 ID");
       setLoading(false);
       return;
     }
-    let cancelled = false;
+    let aborted = false;
+
+    const setArticleData = (data) => {
+      articleRef.current = data;
+      setArticle(data);
+    };
+
+    // 流式增量：一批译文到达后补进 article.zh / article.roman
+    const patchTranslation = (payload) => {
+      if (aborted || !payload?.zh?.length) return;
+      const base = articleRef.current;
+      if (!base?.paragraphs) return;
+      const zh = [...(base.zh || [])];
+      const roman = [...(base.roman || [])];
+      for (let k = 0; k < payload.zh.length; k++) {
+        const idx = payload.start + k;
+        if (idx < base.paragraphs.length) {
+          zh[idx] = payload.zh[k] || "";
+          roman[idx] = payload.roman[k] || "";
+        }
+      }
+      setArticleData({ ...base, zh, roman });
+    };
+
     (async () => {
       try {
+        // 标题/导语兜底（不影响正文渲染）
         fetch(`${API_BASE_URL}/news/daily`)
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => {
-            if (!cancelled && d?.items) {
+            if (!aborted && d?.items) {
               const hit = d.items.find((n) => n.id === newsId);
               if (hit) setMeta(hit);
             }
           })
           .catch(() => {});
 
-        const res = await fetch(`${API_BASE_URL}/news/article?id=${encodeURIComponent(newsId)}`);
-        if (cancelled) return;
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
+        // 1) 优先流式接口：先显示泰语正文/可朗读，译文边到边补
+        const streamed = await fetch(
+          `${API_BASE_URL}/news/article/stream?id=${encodeURIComponent(newsId)}`
+        );
+        if (aborted) return;
+        if (streamed.ok && streamed.body) {
+          const finished = await readSSE(
+            streamed,
+            {
+              article: (obj) => {
+                if (aborted) return;
+                setArticleData(obj);
+                setLoading(false);
+                setError("");
+              },
+              progress: patchTranslation,
+              complete: (obj) => {
+                if (aborted) return;
+                setArticleData({ ...(articleRef.current || {}), ...obj });
+              },
+              error: (obj) => {
+                if (!aborted) {
+                  setError(obj.message || "加载失败，请稍后重试");
+                  setLoading(false);
+                }
+              },
+            },
+            () => aborted
+          );
+          if (finished || aborted) return;
+        }
+
+        // 2) 流式不可用 → 回退标准接口（后端同样已并行加速）
+        if (aborted) return;
+        const fallback = await fetch(
+          `${API_BASE_URL}/news/article?id=${encodeURIComponent(newsId)}`
+        );
+        if (aborted) return;
+        if (!fallback.ok) {
+          const body = await fallback.json().catch(() => ({}));
           setError(body.error || "加载失败，请稍后重试");
           setLoading(false);
           return;
         }
-        const data = await res.json();
-        if (cancelled) return;
-        setArticle(data);
+        const data = await fallback.json();
+        if (aborted) return;
+        setArticleData(data);
       } catch (e) {
-        if (!cancelled) {
+        if (!aborted) {
           setError("网络异常，请稍后重试");
           setLoading(false);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!aborted) setLoading(false);
       }
     })();
+
     return () => {
-      cancelled = true;
+      aborted = true;
       stopThaiAudio();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,7 +445,9 @@ export default function NewsArticle() {
       {lede && (
         <section className="premium-glass rounded-3xl border-l-2 border-l-emerald-300/40 p-5 sm:p-6">
           <div className="mb-2 text-[10px] tracking-[0.16em] text-white/35">สรุปประเด็นสำคัญ · 摘要</div>
-          <p className="font-thai-serif text-[15px] leading-7 text-white/90">{lede}</p>
+          <p className="font-thai-serif text-[15px] leading-7 text-white/90">
+            <ThaiWords text={lede} onWordClick={openWord} />
+          </p>
           {zhLede && <p className="mt-2 text-sm leading-7 text-white/65">{zhLede}</p>}
         </section>
       )}
@@ -339,7 +513,7 @@ export default function NewsArticle() {
                           active ? "text-white" : "text-white/85"
                         }`}
                       >
-                        {unit.thai}
+                        <ThaiWords text={unit.thai} onWordClick={openWord} />
                       </p>
                     </div>
                   );
@@ -379,6 +553,90 @@ export default function NewsArticle() {
           </a>
         )}
       </div>
+
+      {activeWord?.info && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={closeWord} aria-hidden />
+          <div
+            className="fixed z-50 w-[min(340px,calc(100vw-24px))] rounded-2xl border border-emerald-300/20 bg-[#0c1a15]/95 p-4 shadow-2xl shadow-black/50 backdrop-blur-xl"
+            style={{
+              left: activeWord.anchorX,
+              top: activeWord.anchorY,
+              transform:
+                activeWord.placement === "above"
+                  ? "translate(-50%, calc(-100% - 16px))"
+                  : "translate(-50%, 16px)",
+            }}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="font-thai-serif text-2xl font-semibold leading-none text-white">
+                {activeWord.info.thai}
+              </div>
+              <button
+                type="button"
+                onClick={closeWord}
+                aria-label="关闭"
+                className="shrink-0 rounded-md p-1 text-white/40 transition hover:bg-white/[0.06] hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {activeWord.info.roman && (
+              <div className="mt-1.5 text-sm italic text-emerald-200/85">
+                {activeWord.info.roman}
+              </div>
+            )}
+
+            {activeWord.info.pos && (
+              <span className="mt-2 inline-block rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] text-white/45">
+                {activeWord.info.pos}
+              </span>
+            )}
+
+            <div className="mt-2.5 text-base font-medium text-white/95">
+              {activeWord.info.chinese}
+            </div>
+
+            {activeWord.info.sentence && (
+              <div className="mt-2.5 rounded-xl bg-white/[0.04] px-3 py-2.5">
+                <div className="font-thai-serif text-[13px] leading-6 text-white/80">
+                  {activeWord.info.sentence}
+                </div>
+                <div className="mt-0.5 text-[12px] leading-5 text-white/40">
+                  {activeWord.info.sentenceCn}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3.5 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => speakWord(activeWord.info.thai)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3.5 py-1.5 text-xs font-medium text-emerald-100 transition hover:bg-emerald-400/20"
+              >
+                <Volume2 className="h-3.5 w-3.5" /> 发音
+              </button>
+              <button
+                type="button"
+                onClick={addWordToBook}
+                disabled={activeWord.added}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.06] px-3.5 py-1.5 text-xs font-medium text-white/85 transition hover:bg-white/[0.12] disabled:cursor-default disabled:opacity-60"
+              >
+                {activeWord.added ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-300" /> 已加入
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5" /> 加入生词本
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

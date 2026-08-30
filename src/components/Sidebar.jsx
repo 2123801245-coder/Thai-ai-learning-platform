@@ -30,6 +30,7 @@ import {
   ThaiDivider,
   ThaiRoof,
 } from "@/components/common/ThaiMotifs";
+import ThemeQuickSwitcher from "@/components/theme/ThemeQuickSwitcher";
 
 import { SERVER_BASE_URL } from "@/lib/api";
 
@@ -218,6 +219,8 @@ export default function Sidebar() {
 
         backdrop-blur-2xl
 
+        theme-sidebar
+
         border-r
         border-white/[0.08]
 
@@ -378,6 +381,13 @@ export default function Sidebar() {
         {/* 泰式纹样分隔线 */}
 
         <ThaiDivider compact className="mt-4" />
+
+        {/* 快捷主题切换 */}
+
+        <div className="mt-3 flex items-center justify-between gap-2 pl-1">
+          <span className="text-[9px] font-bold tracking-[0.18em] text-white/30">主题</span>
+          <ThemeQuickSwitcher compact />
+        </div>
 
       </div>
 

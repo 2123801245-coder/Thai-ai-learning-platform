@@ -38,6 +38,7 @@ import {
   SUPPORT_CONFIG,
   DEFAULT_PLANS,
   FIRST_PURCHASE_PLAN,
+  PURCHASE_URL,
   copyText,
 } from "@/lib/vipConfig";
 
@@ -792,6 +793,19 @@ export default function VipPanel({ open, onClose }) {
                           激活码由管理员发放。演示环境可在后端控制台查看启动时生成的激活码。
                         </p>
                       </div>
+
+                      {/* 在线购买按钮（独角数卡/爱发卡等） */}
+                      {PURCHASE_URL && (
+                        <a
+                          href={PURCHASE_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-yellow-300/30 bg-gradient-to-r from-yellow-400/20 to-amber-400/20 px-4 py-3 text-sm font-semibold text-yellow-200 transition hover:from-yellow-400/30 hover:to-amber-400/30 hover:text-yellow-100"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          在线购买 VIP 激活码
+                        </a>
+                      )}
 
                       {/* 客服引导：人工收款购买 */}
 

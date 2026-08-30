@@ -18,7 +18,7 @@ import db from "../database.js";
 import { authenticate } from "./auth.js";
 import { getQuotaSetting } from "./features.js";
 import { createNotification } from "./notifications.js";
-import { translateNewsBatch, translateArticleBody, isTranslateEnabled } from "../translate.js";
+import { translateNewsBatch, translateArticleBody, translateArticleBodyStream, isTranslateEnabled } from "../translate.js";
 
 const router = Router();
 
@@ -233,6 +233,7 @@ function parseNewsPage(html) {
 ============================================================ */
 
 const ARTICLE_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 1 天
+const TOP_PREFETCH_LIMIT = 5; // 每日凌晨预取的 Top N 篇新闻（整篇抓取 + 翻译缓存）
 
 async function fetchArticlePage(id) {
   const url = `https://www.thaipbs.or.th/news/content/${id}`;
@@ -726,6 +727,120 @@ setInterval(async () => {
   }
 }, 4 * 3600 * 1000);
 
+// ============================================================
+// 整篇阅读 · 预取队列
+//   - 每日泰国午夜自动抓取当日 Top N 篇新闻正文 + DeepSeek 整篇翻译，
+//     写入 news_articles 缓存，用户打开整篇时命中缓存秒开。
+//   - 服务启动约 15s 后主动预取一次（覆盖部署后当天首访）。
+//   - 幂等：已翻译完整的文章跳过；同一天不重复跑；失败静默不影响主服务。
+//   - 环境变量 NEWS_PREFETCH_OFF=1 可关闭。
+// ============================================================
+
+let prefetchLock = false;
+let lastPrefetchDay = ""; // 记录最近一次预取的泰国日期，避免同一天重复
+
+export async function prefetchTopArticles(limit = TOP_PREFETCH_LIMIT) {
+  const day = thaiToday();
+  if (prefetchLock) {
+    hms("预取跳过：上一次仍在进行中");
+    return { skipped: true, reason: "in-flight" };
+  }
+  if (lastPrefetchDay === day) {
+    hms("预取跳过：今日已执行过");
+    return { skipped: true, reason: "already-done-today" };
+  }
+  lastPrefetchDay = day;
+  prefetchLock = true;
+  try {
+    // 今日新闻：优先当天缓存，否则现场抓
+    let items = null;
+    const cached = await getCache(day);
+    if (cached && cached.items && cached.items.length) items = cached.items;
+    else items = await fetchLatest();
+
+    if (!items || !items.length) {
+      hms("预取：暂无今日新闻");
+      return { day, prefetched: 0 };
+    }
+
+    const top = items.slice(0, limit);
+    let prefetched = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const it of top) {
+      const id = String(it.id || "").replace(/^thaipbs-/i, "").trim();
+      if (!/^\d+$/.test(id)) {
+        failed++;
+        continue;
+      }
+      // 已翻译完整的缓存直接跳过
+      const existing = await getArticleCache(id);
+      if (
+        existing &&
+        existing.data &&
+        existing.data.paragraphs &&
+        existing.data.paragraphs.length &&
+        (existing.data.zh || []).some((t) => t)
+      ) {
+        skipped++;
+        continue;
+      }
+
+      const article = await fetchArticlePage(id);
+      if (!article || !article.paragraphs || !article.paragraphs.length) {
+        failed++;
+        continue;
+      }
+
+      const translated = await translateArticleBody(article.paragraphs);
+      if (translated && translated.zh && translated.zh.length) {
+        article.zh = translated.zh;
+        article.roman = translated.roman;
+      } else {
+        article.zh = [];
+        article.roman = [];
+      }
+      await putArticleCache(id, article);
+      prefetched++;
+      hms(`预取完成 [#${prefetched}] ${id}「${(article.title || "").slice(0, 28)}」`);
+    }
+
+    hms(`预取结束：成功 ${prefetched}，跳过 ${skipped}，失败 ${failed}/${top.length}`);
+    return { day, attempted: top.length, prefetched, skipped, failed };
+  } catch (e) {
+    hms(`预取异常：${e.message}`);
+    return { day, error: e.message };
+  } finally {
+    prefetchLock = false;
+  }
+}
+
+/* 距下一个泰国午夜（00:00:08，留 8 秒余量取到当日新列表）的毫秒数 */
+function msUntilThaiMidnight() {
+  const now = new Date(Date.now() + 7 * 3600 * 1000); // 泰国时区轴
+  const next = new Date(now);
+  next.setHours(0, 0, 8, 0); // 泰国次日 00:00:08
+  if (next <= now) next.setDate(next.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
+/* 每天泰国午夜对齐执行一次预取，执行后自动排下一天 */
+function schedulePrefetch() {
+  const ms = msUntilThaiMidnight();
+  hms(`预取调度：约 ${(ms / 3600000).toFixed(1)} 小时后执行 Top ${TOP_PREFETCH_LIMIT} 整篇预取${ms > 25 * 3600 * 1000 ? "（注：第一次取次日）" : ""}`);
+  return setTimeout(async () => {
+    await prefetchTopArticles(TOP_PREFETCH_LIMIT);
+    schedulePrefetch();
+  }, ms);
+}
+
+if (process.env.NEWS_PREFETCH_OFF !== "1") {
+  // 服务启动后约 15s 先预取一次，覆盖部署/重启当天的首访
+  setTimeout(() => prefetchTopArticles(TOP_PREFETCH_LIMIT), 15000);
+  schedulePrefetch();
+}
+
 export default router;
 
 // ============================================================
@@ -824,4 +939,98 @@ router.get("/news/article", async (req, res) => {
   }
   await putArticleCache(id, article);
   return res.json({ ...article, cached: false, fetched_at: new Date().toISOString() });
+});
+
+/* ============================================================
+   整篇阅读 · 流式（SSE）：首段尽快显示
+   GET /api/news/article/stream?id={id}
+   事件序列：
+     article   → 抓取完成的文章（含 paragraphs，zh/roman 为空，使泰语/朗读立即可用）
+     progress  → { start, len, zh[], roman[] } 一批翻译完成，前端增量补齐
+     complete  → 最终完整文章（含 cached/stale）
+     error     → { message }
+   已完整缓存的文章：直接发一条 complete 即结束（秒回）。
+============================================================ */
+
+router.get("/news/article/stream", async (req, res) => {
+  const rawId = String(req.query.id || "").trim();
+  const id = rawId.replace(/^thaipbs-/i, "").trim();
+  if (!/^\d+$/.test(id)) {
+    return res.status(400).json({ error: "无效的新闻 ID" });
+  }
+
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+
+  const writeEvent = (event, data) => {
+    try {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    } catch (e) {
+      /* 客户端已断开 */
+    }
+  };
+
+  const cached = await getArticleCache(id);
+  const cacheValid =
+    cached &&
+    Date.now() - new Date(cached.fetched_at).getTime() < ARTICLE_CACHE_TTL_MS;
+
+  // 已翻译的完整缓存 → 秒回
+  if (cached && cacheValid && cached.data.paragraphs?.length) {
+    if (cached.data.zh && cached.data.zh.some((t) => t)) {
+      writeEvent("complete", { ...cached.data, cached: true, fetched_at: cached.fetched_at });
+      return res.end();
+    }
+    // 有正文无译文 → 先发正文，再流式补译文
+    writeEvent("article", { ...cached.data, zh: [], roman: [], cached: true });
+    const translated = await translateArticleBodyStream(
+      cached.data.paragraphs,
+      (start, len, zhSlice, romanSlice) => writeEvent("progress", { start, len, zh: zhSlice, roman: romanSlice })
+    );
+    if (translated) {
+      cached.data.zh = translated.zh;
+      cached.data.roman = translated.roman;
+      await putArticleCache(id, cached.data);
+    }
+    writeEvent("complete", { ...cached.data, cached: true, fetched_at: cached.fetched_at });
+    return res.end();
+  }
+
+  // 按需抓取
+  const article = await fetchArticlePage(id);
+  if (!article) {
+    if (cached && cached.data.paragraphs?.length) {
+      writeEvent("complete", { ...cached.data, cached: true, fetched_at: cached.fetched_at, stale: true });
+      return res.end();
+    }
+    writeEvent("error", { message: "暂时无法抓取该文章，请稍后重试" });
+    return res.end();
+  }
+
+  // 1) 先推正文：泰语原文 + 朗读立即可用，不用等全部译文
+  writeEvent("article", { ...article, zh: [], roman: [], cached: false, fetched_at: new Date().toISOString() });
+
+  // 2) 并行翻译，每批完成即时推送
+  const translated = await translateArticleBodyStream(
+    article.paragraphs,
+    (start, len, zhSlice, romanSlice) => writeEvent("progress", { start, len, zh: zhSlice, roman: romanSlice })
+  );
+
+  if (translated) {
+    article.zh = translated.zh;
+    article.roman = translated.roman;
+  } else {
+    article.zh = [];
+    article.roman = [];
+  }
+
+  // 3) 写缓存 + 收尾
+  await putArticleCache(id, article);
+  writeEvent("complete", { ...article, cached: false, fetched_at: new Date().toISOString() });
+  res.end();
 });

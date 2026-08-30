@@ -230,6 +230,7 @@ router.put(
 const QUOTA_SETTING_KEYS = [
   "speakingFreeDaily",
   "newsListeningFreeDaily",
+  "aiTeacherFreeDaily",
 ];
 
 /* 读取单个额度设置：空值回退到 fallback，非法值回退到 fallback */

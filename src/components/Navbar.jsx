@@ -4,6 +4,7 @@ import { Search, Bell, Sparkles, ChevronLeft, Menu, Sun, Moon } from 'lucide-rea
 import { useToast } from '@/components/ui/use-toast';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { useTheme } from '@/hooks/useTheme';
+import ThemeQuickSwitcher from '@/components/theme/ThemeQuickSwitcher';
 
 const navLinks = [
   { label: '首页', path: '/', activePath: '/' },
@@ -65,6 +66,7 @@ export default function Navbar() {
             <button onClick={() => navigate('/vocabulary')} className="p-2 rounded-lg hover:bg-thai-ivory/60 transition-all">
               <Search className="w-4 h-4 text-thai-green/60" />
             </button>
+            <ThemeQuickSwitcher compact />
             <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-thai-ivory/60 transition-all">
               {theme === 'dark' ? <Sun className="w-4 h-4 text-thai-gold" /> : <Moon className="w-4 h-4 text-thai-green/60" />}
             </button>

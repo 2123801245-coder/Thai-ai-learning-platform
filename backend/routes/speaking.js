@@ -569,10 +569,61 @@ async function azurePronunciationAssessment(
    语音识别
 ============================================================ */
 
+/* ============================================================
+   Azure 语音识别（纯转写，无发音评估）
+   入参语言如 th-TH / zh-CN / en-US
+============================================================ */
+
+async function azureTranscribe(filePath, language) {
+  if (!isAzureConfigured()) {
+    throw new Error(
+      "服务器尚未配置 Azure 语音识别（SPEECH_KEY / SPEECH_REGION）。"
+    );
+  }
+
+  const audioBuffer = await fs.promises.readFile(filePath);
+  const endpoint = getSpeechEndpoint();
+
+  const url =
+    `${endpoint}/speech/recognition/conversation/cognitiveservices/v1` +
+    `?language=${encodeURIComponent(language || "th-TH")}&format=detailed`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Ocp-Apim-Subscription-Key": process.env.SPEECH_KEY,
+      "Content-Type": "audio/wav; codecs=audio/pcm; samplerate=16000",
+      Accept: "application/json",
+    },
+    body: audioBuffer,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`Azure 语音识别错误 ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+
+  if (data.RecognitionStatus && data.RecognitionStatus !== "Success") {
+    throw new Error(`Azure 语音识别失败：${data.RecognitionStatus}`);
+  }
+
+  const text = (
+    data.DisplayText ||
+    data.NBest?.[0]?.Display ||
+    data.NBest?.[0]?.ITN ||
+    ""
+  ).trim();
+
+  return text;
+}
+
 async function transcribeAudio(
   filePath,
   originalName,
-  mimetype
+  mimetype,
+  language
 ) {
   const apiUrl =
     process.env.TRANSCRIBE_API_URL;
@@ -620,7 +671,7 @@ async function transcribeAudio(
 
   formData.append(
     "language",
-    "th"
+    language || "th"
   );
 
   const response =
@@ -1066,3 +1117,51 @@ router.get(
 );
 
 export default router;
+/* ============================================================
+   POST /api/speaking/transcribe
+   通用语音识别：浏览器不支持 Web Speech API 时，前端把 WAV 上传到这里，
+   用 Azure STT（或 TRANSCRIBE_API_URL 兜底）转成文本。
+   body: { audio(file), language? }  language: th-TH / zh-CN / en-US ...
+============================================================ */
+
+router.post(
+  "/transcribe",
+  authenticate,
+  upload.single("audio"),
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "缺少音频文件" });
+    }
+
+    const language = String(req.body?.language || "th-TH");
+
+    try {
+      let text = "";
+
+      if (isAzureConfigured()) {
+        text = await azureTranscribe(req.file.path, language);
+      } else {
+        text = await transcribeAudio(
+          req.file.path,
+          req.file.originalname,
+          req.file.mimetype,
+          language
+        );
+      }
+
+      if (!text) {
+        return res
+          .status(422)
+          .json({ error: "未识别到语音，请靠近麦克风或调大音量后重试。" });
+      }
+
+      return res.json({ text });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "语音识别服务异常";
+      return res.status(502).json({ error: message });
+    } finally {
+      fs.promises.unlink(req.file.path).catch(() => {});
+    }
+  }
+);
+

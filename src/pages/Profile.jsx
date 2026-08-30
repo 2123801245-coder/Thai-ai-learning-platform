@@ -58,6 +58,7 @@ import {
 import { API_BASE_URL, SERVER_BASE_URL } from "@/lib/api";
 import { getNewsListeningStats } from "@/api/newsListening";
 import { getVocabQuizStats } from "@/api/vocabStats";
+import { getAiTeacherMemory, updateAiTeacherMemory } from "@/api/aiTeacher";
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return "/default-avatar.png";
@@ -91,6 +92,26 @@ const formatRecentTime = (iso) => {
   const days = Math.round(hours / 24);
   return `${days} 天前`;
 };
+
+const AI_LEVEL_LABEL = {
+  beginner: "初级初学者",
+  elementary: "初级",
+  intermediate: "中级",
+  advanced: "高级",
+};
+
+const AI_LEVEL_OPTIONS = [
+  { value: "beginner", label: "初级初学者 (beginner)" },
+  { value: "elementary", label: "初级 (elementary)" },
+  { value: "intermediate", label: "中级 (intermediate)" },
+  { value: "advanced", label: "高级 (advanced)" },
+];
+
+const AI_GENDER_OPTIONS = [
+  { value: "", label: "未知" },
+  { value: "男性（用ครับ）", label: "男生（ใช้ ครับ）" },
+  { value: "女性（用ค่ะ）", label: "女生（ใช้ ค่ะ）" },
+];
 
 export default function Profile() {
   const {
@@ -156,6 +177,24 @@ export default function Profile() {
 
   const [vocabStats, setVocabStats] = useState(null);
   const [vocabStatsLoading, setVocabStatsLoading] = useState(false);
+  // ============================================================
+  // AI 老师记住的学生画像（名字 / 水平 / 兴趣 / 常见错误…）
+  // ============================================================
+
+  const [aiMem, setAiMem] = useState(null); // { hasMemory, memory, summary }
+  const [aiMemLoading, setAiMemLoading] = useState(false);
+  const [aiMemEdit, setAiMemEdit] = useState(false);
+  const [aiMemSaving, setAiMemSaving] = useState(false);
+  const [aiMemError, setAiMemError] = useState("");
+  const [aiMemForm, setAiMemForm] = useState({
+    studentName: "",
+    genderHint: "",
+    level: "",
+    interests: "",
+    goals: "",
+    mistakes: "",
+    preferences: "",
+  });
 
   useEffect(() => {
     let alive = true;
@@ -175,6 +214,31 @@ export default function Profile() {
       })
       .finally(() => {
         if (alive) setVocabStatsLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // 拉取 AI 老师学生画像
+  useEffect(() => {
+    let alive = true;
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setAiMem(null);
+      setAiMemLoading(false);
+      return;
+    }
+    setAiMemLoading(true);
+    getAiTeacherMemory()
+      .then((r) => {
+        if (alive) setAiMem(r.data || null);
+      })
+      .catch(() => {
+        if (alive) setAiMem(null);
+      })
+      .finally(() => {
+        if (alive) setAiMemLoading(false);
       });
     return () => {
       alive = false;
@@ -649,6 +713,57 @@ export default function Profile() {
 
   const handleAvatarError = () => {
     setAvatar("/default-avatar.png");
+  };
+
+  // ============================================================
+  // AI 老师画像：打开编辑 / 保存修正
+  // ============================================================
+
+  const openAiMemEdit = () => {
+    const m = aiMem?.memory || {};
+    setAiMemForm({
+      studentName: m.studentName || "",
+      genderHint: ["男性（用ครับ）", "女性（用ค่ะ）"].includes(m.genderHint)
+        ? m.genderHint
+        : "",
+      level: m.level || "",
+      interests: (m.interests || []).join("、"),
+      goals: (m.goals || []).join("、"),
+      mistakes: (m.mistakes || []).join("、"),
+      preferences: (m.preferences || []).join("、"),
+    });
+    setAiMemError("");
+    setAiMemEdit(true);
+  };
+
+  const saveAiMem = async () => {
+    const splitArr = (str) =>
+      (str || "")
+        .split(/[，,、]/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+    const payload = {
+      studentName: aiMemForm.studentName.trim(),
+      genderHint: aiMemForm.genderHint,
+      level: aiMemForm.level,
+      interests: splitArr(aiMemForm.interests),
+      goals: splitArr(aiMemForm.goals),
+      mistakes: splitArr(aiMemForm.mistakes),
+      preferences: splitArr(aiMemForm.preferences),
+    };
+    setAiMemSaving(true);
+    setAiMemError("");
+    try {
+      const res = await updateAiTeacherMemory(payload);
+      setAiMem(res.data || null);
+      setAiMemEdit(false);
+    } catch (err) {
+      setAiMemError(
+        err?.response?.data?.message || "保存失败，请稍后重试"
+      );
+    } finally {
+      setAiMemSaving(false);
+    }
   };
 
   return (
@@ -1228,6 +1343,256 @@ export default function Profile() {
           </div>
         )}
       </motion.div>
+
+      {/* ======================================================
+          AI 老师记住的学生画像（可查看 / 手动修正）
+      ====================================================== */}
+
+      <motion.div
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+        className="rounded-3xl border border-violet-300/15 bg-gradient-to-br from-violet-300/[0.05] to-emerald-300/[0.04] p-5 backdrop-blur-xl"
+      >
+        <div className="mb-5 flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] text-violet-300/70">
+              <Brain className="h-3.5 w-3.5" />
+              AI TEACHER MEMORY
+            </div>
+            <h2 className="mt-1 flex items-center gap-2 font-bold text-white">
+              AI 老师记住的你
+            </h2>
+            <p className="mt-0.5 text-xs text-white/30">
+              AI 老师在对话中了解的画像：可查看，也能手动修正
+            </p>
+          </div>
+
+          {aiMemLoading && (
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-300/30 border-t-violet-300" />
+          )}
+
+          {!aiMemLoading && aiMem?.hasMemory && !aiMemEdit && (
+            <button
+              type="button"
+              onClick={openAiMemEdit}
+              className="flex items-center gap-1.5 rounded-xl border border-violet-300/20 bg-violet-300/[0.07] px-3 py-1.5 text-xs font-semibold text-violet-200/90 transition hover:bg-violet-300/[0.14]"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              修正画像
+            </button>
+          )}
+        </div>
+
+        {aiMemLoading ? (
+          <div className="px-2 py-4 text-xs text-white/30">正在加载画像…</div>
+        ) : aiMemEdit ? (
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 flex items-center gap-1 text-[11px] text-white/45">
+                  <User className="h-3 w-3" /> 名字
+                </span>
+                <input
+                  value={aiMemForm.studentName}
+                  onChange={(e) => setAiMemForm((f) => ({ ...f, studentName: e.target.value }))}
+                  maxLength={40}
+                  placeholder="比如：李明"
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-300/40"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 flex items-center gap-1 text-[11px] text-white/45">
+                  <span className="inline-block h-3 w-3" /> 水平评估
+                </span>
+                <select
+                  value={aiMemForm.level}
+                  onChange={(e) => setAiMemForm((f) => ({ ...f, level: e.target.value }))}
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-300/40"
+                >
+                  <option value="">未评估</option>
+                  {AI_LEVEL_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 flex items-center gap-1 text-[11px] text-white/45">
+                  <span className="inline-block h-3 w-3" /> 性别（礼貌词）
+                </span>
+                <select
+                  value={aiMemForm.genderHint}
+                  onChange={(e) => setAiMemForm((f) => ({ ...f, genderHint: e.target.value }))}
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-300/40"
+                >
+                  {AI_GENDER_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 flex items-center gap-1 text-[11px] text-white/45">
+                  <span className="inline-block h-3 w-3" /> 学习兴趣
+                </span>
+                <input
+                  value={aiMemForm.interests}
+                  onChange={(e) => setAiMemForm((f) => ({ ...f, interests: e.target.value }))}
+                  placeholder="美食、旅游、泰剧…（用逗号分隔）"
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-300/40"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 flex items-center gap-1 text-[11px] text-white/45">
+                  <span className="inline-block h-3 w-3" /> 学习目标
+                </span>
+                <input
+                  value={aiMemForm.goals}
+                  onChange={(e) => setAiMemForm((f) => ({ ...f, goals: e.target.value }))}
+                  placeholder="去泰国自由行、考取证书…（用逗号分隔）"
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-300/40"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 flex items-center gap-1 text-[11px] text-white/45">
+                  <span className="inline-block h-3 w-3" /> 常见错误
+                </span>
+                <input
+                  value={aiMemForm.mistakes}
+                  onChange={(e) => setAiMemForm((f) => ({ ...f, mistakes: e.target.value }))}
+                  placeholder="声调不准、ครับ/ค่ะ 不分…（用逗号分隔）"
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-violet-300/40"
+                />
+              </label>
+            </div>
+
+            {aiMemError && <p className="text-xs text-red-400">{aiMemError}</p>}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={saveAiMem}
+                disabled={aiMemSaving}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-violet-400/15 px-4 py-2 text-xs font-semibold text-violet-100 transition hover:bg-violet-400/25 disabled:opacity-50"
+              >
+                {aiMemSaving ? (
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-violet-200/30 border-t-violet-200" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+                保存
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAiMemEdit(false); setAiMemError(""); }}
+                disabled={aiMemSaving}
+                className="rounded-xl bg-white/5 px-4 py-2 text-xs text-white/50 transition hover:bg-white/10 hover:text-white"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        ) : aiMem?.hasMemory ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex items-start gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
+                <User className="mt-0.5 h-4 w-4 text-violet-300/70" />
+                <div>
+                  <p className="text-[10px] text-white/35">名字</p>
+                  <p className="mt-0.5 text-sm font-semibold text-white">{aiMem.memory.studentName || "未告知"}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
+                <Target className="mt-0.5 h-4 w-4 text-emerald-300/70" />
+                <div>
+                  <p className="text-[10px] text-white/35">水平评估</p>
+                  <p className="mt-0.5 text-sm font-semibold text-white">
+                    {aiMem.memory.level ? AI_LEVEL_LABEL[aiMem.memory.level] || aiMem.memory.level : "待评估"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex items-start gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
+                <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center text-[10px]">♂/♀</span>
+                <div>
+                  <p className="text-[10px] text-white/35">性别（礼貌词）</p>
+                  <p className="mt-0.5 text-sm font-semibold text-white">{aiMem.memory.genderHint || "未知"}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
+                <Star className="mt-0.5 h-4 w-4 text-yellow-300/70" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-white/35">学习目标</p>
+                  {aiMem.memory.goals?.length ? (
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {aiMem.memory.goals.slice(0, 6).map((g, i) => (
+                        <span key={i} className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[11px] text-white/70">{g}</span>
+                      ))}
+                    </div>
+                  ) : (<p className="mt-0.5 text-sm font-semibold text-white/50">暂无</p>)}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
+              <p className="text-[10px] text-white/35">学习兴趣</p>
+              {aiMem.memory.interests?.length ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {aiMem.memory.interests.slice(0, 8).map((tag, i) => (
+                    <span key={i} className="rounded-full border border-violet-300/15 bg-violet-300/[0.07] px-2 py-0.5 text-[11px] text-violet-100/80">{tag}</span>
+                  ))}
+                </div>
+              ) : (<p className="mt-1 text-sm text-white/50">AI 老师还没了解到，多跟它聊聊吧</p>)}
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
+              <p className="text-[10px] text-white/35">常见错误</p>
+              {aiMem.memory.mistakes?.length ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {aiMem.memory.mistakes.slice(0, 8).map((m, i) => (
+                    <span key={i} className="rounded-full border border-red-300/15 bg-red-300/[0.06] px-2 py-0.5 text-[11px] text-red-200/70">{m}</span>
+                  ))}
+                </div>
+              ) : (<p className="mt-1 text-sm text-white/50">暂无常见错误记录</p>)}
+            </div>
+
+            {aiMem.memory.preferences?.length > 0 && (
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
+                <p className="text-[10px] text-white/35">表达偏好</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {aiMem.memory.preferences.slice(0, 8).map((tag, i) => (
+                    <span key={i} className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[11px] text-white/70">{tag}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/[0.04] bg-white/[0.02] px-4 py-6 text-center">
+            <p className="text-xs text-white/30">
+              AI 老师会通过和你的对话逐渐了解你的名字、水平、兴趣与常见错误。
+              多跟它聊聊，画像会自动更新；你也可以现在就手动填写。
+            </p>
+            <button
+              type="button"
+              onClick={openAiMemEdit}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-violet-400/10 px-4 py-2 text-xs font-semibold text-violet-200/90 transition hover:bg-violet-400/20"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              手动填写画像
+            </button>
+          </div>
+        )}
+      </motion.div>
+
 
       {/* ======================================================
           学习能力 + 本周目标

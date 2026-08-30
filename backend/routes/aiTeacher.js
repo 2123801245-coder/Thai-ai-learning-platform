@@ -313,6 +313,54 @@ function parseRawJson(content) {
   return parsed && typeof parsed === "object" ? parsed : null;
 }
 
+/* 根据学生画像 + 长期记忆生成定制推荐的 system prompt */
+function buildRecommendSystemPrompt(profile, memory) {
+  const lines = [];
+  if (profile?.name) lines.push(`名字：${profile.name}`);
+  if (profile?.level) lines.push(`当前水平：${profile.level}`);
+  if (memory?.level) lines.push(`老师评估水平：${memory.level}`);
+  if (memory?.interests?.length) lines.push(`兴趣：${memory.interests.slice(0, 5).join("、")}`);
+  if (memory?.goals?.length) lines.push(`目标：${memory.goals.slice(0, 3).join("、")}`);
+  if (memory?.mistakes?.length) lines.push(`常见错误：${memory.mistakes.slice(0, 4).join("；")}`);
+  const profileDesc = lines.length ? lines.join("\n") : "新学生，暂无画像（请按初学者对待）";
+  return `你是 ThaiAI 的 AI 泰语老师「阿泰」。请根据学生的画像和学习档案，生成一份贴合其兴趣、匹配其水平的泰语定制课程与配套练习。
+
+【学生画像】
+${profileDesc}
+
+必须只返回一个 JSON 对象（不要任何其他文字，不要 markdown 围栏），结构如下：
+{
+  "topic": "课程主题（中文，一句话，贴合学生兴趣与目标）",
+  "goal": "本节课达成目标（中文，1-2 句）",
+  "vocab": [{"th":"泰语词","roman":"罗马音","cn":"中文"}],
+  "sentences": [{"th":"泰语句子","roman":"罗马音","cn":"中文"}],
+  "exercise": [{"question":"题目","answer":"参考答案（泰语）","hint":"提示（中文）"}],
+  "tip": "针对学生常见错误的一句温馨提示（中文）",
+  "nextTopic": "下一课建议主题（中文）"
+}
+
+要求：
+- vocab 给 5-7 个与主题相关且符合水平的词；sentences 给 3-4 句主题例句。
+- exercise 给 3 道随堂练习（可泰语挖空或中文问句，答案用泰语）。
+- 难度严格匹配水平：beginner 用最简单高频短句；elementary/intermediate 适当加入地道表达。
+- 主题务必贴合学生兴趣与目标，不要跑题。
+- 泰语必须地道自然，绝不编造；tip 要结合学生常见错误，先鼓励再纠正。`;
+}
+
+/* 解析推荐课程的 JSON（宽容提取，缺失字段给默认值） */
+function parseRecommendJson(content) {
+  const raw = parseRawJson(content);
+  return {
+    topic: String(raw.topic || "").trim(),
+    goal: String(raw.goal || "").trim(),
+    vocab: Array.isArray(raw.vocab) ? raw.vocab.slice(0, 7) : [],
+    sentences: Array.isArray(raw.sentences) ? raw.sentences.slice(0, 5) : [],
+    exercise: Array.isArray(raw.exercise) ? raw.exercise.slice(0, 4) : [],
+    tip: String(raw.tip || "").trim(),
+    nextTopic: String(raw.nextTopic || "").trim(),
+  };
+}
+
 /* 从 DeepSeek 回复中提取 JSON（容忍 ```json 围栏与前后杂文） */
 function parseJsonResponse(content) {
   let text = String(content || "").trim();
@@ -453,7 +501,7 @@ router.post("/teacher", authenticate, async (req, res) => {
     // ── 免费对话配额：非 VIP 每日限 N 次，VIP 无限 ──
     const vipUser = await getVipUser(req.userId);
     const isVip = isVipActive(vipUser);
-    if (!isVip) {
+    if (!isVip && action !== "recommend") {
       const used = await getChatUsage(req.userId);
       const freeChatDaily = await getFreeChatDaily();
       if (used >= freeChatDaily) {
@@ -474,6 +522,32 @@ router.post("/teacher", authenticate, async (req, res) => {
           limitExceeded: true,
         });
       }
+    }
+
+    // ── recommend：根据学生画像定制推荐课程与练习（轻量免费，不消耗配额）──
+    if (action === "recommend") {
+      const profile = req.body?.profile || {};
+      const memory = (await getAiMemory(req.userId)) || {};
+      const systemPrompt = buildRecommendSystemPrompt(profile, memory);
+      const messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "请为我生成一份定制课程。" },
+      ];
+
+      let raw = null;
+      let rec = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          raw = await callDeepSeekMessages(messages, attempt === 0 ? 0.7 : 0.4, 1600, true);
+          rec = parseRecommendJson(raw);
+          break;
+        } catch (attemptErr) {
+          if (attempt === 1) throw attemptErr;
+        }
+      }
+      if (!rec) throw new Error("AI 未返回有效推荐内容");
+
+      return res.json({ success: true, recommend: rec });
     }
 
     // ── conversation：场景化自由对话（结构化 JSON 输出）──
@@ -625,6 +699,77 @@ router.get("/teacher/memory", authenticate, async (req, res) => {
   } catch (error) {
     console.error("[aiTeacher] memory error:", error);
     res.status(500).json({ message: "查询记忆失败" });
+  }
+});
+
+/* ============================================================
+   PUT /api/ai/teacher/memory
+   用户手动修正 AI 老师记住的学生画像（个人中心查看/编辑）
+   body: { memory: { studentName?, genderHint?, level?, interests?, goals?, mistakes?, preferences? } }
+   - 只更新传进来的字段；数组按 ,/，/、 拆分
+   - 传空字符串 / 空数组 → 清空该项
+============================================================ */
+
+router.put("/teacher/memory", authenticate, async (req, res) => {
+  try {
+    const update =
+      req.body?.memory && typeof req.body.memory === "object"
+        ? req.body.memory
+        : {};
+    const current = (await getAiMemory(req.userId)) || {};
+
+    const clean = {};
+
+    const scalar = ["studentName", "genderHint"];
+    for (const key of scalar) {
+      if (key in update) {
+        clean[key] = String(update[key] ?? "").trim() || null;
+      }
+    }
+
+    if ("level" in update) {
+      clean.level = ["beginner", "elementary", "intermediate", "advanced"].includes(
+        String(update.level)
+      )
+        ? String(update.level)
+        : null;
+    }
+
+    const arrays = ["interests", "goals", "mistakes", "preferences"];
+    for (const key of arrays) {
+      if (key in update) {
+        const raw = Array.isArray(update[key])
+          ? update[key]
+          : String(update[key] ?? "").split(/[，,、]/);
+        clean[key] = raw
+          .map((v) => String(v).trim())
+          .filter(Boolean)
+          .slice(0, 10);
+      }
+    }
+
+    const merged = { ...current, ...clean };
+
+    // 去掉空值：允许用户“清空”某项
+    const final = {};
+    for (const key of Object.keys(merged)) {
+      const v = merged[key];
+      if (v == null) continue;
+      if (Array.isArray(v) && v.length === 0) continue;
+      if (typeof v === "string" && v.trim() === "") continue;
+      final[key] = v;
+    }
+
+    await saveAiMemory(req.userId, final);
+
+    res.json({
+      success: true,
+      memory: final,
+      hasMemory: Object.keys(final).length > 0,
+    });
+  } catch (error) {
+    console.error("[aiTeacher] 保存记忆失败:", error);
+    res.status(500).json({ message: "保存记忆失败" });
   }
 });
 

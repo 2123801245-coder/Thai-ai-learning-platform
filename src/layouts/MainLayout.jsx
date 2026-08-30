@@ -6,6 +6,7 @@ import Sidebar from "@/components/Sidebar";
 import MobileTabBar from "@/components/MobileTabBar";
 import { ThaiPatternBand } from "@/components/common/ThaiMotifs";
 import { MouseGlow } from "@/components/common/ThaiDecor";
+import ThemeQuickSwitcher from "@/components/theme/ThemeQuickSwitcher";
 import { useAuth } from "@/lib/AuthContext";
 import OnboardingGuide from "@/components/OnboardingGuide";
 
@@ -51,7 +52,7 @@ export default function MainLayout({ children }) {
 
   if (isLoadingAuth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0f1a1e] text-white">
+      <div className="flex min-h-screen items-center justify-center text-white" style={{ background: 'var(--tp-bg, #0f1a1e)' }}>
         <div className="text-center">
           <div className="text-3xl font-black">
             <span className="bg-gradient-to-r from-emerald-400 via-white to-emerald-400 bg-clip-text text-transparent font-viaoda">
@@ -85,9 +86,9 @@ export default function MainLayout({ children }) {
   }
 
   return (
-    <div className="relative min-h-screen" style={{ background: '#0f1a1e' }}>
+    <div className="relative min-h-screen" style={{ background: 'var(--tp-bg, #0f1a1e)' }}>
       {/* === 全站背景层 === */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden" style={{ background: '#0f1a1e' }}>
+      <div className="theme-site-backdrop pointer-events-none fixed inset-0 overflow-hidden" style={{ background: 'var(--tp-bg, #0f1a1e)' }}>
         {/* 寺庙夜景 */}
         <img src={SITE_BG_NIGHT} alt="" aria-hidden="true"
           className="absolute inset-0 h-full w-full object-cover site-bg-a" />
@@ -116,7 +117,7 @@ export default function MainLayout({ children }) {
       <MobileTabBar />
 
       {/* 移动端顶部品牌栏 */}
-      <header className="safe-area-top fixed left-0 right-0 top-0 z-40 border-b border-white/[0.08] bg-[#0f1a1e]/70 backdrop-blur-2xl md:hidden">
+      <header className="safe-area-top fixed left-0 right-0 top-0 z-40 border-b border-white/[0.08] backdrop-blur-2xl md:hidden" style={{ background: 'color-mix(in srgb, var(--tp-bg, #0f1a1e) 72%, transparent)' }}>
         <div className="flex h-14 items-center justify-between px-4">
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-300/20 bg-gradient-to-br from-emerald-400/20 via-emerald-600/10 to-[#050A14] shadow-lg shadow-emerald-400/10">
@@ -128,8 +129,11 @@ export default function MainLayout({ children }) {
               <div className="mt-1 truncate text-[9px] tracking-[0.16em] text-emerald-300/55">泰语学习空间</div>
             </div>
           </div>
-          <div className="rounded-full border border-emerald-300/15 bg-emerald-400/[0.07] px-2.5 py-1 text-[10px] font-medium text-emerald-300/75">
-            เรียนทุกวัน
+          <div className="flex items-center gap-2">
+            <ThemeQuickSwitcher compact />
+            <div className="hidden rounded-full border border-emerald-300/15 bg-emerald-400/[0.07] px-2.5 py-1 text-[10px] font-medium text-emerald-300/75 sm:block">
+              เรียนทุกวัน
+            </div>
           </div>
         </div>
       </header>

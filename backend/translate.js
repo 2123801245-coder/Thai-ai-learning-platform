@@ -225,31 +225,63 @@ async function translateArticleChunk(paragraphs) {
   }
 }
 
-export async function translateArticleBody(paragraphs) {
+export async function translateArticleBodyStream(paragraphs, onBatch) {
   if (!isTranslateEnabled() || !Array.isArray(paragraphs) || !paragraphs.length) {
     return null;
   }
   const total = paragraphs.length;
-  const BATCH = 8;
+  const BATCH = 4;        // 更小的批次 = 更多并行条数，长文也能显著提速
+  const CONCURRENCY = 3;  // 有界并发：既加速又避免打爆 DeepSeek 限流
   const zh = new Array(total).fill("");
   const roman = new Array(total).fill("");
+
+  const chunks = [];
   for (let i = 0; i < total; i += BATCH) {
-    const chunk = paragraphs.slice(i, i + BATCH);
-    let result = await translateArticleChunk(chunk);
-    if (!result) {
-      await sleep(1200);
-      result = await translateArticleChunk(chunk);
-    }
-    if (result) {
-      for (let j = 0; j < chunk.length; j++) {
-        if (i + j < total) {
-          zh[i + j] = result.zh[j] || "";
-          roman[i + j] = result.roman[j] || "";
+    chunks.push({ start: i, paras: paragraphs.slice(i, i + BATCH) });
+  }
+
+  let cursor = 0;
+  async function worker() {
+    while (cursor < chunks.length) {
+      const { start, paras } = chunks[cursor++];
+      let result = await translateArticleChunk(paras);
+      if (!result) {
+        await sleep(1200);
+        result = await translateArticleChunk(paras);
+      }
+      if (result) {
+        for (let j = 0; j < paras.length; j++) {
+          if (start + j < total) {
+            zh[start + j] = result.zh[j] || "";
+            roman[start + j] = result.roman[j] || "";
+          }
+        }
+        if (onBatch) {
+          try {
+            onBatch(
+              start,
+              paras.length,
+              paras.map((_, j) => zh[start + j] || ""),
+              paras.map((_, j) => roman[start + j] || "")
+            );
+          } catch (e) {
+            /* 回调失败不影响翻译 */
+          }
         }
       }
     }
   }
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, chunks.length) }, () => worker())
+  );
+
   const anyTranslated = zh.some((t) => t);
   if (!anyTranslated) return null;
   return { zh, roman };
+}
+
+/* 兼容旧签名：并行翻译、一次性返回（非流式客户端也能提速约一倍） */
+export async function translateArticleBody(paragraphs) {
+  return translateArticleBodyStream(paragraphs);
 }

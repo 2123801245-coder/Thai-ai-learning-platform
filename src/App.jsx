@@ -53,6 +53,7 @@ const ThaiAlphabet = lazy(() => import("@/pages/ThaiAlphabet"));
 const VocabMatch = lazy(() => import("@/pages/VocabMatch"));
 const SentenceFill = lazy(() => import("@/pages/SentenceFill"));
 const WordSegment = lazy(() => import("@/pages/WordSegment"));
+const LearnLoop = lazy(() => import("@/pages/LearnLoop"));
 
 
 /* =========================================================
@@ -452,6 +453,20 @@ export default function App() {
           element={
             <MainLayout>
               <WordSegment />
+            </MainLayout>
+          }
+        />
+
+
+        {/* =================================================
+            今日学习闭环（学→练→测→复习）
+        ================================================= */}
+
+        <Route
+          path="/loop"
+          element={
+            <MainLayout>
+              <LearnLoop />
             </MainLayout>
           }
         />

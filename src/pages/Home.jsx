@@ -876,7 +876,7 @@ function LegacyHome() {
   return (
     <div
       className="home-theme-root relative min-h-screen w-full text-white"
-      style={{ background: '#0c1719' }}
+      style={{ background: 'var(--tp-bg, #0c1719)' }}
     >
       <div className="home-theme-backdrop pointer-events-none fixed inset-0 z-0" aria-hidden="true">
         <motion.div
@@ -1332,6 +1332,7 @@ function LegacyHome() {
 
           <div
             className="
+              theme-hero-overlay-x
               absolute
               inset-0
               bg-gradient-to-r
@@ -1343,6 +1344,7 @@ function LegacyHome() {
 
           <div
             className="
+              theme-hero-overlay-y
               absolute
               inset-0
               bg-gradient-to-t
@@ -1352,9 +1354,10 @@ function LegacyHome() {
             "
           />
 
-          {/* 深绿氛围光（佛像/寺庙区域） */}
+          {/* 深绿氛围光（佛像/寺庙区域）——跟随主题主色 */}
           <div
             className="
+              theme-hero-glow
               pointer-events-none
               absolute
               right-[15%]

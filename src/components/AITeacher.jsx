@@ -18,8 +18,16 @@ import {
 } from "lucide-react";
 
 import { speakThai, stopThaiAudio, extractThaiText } from "@/lib/thaiSpeech";
-import { askAiTeacher, getAiTeacherQuota, getAiTeacherMemory } from "@/api/aiTeacher";
+import { askAiTeacher, getAiTeacherQuota, getAiTeacherMemory, getAiTeacherRecommendation, transcribeSpeech } from "@/api/aiTeacher";
+import { createAudioRecorder } from "@/lib/audioRecorder";
 import VipPanel from "@/components/common/VipPanel";
+
+const LANG_OPTIONS = [
+  { value: "th-TH", label: "泰语" },
+  { value: "zh-CN", label: "中文" },
+  { value: "en-US", label: "英语" },
+  { value: "auto", label: "自动" },
+];
 
 export default function AITeacher() {
   const [view, setView] = useState("promo");
@@ -39,10 +47,17 @@ export default function AITeacher() {
       : false
   );
   const recognitionRef = useRef(null);
+  const [recordingAzure, setRecordingAzure] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [lang, setLang] = useState("th-TH");
+  const azureRecorderRef = useRef(null);
+  const [recommend, setRecommend] = useState(null); // { topic, goal, vocab[], sentences[], exercise[], tip, nextTopic }
+  const [recommending, setRecommending] = useState(false);
   const [vipOpen, setVipOpen] = useState(false);
 
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const langLabel = LANG_OPTIONS.find((o) => o.value === lang)?.label || lang;
 
   // ==========================================
   // 初始欢迎消息
@@ -154,6 +169,14 @@ export default function AITeacher() {
       setInput("");
       setTimeout(() => inputRef.current?.focus(), 100);
     }
+
+    if (nextMode === "recommend") {
+      setInput("");
+      setTimeout(() => inputRef.current?.focus(), 100);
+      if (!recommend && !recommending) {
+        handleRecommend();
+      }
+    }
   };
 
   // ==========================================
@@ -181,6 +204,13 @@ export default function AITeacher() {
       action: "speaking",
       icon: Mic2,
     },
+
+    recommend: {
+      title: "智能推荐",
+      placeholder: "针对推荐课程提问，AI 会继续解答……",
+      action: "chat",
+      icon: Brain,
+    },
   };
 
   const currentMode = modeConfig[mode];
@@ -190,9 +220,14 @@ export default function AITeacher() {
   // ==========================================
 
   const handleSend = async () => {
-    const text = input.trim();
+    let text = input.trim();
 
     if (!text || loading) return;
+
+    // 在「智能推荐」模式下跟随访问：带上当前课程主题作为上下文
+    if (mode === "recommend" && recommend?.topic) {
+      text = `我正在学习课程「${recommend.topic}」，${text}`;
+    }
 
     setError("");
 
@@ -360,12 +395,64 @@ export default function AITeacher() {
   };
 
   // ==========================================
-  // 语音输入（Web Speech API，th-TH）
+  // ==========================================
+  // 语音输入：优先 Web Speech API（可选手语种）；
+  // 浏览器不支持时降级为「录音 → 后端 Azure STT」。
   // ==========================================
 
+  const startAzureRecording = async () => {
+    try {
+      const rec = createAudioRecorder();
+      azureRecorderRef.current = rec;
+      await rec.start();
+      setRecordingAzure(true);
+      setError("");
+    } catch {
+      azureRecorderRef.current = null;
+      setError("无法访问麦克风，请在浏览器设置中允许访问。");
+    }
+  };
+
+  const stopAzureRecording = async () => {
+    const rec = azureRecorderRef.current;
+    azureRecorderRef.current = null;
+    let wav = null;
+    try {
+      wav = rec?.stop() || null;
+    } catch {
+      wav = null;
+    }
+    setRecordingAzure(false);
+    if (!wav) {
+      setError("没有录制到有效音频，请重试。");
+      return;
+    }
+    setTranscribing(true);
+    try {
+      const fd = new FormData();
+      fd.append("audio", wav, "voice.wav");
+      fd.append("language", lang === "auto" ? "th-TH" : lang);
+      const res = await transcribeSpeech(fd);
+      const text = (res?.data?.text || "").trim();
+      if (text) {
+        setInput(text);
+        inputRef.current?.focus();
+      } else {
+        setError("未识别到语音，请靠近麦克风重试。");
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || "云端语音识别失败，请重试。");
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
   const toggleVoiceInput = () => {
-    if (!voiceSupported) {
-      setError("当前浏览器不支持语音输入，请使用 Chrome / Edge 访问。");
+    if (transcribing) return;
+    setError("");
+
+    if (recordingAzure) {
+      stopAzureRecording();
       return;
     }
 
@@ -375,10 +462,15 @@ export default function AITeacher() {
       return;
     }
 
-    const SR =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
+    // 浏览器不支持 Web Speech → 降级 Azure 录音识别
+    if (!voiceSupported) {
+      startAzureRecording();
+      return;
+    }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SR();
-    recognition.lang = "th-TH";
+    if (lang !== "auto") recognition.lang = lang;
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 3;
@@ -420,9 +512,14 @@ export default function AITeacher() {
     }
   };
 
-  /* 卸载时停止识别 */
+  /* 卸载时停止识别 / 录音 */
   useEffect(() => () => {
     recognitionRef.current?.stop();
+    try {
+      azureRecorderRef.current?.stop();
+    } catch (e) {
+      /* ignore */
+    }
     stopThaiAudio();
   }, []);
 
@@ -444,6 +541,61 @@ export default function AITeacher() {
           "สวัสดีครับ 👋\n你好，我是你的 AI 泰语老师。\n\n我们重新开始吧。你可以问我任何泰语问题。",
       },
     ]);
+  };
+
+  // ==========================================
+
+  // 构建学生画像（供推荐 / 对话共用）
+
+  // ==========================================
+
+
+  const buildProfile = () => {
+    try {
+      const user = JSON.parse(
+        localStorage.getItem("thaiai_user") || "{}"
+      );
+      const prog = JSON.parse(
+        localStorage.getItem("thai_ai_learning_progress") || "{}"
+      );
+      return {
+        name: user.nickname || (user.email || "").split("@")[0] || "",
+        level: prog.level_name || "",
+        streak: prog.learning_streak || 0,
+        mastered: prog.total_vocabulary || 0,
+      };
+    } catch {
+      return {};
+    }
+  };
+
+  // ==========================================
+
+  // 智能推荐：根据画像生成定制课程（轻量免费）
+
+  // ==========================================
+
+
+  const handleRecommend = async () => {
+    if (recommending) return;
+    setRecommend(null);
+    setRecommending(true);
+    setError("");
+    try {
+      const res = await getAiTeacherRecommendation(buildProfile());
+      const rec = res?.data?.recommend || null;
+      setRecommend(rec);
+      if (!rec) {
+        setError("AI 暂时无法生成推荐，请稍后再试。");
+      }
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          "推荐生成失败，请稍后再试。"
+      );
+    } finally {
+      setRecommending(false);
+    }
   };
 
   return (
@@ -881,6 +1033,15 @@ export default function AITeacher() {
             handleModeChange("speaking")
           }
         />
+
+        <ModeButton
+          active={mode === "recommend"}
+          icon={Brain}
+          text="智能推荐"
+          onClick={() =>
+            handleModeChange("recommend")
+          }
+        />
       </div>
 
       {/* ========================================
@@ -888,7 +1049,7 @@ export default function AITeacher() {
       ======================================== */}
 
       <AnimatePresence>
-        {messages.length <= 1 && !loading && (
+        {messages.length <= 1 && !loading && mode !== "recommend" && (
           <motion.div
             initial={{
               opacity: 0,
@@ -968,6 +1129,17 @@ export default function AITeacher() {
         "
       >
         <div className="space-y-3">
+          {mode === "recommend" && (
+            <RecommendationPanel
+              recommend={recommend}
+              recommending={recommending}
+              hasMemory={memory?.hasMemory}
+              summary={memory?.summary}
+              onGenerate={handleRecommend}
+              onSpeak={handleSpeak}
+              speakingId={speakingId}
+            />
+          )}
           {messages.map((message) => (
             <MessageBubble
               key={message.id}
@@ -1140,18 +1312,26 @@ export default function AITeacher() {
             onClick={toggleVoiceInput}
             disabled={loading}
             whileTap={{ scale: 0.92 }}
-            title={listening ? "点击停止语音输入" : "语音输入（说泰语）"}
+            title={
+              recordingAzure
+                ? "点击结束录音并云端识别"
+                : listening
+                ? "点击停止语音输入"
+                : `语音输入（识别语种：${langLabel}）`
+            }
             className={
-              listening
+              listening || recordingAzure
                 ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-400/20 text-red-300 shadow-lg shadow-red-900/20"
                 : "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white/40 transition hover:border-emerald-300/20 hover:bg-emerald-400/[0.08] hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
             }
           >
-            {listening ? (
+            {listening || recordingAzure ? (
               <span className="relative flex h-3 w-3">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400/70" />
                 <span className="relative inline-flex h-3 w-3 rounded-full bg-red-400" />
               </span>
+            ) : transcribing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Mic2 className="h-4 w-4" />
             )}
@@ -1237,9 +1417,26 @@ export default function AITeacher() {
         </div>
 
         <div className="mt-2 flex items-center justify-between px-1">
-          <span className="text-[10px] text-white/20">
-            Enter 发送 · Shift + Enter 换行
-            {listening && " · 🎤 正在听你说泰语..."}
+          <span className="flex flex-wrap items-center gap-2 text-[10px] text-white/20">
+            <span>Enter 发送 · Shift + Enter 换行</span>
+            {listening && <span className="text-red-300/80">🎤 正在听你说{langLabel}...</span>}
+            {recordingAzure && <span className="text-red-300/80">🎤 云端识别中（点击麦克风结束）...</span>}
+            {transcribing && <span className="text-emerald-300/70">⏳ 云端识别中...</span>}
+            <label className="flex items-center gap-1">
+              <span>识别语言</span>
+              <select
+                value={lang}
+                onChange={(e) => setLang(e.target.value)}
+                disabled={listening || recordingAzure || transcribing}
+                className="rounded-md border border-white/15 bg-black/40 px-1.5 py-0.5 text-[10px] text-white/70 outline-none disabled:opacity-40"
+              >
+                {LANG_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </span>
 
           <span className="text-[10px] text-white/20">
@@ -1517,5 +1714,229 @@ function StarDot({
         ${className}
       `}
     />
+  );
+}
+
+// ============================================================
+// 智能推荐面板（智能推荐模式顶部）
+// ============================================================
+
+function RecommendationPanel({ recommend, recommending, hasMemory, summary, onGenerate, onSpeak, speakingId }) {
+  if (recommending) {
+    return (
+      <div className="rounded-2xl border border-violet-300/15 bg-violet-400/[0.05] p-5">
+        <div className="flex items-center gap-2.5">
+          <Brain className="h-4 w-4 animate-pulse text-violet-300" />
+          <span className="text-sm text-white/70">
+            正在根据你的画像定制专属课程…
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!recommend) {
+    return (
+      <div className="rounded-2xl border border-violet-300/15 bg-violet-400/[0.05] p-5">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet-400/15">
+            <Brain className="h-4 w-4 text-violet-300" />
+          </div>
+          <p className="text-sm font-semibold text-white/85">
+            为你推荐专属泰语课程
+          </p>
+        </div>
+        <p className="mt-2 text-xs leading-5 text-white/45">
+          {hasMemory
+            ? `已根据「${summary}」定制贴合你兴趣和水平的内容。`
+            : "通过学习记录了解你的兴趣和水平，为你定制贴合你的课程。"}
+        </p>
+        <button
+          type="button"
+          onClick={onGenerate}
+          className="mt-3 flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-violet-900/30 transition-all hover:-translate-y-0.5 hover:shadow-violet-500/20"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          为我生成推荐
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <LessonCard
+      recommend={recommend}
+      onGenerate={onGenerate}
+      onSpeak={onSpeak}
+      speakingId={speakingId}
+    />
+  );
+}
+
+// ============================================================
+// 课程卡
+// ============================================================
+
+function LessonCard({ recommend, onGenerate, onSpeak, speakingId }) {
+  const speak = (th, id) => {
+    if (th) onSpeak(th, id);
+  };
+
+  return (
+    <div className="rounded-2xl border border-violet-300/15 bg-violet-400/[0.04] p-4">
+      <div className="flex items-center justify-between">
+        <span className="rounded-full bg-violet-400/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+          智能推荐
+        </span>
+        <button
+          type="button"
+          onClick={onGenerate}
+          className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/40 transition hover:border-white/15 hover:text-white/70"
+        >
+          <Sparkles className="h-3 w-3" />
+          换一个主题
+        </button>
+      </div>
+
+      <h3 className="mt-2 text-base font-bold text-white">
+        {recommend.topic}
+      </h3>
+      {recommend.goal && (
+        <p className="mt-1 text-xs leading-5 text-white/45">
+          🎯 {recommend.goal}
+        </p>
+      )}
+
+      {recommend.vocab?.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold text-violet-200/80">
+            本课词汇
+          </p>
+          <div className="mt-1.5 space-y-1.5">
+            {recommend.vocab.map((v, i) => (
+              <div
+                key={`v-${i}`}
+                className="flex items-center justify-between rounded-lg bg-black/20 px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => speak(v.th, `rec-v-${i}`)}
+                    className="text-white/30 transition hover:text-emerald-300"
+                    title="朗读"
+                  >
+                    {speakingId === `rec-v-${i}` ? (
+                      <Volume2 className="h-3.5 w-3.5 animate-pulse text-emerald-300" />
+                    ) : (
+                      <Volume2 className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                  <span className="text-sm text-white">{v.th}</span>
+                  <span className="text-[11px] text-white/40">{v.roman}</span>
+                </div>
+                <span className="text-[11px] text-white/60">{v.cn}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recommend.sentences?.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold text-violet-200/80">
+            主题例句
+          </p>
+          <div className="mt-1.5 space-y-1.5">
+            {recommend.sentences.map((sen, i) => (
+              <div
+                key={`s-${i}`}
+                className="rounded-lg bg-black/20 px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => speak(sen.th, `rec-s-${i}`)}
+                    className="text-white/30 transition hover:text-emerald-300"
+                    title="朗读"
+                  >
+                    {speakingId === `rec-s-${i}` ? (
+                      <Volume2 className="h-3.5 w-3.5 animate-pulse text-emerald-300" />
+                    ) : (
+                      <Volume2 className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                  <span className="text-sm text-white">{sen.th}</span>
+                </div>
+                <div className="mt-0.5 pl-7 text-[11px] text-white/40">
+                  {sen.roman}
+                  {sen.cn ? ` · ${sen.cn}` : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recommend.exercise?.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold text-violet-200/80">
+            随堂练习
+          </p>
+          <div className="mt-1.5 space-y-1.5">
+            {recommend.exercise.map((ex, i) => (
+              <div
+                key={`e-${i}`}
+                className="rounded-lg bg-black/20 px-3 py-2"
+              >
+                <p className="text-xs text-white/80">
+                  {i + 1}. {ex.question}
+                </p>
+                {ex.hint && (
+                  <p className="mt-1 text-[11px] text-white/40">
+                    💡 {ex.hint}
+                  </p>
+                )}
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-[11px] text-violet-200/70">
+                    参考答案
+                  </summary>
+                  <div className="mt-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => speak(ex.answer, `rec-e-${i}`)}
+                      className="text-white/30 transition hover:text-emerald-300"
+                      title="朗读"
+                    >
+                      {speakingId === `rec-e-${i}` ? (
+                        <Volume2 className="h-3.5 w-3.5 animate-pulse text-emerald-300" />
+                      ) : (
+                        <Volume2 className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    <span className="text-sm text-white">{ex.answer}</span>
+                  </div>
+                </details>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recommend.tip && (
+        <div className="mt-3 rounded-lg border border-yellow-300/15 bg-yellow-300/[0.05] px-3 py-2 text-[11px] leading-5 text-yellow-100/70">
+          📌 {recommend.tip}
+        </div>
+      )}
+
+      {recommend.nextTopic && (
+        <div className="mt-2 text-[11px] text-white/40">
+          下一课建议：{recommend.nextTopic}
+        </div>
+      )}
+
+      <p className="mt-3 text-[10px] text-white/25">
+        记不住的生词可以点小喇叭跟读，也可以在下方向老师追问本课内容。
+      </p>
+    </div>
   );
 }
