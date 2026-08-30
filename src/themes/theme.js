@@ -23,12 +23,14 @@ export const DEFAULT_CUSTOM_COLORS = {
 };
 
 // 预设主题（与当前墨绿一致的 Emerald 为默认）
+// style：该主题对应的「学习风格」，用于主题选择器展示
 export const THEMES = {
   emerald: {
     id: "emerald",
     name: "Emerald",
     nameCn: "泰玉",
     tag: "ThaiAI Default",
+    style: "经典专注 · 沉浸式阅读",
     base: "dark",
     colors: {
       primary: "#10B981",
@@ -44,11 +46,12 @@ export const THEMES = {
     name: "Royal Thai",
     nameCn: "王室金",
     tag: "高级泰国宫廷",
+    style: "典雅庄重 · 慢速精读",
     base: "dark",
     colors: {
-      primary: "#C9A227",
-      secondary: "#6E3B8E",
-      accent: "#F5C451",
+      primary: "#D4A94E",
+      secondary: "#7B3FA0",
+      accent: "#F0C75E",
       background: "#17102A",
       surface: "rgba(255,255,255,0.07)",
       text: "#FFFFFF",
@@ -59,11 +62,12 @@ export const THEMES = {
     name: "Bangkok Night",
     nameCn: "曼谷之夜",
     tag: "城市夜景 · SaaS",
+    style: "都市高效 · 快速打卡",
     base: "dark",
     colors: {
       primary: "#2DD4BF",
       secondary: "#0E7490",
-      accent: "#22D3EE",
+      accent: "#38BDF8",
       background: "#0A1122",
       surface: "rgba(255,255,255,0.06)",
       text: "#FFFFFF",
@@ -74,6 +78,7 @@ export const THEMES = {
     name: "Chiang Mai",
     nameCn: "清迈",
     tag: "温暖自然",
+    style: "自然舒缓 · 轻松积累",
     base: "dark",
     colors: {
       primary: "#4C9F70",
@@ -89,11 +94,12 @@ export const THEMES = {
     name: "Ocean Thailand",
     nameCn: "泰南海岛",
     tag: "海岛度假",
+    style: "清新活力 · 听力跟读",
     base: "dark",
     colors: {
       primary: "#14B8A6",
       secondary: "#0E7C86",
-      accent: "#A7E8FF",
+      accent: "#FBBF24",
       background: "#07141F",
       surface: "rgba(255,255,255,0.06)",
       text: "#FFFFFF",
@@ -104,11 +110,12 @@ export const THEMES = {
     name: "Cyber Thai",
     nameCn: "赛博泰语",
     tag: "AI 科技感",
+    style: "未来高效 · AI 对话强化",
     base: "dark",
     colors: {
       primary: "#34D399",
       secondary: "#22D3EE",
-      accent: "#A855F7",
+      accent: "#C084FC",
       background: "#0A0A0A",
       surface: "rgba(255,255,255,0.06)",
       text: "#FFFFFF",

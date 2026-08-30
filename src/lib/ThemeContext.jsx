@@ -73,30 +73,20 @@ export function ThemeProvider({ children }) {
     root.classList.toggle("dark", dark);
 
     // 2) 颜色变量
-    //    主题模式（深色/浅色）强制纯黑白底色；预设/自定义色负责强调色。
-    //    mode=system 时跟随系统偏好。
-    let resolvedBg, resolvedText, resolvedCard;
-    if (forceLight || m === "light") {
-      resolvedBg = "#FFFFFF";
-      resolvedText = "#111111";
-      resolvedCard = "rgba(0,0,0,0.05)";
-    } else if (m === "dark") {
-      resolvedBg = "#000000";
-      resolvedText = "#FFFFFF";
-      resolvedCard = "rgba(255,255,255,0.07)";
-    } else {
-      // system：跟随系统
-      const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      if (sysDark) {
-        resolvedBg = "#000000";
-        resolvedText = "#FFFFFF";
-        resolvedCard = "rgba(255,255,255,0.07)";
-      } else {
-        resolvedBg = "#FFFFFF";
-        resolvedText = "#111111";
-        resolvedCard = "rgba(0,0,0,0.05)";
-      }
-    }
+    //    - 深色模式：整体底色 = 预设/自定义的 background，切换预设会改变整体色调
+    //    - 浅色模式：纯白底黑字（预设的亮色基调仅影响强调色），保证可读
+    //    - system：跟随系统偏好，深则用预设底色、浅则纯白
+    const isDarkMode = (() => {
+      if (forceLight) return false;
+      if (m === "dark") return true;
+      if (m === "light") return false;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    })();
+    const resolvedBg = isDarkMode ? (effective.background || "#0f1a1e") : "#FFFFFF";
+    const resolvedText = isDarkMode ? "#FFFFFF" : "#111111";
+    const resolvedCard = isDarkMode
+      ? "rgba(255,255,255,0.07)"
+      : "rgba(0,0,0,0.05)";
     const colorMap = {
       "--tp-primary": effective.primary,
       "--tp-secondary": effective.secondary,
@@ -104,6 +94,8 @@ export function ThemeProvider({ children }) {
       "--tp-bg": resolvedBg,
       "--tp-card": resolvedCard,
       "--tp-text": resolvedText,
+      "--tp-glow": effective.primary,
+      "--tp-glow-accent": effective.accent,
     };
     Object.entries(colorMap).forEach(([k, v]) => (v ? root.style.setProperty(k, v) : root.style.removeProperty(k)));
 

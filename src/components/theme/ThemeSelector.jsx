@@ -33,7 +33,13 @@ export default function ThemeSelector({ value, onChange }) {
 
             <div className="mt-1.5 px-0.5 pb-0.5">
               <p className="truncate text-[11px] font-bold text-white/85">{t.name}</p>
-              <p className="text-[9px] text-white/35">{t.tag}</p>
+              <p className="truncate text-[9px] text-white/35">{t.tag}</p>
+              <p
+                className="mt-0.5 inline-block rounded-md px-1 py-px text-[8px] font-semibold leading-tight"
+                style={{ color: t.colors.accent, background: "color-mix(in srgb, " + t.colors.accent + " 12%, transparent)" }}
+              >
+                {t.style}
+              </p>
             </div>
 
             {active && (

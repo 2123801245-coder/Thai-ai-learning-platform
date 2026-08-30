@@ -1273,6 +1273,7 @@ function LegacyHome() {
           }}
           className="
             group
+            theme-hero-card
             relative
             mb-5
             min-h-[340px]

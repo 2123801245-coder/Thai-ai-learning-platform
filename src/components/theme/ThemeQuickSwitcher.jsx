@@ -3,21 +3,58 @@ import { Check, ChevronDown, Palette, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { THEMES, THEME_ORDER } from "@/themes/theme";
 
-/* 顶栏快捷主题切换器：预设下拉 + 深/浅模式快捷切换 */
+/* 顶栏快捷主题切换器：预设下拉 + 深/浅模式快捷切换
+   下拉用 position:fixed 按视口定位，绕开 Sidebar/MainLayout 的 overflow 裁剪 */
 export default function ThemeQuickSwitcher({ compact = false }) {
   const { theme, setTheme, mode, setMode, setCustomColors } = useTheme();
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [pos, setPos] = useState(null); // {top, left, right} 视口坐标
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
 
   const current = THEMES[theme] || THEMES.emerald;
 
   useEffect(() => {
+    if (!open) return;
     function onDocClick(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (
+        btnRef.current?.contains(e.target) ||
+        menuRef.current?.contains(e.target)
+      ) {
+        return;
+      }
+      setOpen(false);
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
+  }, [open]);
+
+  useEffect(() => {
+    function onScroll() { if (open) setOpen(false); }
+    function onResize() { if (open) setOpen(false); }
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open]);
+
+  function toggle() {
+    if (!open) {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (r) {
+        const MENU_W = 216;
+        const vw = window.innerWidth;
+        // left 对齐按钮左缘，若超出视口右则收窄以完全可见
+        let left;
+        if (r.left + MENU_W > vw) left = Math.max(4, vw - MENU_W - 4);
+        else left = Math.max(4, r.left);
+        setPos({ top: r.bottom + 6, left });
+      }
+    }
+    setOpen((o) => !o);
+  }
 
   function pick(id) {
     setTheme(id);
@@ -26,13 +63,13 @@ export default function ThemeQuickSwitcher({ compact = false }) {
   }
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={btnRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={`flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.05] transition hover:border-emerald-300/30 hover:bg-white/[0.08] ${
+        className={`theme-quick-toggle flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.05] transition hover:border-emerald-300/30 hover:bg-white/[0.08] ${
           compact ? "px-2 py-1.5" : "px-2.5 py-2"
         }`}
         title="快捷切换主题"
@@ -50,8 +87,10 @@ export default function ThemeQuickSwitcher({ compact = false }) {
 
       {open && (
         <div
+          ref={menuRef}
           role="listbox"
-          className="absolute left-0 top-full z-[90] mt-2 w-52 overflow-hidden rounded-2xl border border-white/10 bg-[#0d1a16]/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
+          className="fixed z-[200] w-[216px] origin-top-left overflow-visible rounded-2xl border border-white/10 bg-[#0d1a16]/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
+          style={{ top: pos?.top ?? 0, left: pos?.left ?? 12 }}
         >
           <p className="px-2 pb-1 pt-1.5 text-[9px] font-bold tracking-[0.16em] text-white/30">
             主题预设
@@ -71,11 +110,14 @@ export default function ThemeQuickSwitcher({ compact = false }) {
                 }`}
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full ring-1 ring-white/15" style={{ background: t.colors.accent }} />
-                <span className="flex-1 truncate text-[11px] font-medium text-white/80">
-                  {t.nameCn}
-                  <span className="ml-1 text-[9px] text-white/35">{t.name}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate text-[11px] font-medium text-white/80">
+                    {t.nameCn}
+                    <span className="ml-1 text-[9px] text-white/35">{t.name}</span>
+                  </span>
+                  <span className="block truncate text-[8.5px] text-white/35">{t.style}</span>
                 </span>
-                {active && <Check className="h-3 w-3 text-emerald-300" />}
+                {active && <Check className="h-3 w-3 shrink-0 text-emerald-300" />}
               </button>
             );
           })}

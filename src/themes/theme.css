@@ -103,6 +103,23 @@ html.theme-custom[data-glass="off"] .premium-glass {
   );
 }
 
+/* 每个主题的氛围色 cast：把主题主/辅/强调色渗透到全局背景，
+   让 Bangkok（青蓝）、Royal（紫金）、Ocean（青）、Cyber（黑+紫）等
+   差异一眼可见。默认主题不带 theme-custom，不生效。 */
+.theme-custom .theme-site-backdrop::before,
+.theme-custom .home-theme-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    radial-gradient(70% 55% at 82% 8%, color-mix(in srgb, var(--tp-secondary) 22%, transparent), transparent 62%),
+    radial-gradient(55% 48% at 12% 92%, color-mix(in srgb, var(--tp-primary) 18%, transparent), transparent 60%),
+    radial-gradient(40% 38% at 60% 45%, color-mix(in srgb, var(--tp-accent) 10%, transparent), transparent 65%);
+  opacity: 0.8;
+}
+
 /* Sidebar 背景跟随主题背景色（仅 custom 主题） */
 .theme-custom .theme-sidebar {
   background-color: color-mix(in srgb, var(--tp-bg) 82%, black);
@@ -129,32 +146,87 @@ html.theme-custom[data-glass="off"] .premium-glass {
   background-color: color-mix(in srgb, var(--tp-primary) 22%, transparent) !important;
 }
 
-/* 主要红色系：emerald / jade 风格的常用 Tailwind 色统一映射到主/辅色 */
-.theme-custom .text-emerald-300,
+/* 主要红色系：emerald / teal / jade 风格的常用 Tailwind 色统一映射到主/辅色 */
+.theme-custom .text-emerald-100,
 .theme-custom .text-emerald-200,
+.theme-custom .text-emerald-300,
 .theme-custom .text-emerald-400,
-.theme-custom .text-teal-300 { color: var(--tp-primary) !important; }
-.theme-custom .text-emerald-500 { color: var(--tp-secondary) !important; }
+.theme-custom .text-teal-200,
+.theme-custom .text-teal-300,
+.theme-custom .text-teal-400 { color: var(--tp-primary) !important; }
+.theme-custom .text-emerald-500,
+.theme-custom .text-emerald-600,
+.theme-custom .text-teal-500,
+.theme-custom .text-teal-600 { color: var(--tp-secondary) !important; }
+.theme-custom .from-emerald-300,
+.theme-custom .to-emerald-300,
 .theme-custom .from-emerald-400,
 .theme-custom .to-emerald-400,
 .theme-custom .from-emerald-500,
-.theme-custom .to-emerald-500 {
+.theme-custom .to-emerald-500,
+.theme-custom .from-teal-400,
+.theme-custom .to-teal-400,
+.theme-custom .from-teal-500,
+.theme-custom .to-teal-500 {
   background-image: linear-gradient(to right, var(--tp-primary), var(--tp-secondary));
 }
+.theme-custom .bg-emerald-400\/\[0\.04\],
+.theme-custom .bg-emerald-400\/\[0\.05\],
+.theme-custom .bg-emerald-400\/\[0\.06\],
+.theme-custom .bg-emerald-400\/\[0\.07\],
 .theme-custom .bg-emerald-400\/\[0\.08\],
-.theme-custom .bg-emerald-400\/\[0\.07\] { background-color: color-mix(in srgb, var(--tp-primary) 10%, transparent); }
+.theme-custom .bg-emerald-400\/\[0\.1\],
+.theme-custom .bg-emerald-400\/\[0\.12\],
+.theme-custom .bg-teal-400\/\[0\.08\],
+.theme-custom .bg-teal-400\/\[0\.1\] { background-color: color-mix(in srgb, var(--tp-primary) 12%, transparent); }
+.theme-custom .bg-emerald-400\/10,
+.theme-custom .bg-emerald-400\/20,
+.theme-custom .bg-teal-400\/10 { background-color: color-mix(in srgb, var(--tp-primary) 16%, transparent); }
+.theme-custom .border-emerald-300\/15,
 .theme-custom .border-emerald-300\/20,
-.theme-custom .border-emerald-300\/15 { border-color: color-mix(in srgb, var(--tp-primary) 25%, transparent); }
-.theme-custom .shadow-emerald-400\/10 { box-shadow: 0 10px 30px -12px var(--tp-primary); }
+.theme-custom .border-emerald-300\/25,
+.theme-custom .border-emerald-300\/30,
+.theme-custom .border-teal-300\/20 { border-color: color-mix(in srgb, var(--tp-primary) 28%, transparent); }
+.theme-custom .shadow-emerald-400\/10,
+.theme-custom .shadow-emerald-400\/15,
+.theme-custom .shadow-teal-400\/10 { box-shadow: 0 10px 30px -12px var(--tp-primary); }
 
 /* 金色系 */
+.theme-custom .text-yellow-100,
 .theme-custom .text-yellow-200,
+.theme-custom .text-yellow-300,
 .theme-custom .text-amber-200,
-.theme-custom .text-yellow-300 { color: var(--tp-accent) !important; }
-.theme-custom .border-yellow-300\/25,
-.theme-custom .border-yellow-300\/40 {
-  border-color: color-mix(in srgb, var(--tp-accent) 30%, transparent);
+.theme-custom .text-amber-300 { color: var(--tp-accent) !important; }
+.theme-custom .from-yellow-200,
+.theme-custom .to-yellow-200,
+.theme-custom .from-yellow-300,
+.theme-custom .to-yellow-300,
+.theme-custom .from-amber-300,
+.theme-custom .to-amber-300 {
+  background-image: linear-gradient(to right, var(--tp-accent), color-mix(in srgb, var(--tp-accent) 70%, white));
 }
+.theme-custom .border-yellow-300\/15,
+.theme-custom .border-yellow-300\/20,
+.theme-custom .border-yellow-300\/25,
+.theme-custom .border-yellow-300\/40,
+.theme-custom .border-amber-300\/20 {
+  border-color: color-mix(in srgb, var(--tp-accent) 32%, transparent);
+}
+.theme-custom .bg-yellow-300\/\[0\.07\],
+.theme-custom .bg-yellow-300\/\[0\.08\],
+.theme-custom .bg-yellow-300\/\[0\.16\],
+.theme-custom .bg-amber-300\/\[0\.08\] { background-color: color-mix(in srgb, var(--tp-accent) 14%, transparent); }
+
+/* 科技色系（bangkok / cyber / ocean 特有） */
+.theme-custom .text-cyan-300,
+.theme-custom .text-cyan-400 { color: var(--tp-secondary) !important; }
+.theme-custom .text-purple-300,
+.theme-custom .text-purple-400,
+.theme-custom .text-fuchsia-300,
+.theme-custom .text-violet-300 { color: var(--tp-accent) !important; }
+.theme-custom .bg-cyan-400\/\[0\.08\],
+.theme-custom .bg-cyan-400\/\[0\.1\] { background-color: color-mix(in srgb, var(--tp-secondary) 14%, transparent); }
+.theme-custom .border-cyan-300\/20 { border-color: color-mix(in srgb, var(--tp-secondary) 30%, transparent); }
 
 /* ============================================================
    背景氛围效果（data-bgeffect）
@@ -219,16 +291,19 @@ html[data-bgeffect="star"] .site-bg-a { filter: brightness(1.06); }
    - 预设/自定义色只负责强调色（主色/辅助/金色）
    ============================================================ */
 
-/* ---- 深色：隐藏背景图，纯黑 ---- */
+/* ---- 深色：隐藏背景图，底色 = 预设 background（切换预设会改变整体色调） ---- */
 html.theme-custom[data-mode="dark"] .theme-site-backdrop .site-bg-a,
 html.theme-custom[data-mode="dark"] .theme-site-backdrop .site-bg-b {
   opacity: 0 !important;
 }
 html.theme-custom[data-mode="dark"] .theme-site-backdrop::after {
-  background: #000;
+  background: var(--tp-bg);
 }
 html.theme-custom[data-mode="dark"] .home-theme-image {
   opacity: 0 !important;
+}
+html.theme-custom[data-mode="dark"] .home-theme-root {
+  background: var(--tp-bg) !important;
 }
 
 /* ---- 浅色：隐藏背景图，纯白 ---- */
@@ -263,12 +338,41 @@ html.theme-custom[data-mode="light"] [class*="text-white/"] {
   color: rgba(22, 22, 22, 0.78) !important;
 }
 
-/* 浅色：硬编码白卡（bg-white/x）转浅灰底，保持层次 */
+/* 浅色：bg-white/x 半透明白卡保持白色系（白底上自然融合，文字已转深） */
 html.theme-custom[data-mode="light"] [class*="bg-white"] {
-  background-color: rgba(0, 0, 0, 0.045) !important;
+  background-color: rgba(255, 255, 255, 0.72) !important;
 }
 html.theme-custom[data-mode="light"] [class*="bg-white/"] {
-  background-color: rgba(0, 0, 0, 0.045) !important;
+  background-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+/* 浅色：首页硬编码半透明黑卡（bg-black/x）转白卡，避免深底深字 */
+html.theme-custom[data-mode="light"] [class*="bg-black"] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+html.theme-custom[data-mode="light"] [class*="bg-black/"] {
+  background-color: rgba(255, 255, 255, 0.78) !important;
+}
+
+/* 浅色：主题快捷切换按钮（Sidebar 白底上不可见）——转深描边 + 浅底深字 */
+html.theme-custom[data-mode="light"] .theme-quick-toggle {
+  background-color: rgba(255, 255, 255, 0.6) !important;
+  border-color: rgba(0, 0, 0, 0.18) !important;
+  box-shadow: inset 0 0 0 0 !important;
+}
+html.theme-custom[data-mode="light"] .theme-quick-toggle:hover {
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  background-color: rgba(255, 255, 255, 0.85) !important;
+}
+html.theme-custom[data-mode="light"] .theme-quick-toggle svg {
+  color: #10b981 !important;
+}
+html.theme-custom[data-mode="light"] .theme-quick-toggle svg.lucide-chevron-down {
+  color: rgba(0, 0, 0, 0.4) !important;
+}
+html.theme-custom[data-mode="light"] .theme-quick-toggle span,
+html.theme-custom[data-mode="light"] .theme-quick-label {
+  color: #161616 !important;
 }
 
 /* 浅色：硬编码白边转浅灰边 */
@@ -277,6 +381,47 @@ html.theme-custom[data-mode="light"] [class*="border-white"] {
 }
 html.theme-custom[data-mode="light"] [class*="border-white/"] {
   border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* 浅色：首页深色玻璃卡（bg-[#071817]）转浅色卡，保证白底深字可读 */
+html.theme-custom[data-mode="light"] [class*="bg-[#071817]"] {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+/* 浅色：首页其它硬编码深色底也转浅 */
+html.theme-custom[data-mode="light"] [class*="bg-[#0c1719]"] {
+  background: #f4f7f6 !important;
+}
+
+/* 浅色：Hero 卡保持深色沉浸视觉（白字 + 深遮罩 + 保留背景图） */
+html.theme-custom[data-mode="light"] .theme-hero-card {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+html.theme-custom[data-mode="light"] .theme-hero-card .theme-hero-overlay-x {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, #020c0e 80%, black),
+    color-mix(in srgb, #041112 55%, transparent),
+    transparent
+  ) !important;
+}
+html.theme-custom[data-mode="light"] .theme-hero-card .theme-hero-overlay-y {
+  background-image: linear-gradient(
+    to top,
+    color-mix(in srgb, #030f10 62%, black),
+    transparent 55%,
+    color-mix(in srgb, #020c0e 28%, transparent)
+  ) !important;
+}
+html.theme-custom[data-mode="light"] .theme-hero-card [class*="text-white"] {
+  color: #fff !important;
+}
+html.theme-custom[data-mode="light"] .theme-hero-card [class*="text-white/"] {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+/* 浅色：Hero 内浅色挂件/按钮背景保持深色玻璃（白字才可读） */
+html.theme-custom[data-mode="light"] .theme-hero-card [class*="bg-white/"] {
+  background-color: rgba(0, 0, 0, 0.45) !important;
 }
 
 /* 浅色：premium-glass 卡转白底深字 */
