@@ -30,6 +30,7 @@ import { BangkokSkyline } from "@/components/common/ThaiDecor";
 import { useNavigate } from "react-router-dom";
 
 import AITeacher from "@/components/AITeacher";
+import AiTodayMission from "@/components/ai/AiTodayMission";
 import VipPanel from "@/components/common/VipPanel";
 import {
   ThaiCorner,
@@ -1667,6 +1668,12 @@ function LegacyHome() {
           </div>
 
         </motion.div>
+
+        {/* =====================================================
+            AI 今日安排（核心：今天学什么 → 开始今日学习）
+        ===================================================== */}
+
+        <AiTodayMission />
 
         {/* =====================================================
             移动端快捷入口

@@ -601,6 +601,7 @@ export default function AITeacher() {
   return (
     <section
       className="
+        theme-teacher-card
         relative
         flex
         h-full

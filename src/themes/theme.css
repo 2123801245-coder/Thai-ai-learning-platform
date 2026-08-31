@@ -317,6 +317,11 @@ html.theme-custom[data-mode="light"] .theme-site-backdrop::after {
 html.theme-custom[data-mode="light"] .home-theme-image {
   opacity: 0 !important;
 }
+html.theme-custom[data-mode="light"] .home-theme-backdrop::after {
+  background: #fff !important;
+  opacity: 1 !important;
+  z-index: 2;
+}
 html.theme-custom[data-mode="light"] .home-theme-root {
   background: #fff !important;
   color: #111 !important;
@@ -393,35 +398,82 @@ html.theme-custom[data-mode="light"] [class*="bg-[#0c1719]"] {
   background: #f4f7f6 !important;
 }
 
-/* 浅色：Hero 卡保持深色沉浸视觉（白字 + 深遮罩 + 保留背景图） */
+/* 浅色：Hero 卡也转为浅色沉浸视觉（深字 + 浅遮罩 + 隐藏背景图），
+   使首页所有板块都统一为白色 */
 html.theme-custom[data-mode="light"] .theme-hero-card {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  background: rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 0 20px 60px -30px rgba(0, 0, 0, 0.25) !important;
 }
-html.theme-custom[data-mode="light"] .theme-hero-card .theme-hero-overlay-x {
+/* 隐藏 Hero 卡内部的背景大图（浅色模式不要图片） */
+html.theme-custom[data-mode="light"] .theme-hero-card img {
+  opacity: 0 !important;
+}
+html.theme-custom[data-mode="light"] .theme-hero-card .gold-draw {
+  opacity: 0.5 !important;
+}
+html.theme-custom[data-mode="light"] .theme-hero-card .theme-hero-overlay-x,
+html.theme-custom[data-mode="light"] .theme-hero-card > div[class*="absolute"] {
   background-image: linear-gradient(
     to right,
-    color-mix(in srgb, #020c0e 80%, black),
-    color-mix(in srgb, #041112 55%, transparent),
+    color-mix(in srgb, #ffffff 55%, transparent),
+    color-mix(in srgb, #f4f7f6 30%, transparent),
     transparent
   ) !important;
 }
 html.theme-custom[data-mode="light"] .theme-hero-card .theme-hero-overlay-y {
   background-image: linear-gradient(
     to top,
-    color-mix(in srgb, #030f10 62%, black),
+    color-mix(in srgb, #ffffff 45%, transparent),
     transparent 55%,
-    color-mix(in srgb, #020c0e 28%, transparent)
+    color-mix(in srgb, #f4f7f6 20%, transparent)
   ) !important;
 }
+html.theme-custom[data-mode="light"] .theme-hero-card .theme-hero-glow {
+  background-color: color-mix(in srgb, var(--tp-primary) 16%, transparent) !important;
+}
 html.theme-custom[data-mode="light"] .theme-hero-card [class*="text-white"] {
-  color: #fff !important;
+  color: #161616 !important;
 }
 html.theme-custom[data-mode="light"] .theme-hero-card [class*="text-white/"] {
-  color: rgba(255, 255, 255, 0.8) !important;
+  color: rgba(22, 22, 22, 0.78) !important;
 }
-/* 浅色：Hero 内浅色挂件/按钮背景保持深色玻璃（白字才可读） */
-html.theme-custom[data-mode="light"] .theme-hero-card [class*="bg-white/"] {
-  background-color: rgba(0, 0, 0, 0.45) !important;
+html.theme-custom[data-mode="light"] .theme-hero-card [class*="bg-black"] {
+  background-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+/* 浅色：AI 泰语老师 promo Hero 卡（thai-teacher）也转白、隐藏背景大图 */
+html.theme-custom[data-mode="light"] .theme-teacher-card {
+  background: rgba(255, 253, 250, 0.92) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 30px 90px -40px rgba(0, 0, 0, 0.25) !important;
+  backdrop-filter: none !important;
+}
+html.theme-custom[data-mode="light"] .theme-teacher-card img[src*="thai-teacher-bg"] {
+  opacity: 0 !important;
+}
+/* 浅色：Hero 内深绿渐变遮罩转浅色 */
+html.theme-custom[data-mode="light"] .theme-teacher-card > div[class*="bg-gradient-to-t from-[#061513]"] {
+  background-image: linear-gradient(
+    to top,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0.25),
+    rgba(255, 255, 255, 0.4)
+  ) !important;
+}
+/* 浅色：AI 老师名、气泡文字转深色可读 */
+html.theme-custom[data-mode="light"] .theme-teacher-card [class*="text-white"] {
+  color: #161616 !important;
+}
+html.theme-custom[data-mode="light"] .theme-teacher-card [class*="text-white/"] {
+  color: rgba(22, 22, 22, 0.78) !important;
+}
+html.theme-custom[data-mode="light"] .theme-teacher-card [class*="bg-white/"] {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+}
+/* 浅色：AI 老师卡片内的 emerald 在线状态徽章转主题主色 */
+html.theme-custom[data-mode="light"] .theme-teacher-card {
+  color: #161616;
 }
 
 /* 浅色：premium-glass 卡转白底深字 */

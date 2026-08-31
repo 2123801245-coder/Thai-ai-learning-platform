@@ -31,6 +31,19 @@ export const getAiTeacherRecommendation = (profile) =>
     profile,
   });
 
+// 根据学生画像 + 长期记忆生成个性化今日学习计划（轻量免费）
+// 生成任务表格较耗时，放宽超时避免首图 10s 上限
+export const getAiTeacherPlan = (profile) =>
+  api.post(
+    "/ai/teacher",
+    {
+      message: "请为我生成今日学习计划",
+      action: "plan",
+      profile,
+    },
+    { timeout: 60000 }
+  );
+
 
 // 学生长期记忆摘要（「老师记得你」）
 export const getAiTeacherMemory = () =>
@@ -54,6 +67,7 @@ export default {
   askAiTeacher,
   getAiTeacherQuota,
   getAiTeacherRecommendation,
+  getAiTeacherPlan,
   getAiTeacherMemory,
   updateAiTeacherMemory,
   transcribeSpeech,

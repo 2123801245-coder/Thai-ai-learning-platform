@@ -361,6 +361,67 @@ function parseRecommendJson(content) {
   };
 }
 
+/* 根据学生画像 + 长期记忆 + 当日进度 生成个性化每日学习计划 */
+function buildPlanSystemPrompt(profile, memory) {
+  const lines = [];
+  if (profile?.name) lines.push(`名字：${profile.name}`);
+  if (profile?.level) lines.push(`当前水平：${profile.level}`);
+  if (profile?.streak) lines.push(`已连续学习：${profile.streak} 天`);
+  if (profile?.mastered) lines.push(`已掌握词汇：约 ${profile.mastered} 词`);
+  if (memory?.level) lines.push(`老师评估水平：${memory.level}`);
+  if (memory?.interests?.length) lines.push(`兴趣：${memory.interests.slice(0, 5).join("、")}`);
+  if (memory?.goals?.length) lines.push(`目标：${memory.goals.slice(0, 3).join("、")}`);
+  if (memory?.mistakes?.length) lines.push(`常见错误：${memory.mistakes.slice(0, 4).join("；")}`);
+  if (memory?.preferences?.length) lines.push(`偏好：${memory.preferences.slice(0, 4).join("、")}`);
+  const profileDesc = lines.length ? lines.join("\n") : "新学生，尚无画像（请按初学者、对泰语文化和美食旅行感兴趣对待）";
+  return `你是 ThaiAI 的 AI 泰语老师「阿泰」。请根据学生的画像、常见错误与学习进度，生成一份贴合其兴趣、匹配其水平的「今日学习计划」，作为学生每天的练习清单。
+
+【学生画像】
+${profileDesc}
+
+必须只返回一个 JSON 对象（不要任何其他文字，不要 markdown 围栏），结构如下：
+{
+  "focus": "今日学习主题（中文，1 句话，贴合学生兴趣）",
+  "tasks": [
+    {"id":"vocab","title":"学习 10 个新词","description":"围绕今天主题的词汇","goal":"10 词"},
+    {"id":"review","title":"复习 5 个错题","description":"巩固易错词","goal":"5 词"},
+    {"id":"video","title":"观看 1 节视频","description":"对应水平的课程","goal":"1 节"},
+    {"id":"speaking","title":"开口 5 分钟","description":"跟着句子练发音","goal":"5 分钟"},
+    {"id":"chat","title":"和 AI 老师聊一次","description":"用今天的主题自由对话","goal":"1 次"}
+  ],
+  "tip": "结合学生常见错误的一句提示（中文，先鼓励再纠正）"
+}
+
+要求：
+- 生成 4-6 个任务；id 只能从以下取值（每个任务尽量不同）：vocab(新词)、review(错题/生词本复习)、video(课程)、speaking(口语)、chat(AI对话)、listening(听力)、reading(阅读)。
+- 任务的 title/description/goal 要显式体现本篇某个现实量（如 5 词、1 节、5 分钟），便于学生对照完成。
+- 难度严格匹配水平：beginner 用小量高频任务；中高阶适当提升量并加入听说/阅读。
+- 至少保留 vocab 与 speaking 两类基础任务。
+- tip 要结合学生常见错误，语气温暖、自然。`;
+}
+
+/* 解析个性化计划的 JSON */
+function parsePlanJson(content) {
+  const raw = parseRawJson(content || "{}");
+  const allowed = ["vocab", "review", "video", "speaking", "chat", "listening", "reading"];
+  const tasks = Array.isArray(raw.tasks)
+    ? raw.tasks
+        .filter((t) => t && allowed.includes(String(t.id).trim()))
+        .slice(0, 6)
+        .map((t) => ({
+          id: String(t.id).trim(),
+          title: String(t.title || "").trim(),
+          description: String(t.description || "").trim(),
+          goal: String(t.goal || "").trim(),
+        }))
+    : [];
+  return {
+    focus: String(raw.focus || "").trim(),
+    tasks,
+    tip: String(raw.tip || "").trim(),
+  };
+}
+
 /* 从 DeepSeek 回复中提取 JSON（容忍 ```json 围栏与前后杂文） */
 function parseJsonResponse(content) {
   let text = String(content || "").trim();
@@ -522,6 +583,33 @@ router.post("/teacher", authenticate, async (req, res) => {
           limitExceeded: true,
         });
       }
+    }
+
+    // ── plan：按学生画像 + 记忆生成个性化今日学习计划（轻量免费，不消耗配额）──
+    if (action === "plan") {
+      const profile = req.body?.profile || {};
+      const memory = (await getAiMemory(req.userId)) || {};
+      const systemPrompt = buildPlanSystemPrompt(profile, memory);
+      const messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "请为我生成一份今日学习计划。" },
+      ];
+
+      let raw = null;
+      let plan = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          raw = await callDeepSeekMessages(messages, attempt === 0 ? 0.7 : 0.4, 1400, true);
+          plan = parsePlanJson(raw);
+          break;
+        } catch (attemptErr) {
+          if (attempt === 1) throw attemptErr;
+        }
+      }
+      if (!plan || !plan.tasks || plan.tasks.length === 0) {
+        throw new Error("AI 未返回有效学习计划");
+      }
+      return res.json({ success: true, plan });
     }
 
     // ── recommend：根据学生画像定制推荐课程与练习（轻量免费，不消耗配额）──
