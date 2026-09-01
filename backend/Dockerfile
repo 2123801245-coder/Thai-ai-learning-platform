@@ -13,7 +13,7 @@ WORKDIR /app
 
 # 系统依赖：sqlite3 原生模块编译（如有预编译包则不会触发）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ \
+    python3 make g++ ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # 先拷依赖清单，利用 Docker 层缓存

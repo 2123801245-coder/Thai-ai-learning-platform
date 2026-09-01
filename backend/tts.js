@@ -373,18 +373,32 @@ async function synthesizeWithSay(text, rateNum) {
 
 /* 用 macOS afconvert 把 MP3 转成标准 PCM WAV（LEI16@24kHz 单声道）。
    afconvert 是 macOS 自带工具，零额外依赖；WebView 对标准 WAV 的解码
-   可靠性远高于 Edge 的 24kHz MP3 流。临时文件用完即删。 */
+   可靠性远高于 Edge 的 24kHz MP3 流。临时文件用完即删。
+
+   Linux 部署（Docker）没有 afconvert，回退到 ffmpeg（镜像里已安装）做
+   同样的 MP3→PCM WAV 转换——否则线上会直接把原始 MP3 返回给浏览器
+   （无 WAV 化、无限幅，压缩噪声即“电音”）。两个转换器都失败才回退 MP3。 */
 async function convertToWav(mp3Buffer) {
   const tag = crypto.randomBytes(8).toString("hex");
   const inPath = join(tmpdir(), `thaiai-tts-${tag}.mp3`);
   const outPath = join(tmpdir(), `thaiai-tts-${tag}.wav`);
   try {
     await writeFile(inPath, mp3Buffer);
-    await execFileAsync(
-      "afconvert",
-      ["-f", "WAVE", "-d", "LEI16@24000", inPath, outPath],
-      { timeout: 20000 }
-    );
+    try {
+      await execFileAsync(
+        "afconvert",
+        ["-f", "WAVE", "-d", "LEI16@24000", inPath, outPath],
+        { timeout: 20000 }
+      );
+    } catch (e) {
+      // afconvert 不存在（Linux 容器）或转换失败 → ffmpeg 兜底
+      console.warn("[tts] afconvert 不可用，改用 ffmpeg 转 WAV:", e.message);
+      await execFileAsync(
+        "ffmpeg",
+        ["-y", "-i", inPath, "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", outPath],
+        { timeout: 30000 }
+      );
+    }
     const wav = await readFile(outPath);
     // Edge 的 MP3 响度极满（实测峰值 1.000、多处削波，听感发燥带“电音”），
     // 解码成 WAV 后仍会削波。这里做纯 PCM 增益衰减：峰值超过 0.85 就整体
