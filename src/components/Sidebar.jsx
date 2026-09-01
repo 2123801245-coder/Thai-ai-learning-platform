@@ -19,6 +19,7 @@ import {
   Shuffle,
   FileText,
   Puzzle,
+  Landmark,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/AuthContext";
@@ -144,6 +145,11 @@ export default function Sidebar() {
       name: "本地语料库",
       path: "/corpus",
       icon: BookOpenText,
+    },
+    {
+      name: "泰国文化",
+      path: "/culture",
+      icon: Landmark,
     },
     {
       name: "学习计划",

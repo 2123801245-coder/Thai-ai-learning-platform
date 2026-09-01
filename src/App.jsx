@@ -54,6 +54,8 @@ const VocabMatch = lazy(() => import("@/pages/VocabMatch"));
 const SentenceFill = lazy(() => import("@/pages/SentenceFill"));
 const WordSegment = lazy(() => import("@/pages/WordSegment"));
 const LearnLoop = lazy(() => import("@/pages/LearnLoop"));
+const Practice = lazy(() => import("@/pages/Practice"));
+const Culture = lazy(() => import("@/pages/Culture"));
 
 
 /* =========================================================
@@ -334,6 +336,20 @@ export default function App() {
 
 
         {/* =================================================
+            泰国文化
+        ================================================= */}
+
+        <Route
+          path="/culture"
+          element={
+            <MainLayout>
+              <Culture />
+            </MainLayout>
+          }
+        />
+
+
+        {/* =================================================
             本地泰语语料库
         ================================================= */}
 
@@ -467,6 +483,20 @@ export default function App() {
           element={
             <MainLayout>
               <LearnLoop />
+            </MainLayout>
+          }
+        />
+
+
+        {/* =================================================
+            练习中心（移动端底部导航落地页）
+        ================================================= */}
+
+        <Route
+          path="/practice"
+          element={
+            <MainLayout>
+              <Practice />
             </MainLayout>
           }
         />
