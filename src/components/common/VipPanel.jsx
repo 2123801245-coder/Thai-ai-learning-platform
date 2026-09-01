@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Sparkles,
   BarChart3,
+  Headphones,
   KeyRound,
   Loader2,
   CheckCircle2,
@@ -56,34 +57,68 @@ import {
 
 const benefits = [
   {
-    icon: BookOpen,
-    text: "全部课程解锁",
-    desc: "5 门 VIP 进阶课程全开放",
+    icon: MessageCircle,
+    text: "AI 老师无限对话",
+    desc: "免费版每日 10 次；VIP 不限次数，随时问",
   },
   {
     icon: Video,
-    text: "全部视频",
-    desc: "含 VIP 专属章节与完整课时",
+    text: "全部课程与视频",
+    desc: "5 门 VIP 进阶课程 + 全部课时全开放",
   },
   {
     icon: Mic,
     text: "完整口语训练",
-    desc: "单词 / 句子 / 段落三模式 + Azure 专业评测",
+    desc: "句子/段落跟读 + Azure 专业发音评测（免费版仅单词模式）",
   },
   {
-    icon: MessageCircle,
-    text: "AI 对话高级功能",
-    desc: "更多场景与智能互动",
+    icon: Headphones,
+    text: "新闻听力无限题",
+    desc: "免费版每日 10 题；VIP 无限听音填空练习",
   },
   {
     icon: Sparkles,
-    text: "高级词汇",
-    desc: "进阶词库与学习内容",
+    text: "高级词汇与词书",
+    desc: "进阶词库、错题本智能复习全开放",
   },
   {
     icon: BarChart3,
-    text: "高级学习数据",
-    desc: "更完整的学习分析与报告",
+    text: "完整学习数据",
+    desc: "能力雷达、成长曲线、口语评分趋势全展示",
+  },
+];
+
+/* 免费 vs VIP 对比表（与后端配额逻辑一致） */
+const compareRows = [
+  {
+    label: "AI 泰语老师",
+    free: "每日 10 次对话",
+    vip: "无限对话 · 语音输入",
+  },
+  {
+    label: "新闻听力练习",
+    free: "每日 10 题",
+    vip: "无限听音填空",
+  },
+  {
+    label: "口语训练",
+    free: "仅单词模式",
+    vip: "句子+段落+专业评分",
+  },
+  {
+    label: "进阶课程视频",
+    free: "试看部分课时",
+    vip: "全部解锁",
+  },
+  {
+    label: "高级词库",
+    free: "基础词书",
+    vip: "29 本词书全开放",
+  },
+  {
+    label: "学习数据分析",
+    free: "基础统计",
+    vip: "雷达+趋势+错题复盘",
   },
 ];
 
@@ -871,6 +906,41 @@ export default function VipPanel({ open, onClose }) {
                     </>
                   )}
                 </>
+              )}
+
+              {/* 免费 vs VIP 对比表 */}
+
+              {!isVip && (
+                <div className="mt-5 overflow-hidden rounded-2xl border border-white/[0.08]">
+                  <div className="grid grid-cols-[1.2fr_1fr_1fr] gap-px bg-white/[0.08] text-[10px]">
+                    <div className="bg-[#0A1F1B] px-3 py-2 font-semibold text-white/50">
+                      功能
+                    </div>
+                    <div className="bg-[#0A1F1B] px-3 py-2 text-center text-white/40">
+                      免费版
+                    </div>
+                    <div className="bg-gradient-to-r from-yellow-300/20 to-amber-400/15 px-3 py-2 text-center font-bold text-yellow-200">
+                      👑 VIP
+                    </div>
+
+                    {compareRows.map((row) => (
+                      <div
+                        key={row.label}
+                        className="grid grid-cols-[1.2fr_1fr_1fr] gap-px bg-white/[0.08]"
+                      >
+                        <div className="bg-black/20 px-3 py-2 text-white/70">
+                          {row.label}
+                        </div>
+                        <div className="bg-black/20 px-3 py-2 text-center text-white/35">
+                          {row.free}
+                        </div>
+                        <div className="bg-black/20 px-3 py-2 text-center font-semibold text-yellow-100/90">
+                          {row.vip}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {/* 权益列表 */}

@@ -1,9 +1,15 @@
 # ============================================================
-# ThaiAI 生产部署（纯 HTTP，无域名用 IP 直接访问）
+# ThaiAI 生产部署（HTTPS）
 #
 # 使用：
 #   1. 复制 .env.example 为 .env 并填好密钥
-#   2. docker compose up -d --build
+#   2. 准备证书 certs/thaiai.crt + certs/thaiai.key（阿里云证书/自签均可）
+#   3. docker compose up -d --build
+#
+# 说明：
+#   - 80 端口自动 301 跳转到 https
+#   - 无域名时用自签证书可访问（浏览器有安全警告）；有域名后替换 certs/ 两个文件即可
+#   - 纯 HTTP 模式：把 Dockerfile 中 nginx.conf 换回 nginx-http.conf，去掉 certs 挂载与 443 端口
 # ============================================================
 
 services:
@@ -51,6 +57,10 @@ services:
       - backend
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      # HTTPS 证书（阿里云证书或自签）：thaiai.crt + thaiai.key
+      - ./certs:/etc/nginx/certs:ro
 
 networks:
   default:

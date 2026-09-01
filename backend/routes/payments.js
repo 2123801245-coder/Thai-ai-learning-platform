@@ -88,17 +88,17 @@ export const VIP_PLANS = {
   m1: {
     label: "月度会员",
     days: 30,
-    amount: Number(process.env.VIP_PLAN_30_CNY || 49) * 100,
+    amount: Number(process.env.VIP_PLAN_30_CNY || 29) * 100,
   },
   m3: {
     label: "季度会员",
     days: 90,
-    amount: Number(process.env.VIP_PLAN_90_CNY || 128) * 100,
+    amount: Number(process.env.VIP_PLAN_90_CNY || 68) * 100,
   },
   y1: {
     label: "年度会员",
     days: 365,
-    amount: Number(process.env.VIP_PLAN_365_CNY || 399) * 100,
+    amount: Number(process.env.VIP_PLAN_365_CNY || 199) * 100,
   },
 };
 

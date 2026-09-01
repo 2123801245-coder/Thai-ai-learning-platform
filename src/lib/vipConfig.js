@@ -35,9 +35,9 @@ export const FIRST_PURCHASE_PLAN = {
 };
 
 export const DEFAULT_PLANS = [
-  { label: "月度", days: 30, amount: 49 },
-  { label: "季度", days: 90, amount: 128 },
-  { label: "年度", days: 365, amount: 399 },
+  { label: "月度", days: 30, amount: 29 },
+  { label: "季度", days: 90, amount: 68 },
+  { label: "年度", days: 365, amount: 199 },
 ];
 
 /* 生成「购买话术」：用户一键复制后粘贴到微信发给客服
