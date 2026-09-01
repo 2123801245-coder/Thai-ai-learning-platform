@@ -12,14 +12,16 @@ FROM node:20-bookworm-slim
 WORKDIR /app
 
 # 系统依赖：sqlite3 原生模块编译（如有预编译包则不会触发）
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 国内服务器用阿里云 Debian 镜像，避免 deb.debian.org 拉包超时
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+    apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # 先拷依赖清单，利用 Docker 层缓存
 COPY backend/package.json backend/package-lock.json* ./backend/
 WORKDIR /app/backend
-RUN npm install --omit=dev --build-from-source
+RUN npm install --omit=dev --build-from-source --registry=https://registry.npmmirror.com
 
 WORKDIR /app
 

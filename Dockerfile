@@ -13,13 +13,13 @@ FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install --registry=https://registry.npmmirror.com
 
 COPY . .
 RUN npm run build
 
 # ---- 阶段 2：nginx ----
-FROM nginx:1.27-alpine
+FROM docker.m.daocloud.io/library/nginx:1.27-alpine
 
 # 站点配置（含 HTTPS 与 /api 反代，见 deploy/nginx.conf）
 COPY deploy/nginx-http.conf /etc/nginx/conf.d/default.conf
