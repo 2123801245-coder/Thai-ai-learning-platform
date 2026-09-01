@@ -6,6 +6,9 @@ import { useAuth } from "@/lib/AuthContext";
 import { Mail, Lock, Loader2, Menu, X, ArrowRight } from "lucide-react";
 import StarParticles from "@/components/StarParticles";
 
+/* 本地静态背景（立即渲染，作为视频加载完成前的兜底） */
+const FALLBACK_BG = "/thailand-hero.jpg";
+
 const VIDEOS = [
   {
     url: "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260702_081127_0992a171-d3c6-4978-8213-0ec5df8b6d63.mp4",
@@ -41,6 +44,9 @@ export default function Login() {
   const [activeVideo, setActiveVideo] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
+  /* 懒加载：仅当前激活视频设置 src + preload，其余不加载，避免首屏同时下载 4 个视频 */
+  const [loadedVideos, setLoadedVideos] = useState(() => [true, false, false, false]);
+
   const switchVideo = useCallback(
     (idx) => {
       if (idx === activeVideo || isTransitioning) return;
@@ -49,6 +55,22 @@ export default function Login() {
       setTimeout(() => setIsTransitioning(false), 1000);
     },
     [activeVideo, isTransitioning]
+  );
+
+  /* 当前视频可播放后，预加载下一段（提前下载，轮播无缝） */
+  const handleVideoReady = useCallback(
+    (i) => {
+      const next = (i + 1) % VIDEOS.length;
+      if (!loadedVideos[next]) {
+        setLoadedVideos((prev) => {
+          if (prev[next]) return prev;
+          const copy = [...prev];
+          copy[next] = true;
+          return copy;
+        });
+      }
+    },
+    [loadedVideos]
   );
 
   /* auto-cycle every 8s */
@@ -82,29 +104,44 @@ export default function Login() {
 
   return (
     <section className="relative w-full h-screen overflow-hidden bg-black">
-      {/* ===== Video layer ===== */}
-      {VIDEOS.map((v, i) => (
-        <video
-          key={i}
-          src={v.url}
-          muted
-          loop
-          playsInline
-          autoPlay
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[1000ms] ease-in-out ${
-            i === activeVideo ? "opacity-100" : "opacity-0"
-          }`}
-        />
-      ))}
+      {/* ===== 本地静态背景兜底（秒显，避免视频加载前的黑屏等待） ===== */}
+      <img
+        src={FALLBACK_BG}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover"
+      />
+
+      {/* ===== Video layer（懒加载：仅当前激活视频下载，其余不占带宽） ===== */}
+      {VIDEOS.map((v, i) => {
+        const isActive = i === activeVideo;
+        return (
+          <video
+            key={i}
+            src={loadedVideos[i] ? v.url : undefined}
+            muted
+            loop
+            playsInline
+            autoPlay={isActive && loadedVideos[i]}
+            onCanPlay={() => handleVideoReady(i)}
+            preload={isActive ? "auto" : "none"}
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-[1000ms] ease-in-out ${
+              isActive ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        );
+      })}
 
       {/* ===== Star / sparkle particles ===== */}
       <StarParticles count={90} opacity={0.6} speed={0.8} />
 
-      {/* ===== Overlay PNG ===== */}
+      {/* ===== Overlay PNG（加载失败静默隐藏，不影响页面） ===== */}
       <div className="absolute inset-0 z-[1] pointer-events-none animate-train-bob">
         <img
           src={OVERLAY_URL}
           alt=""
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
           className="w-full h-full object-cover"
           style={{ transform: "scale(1.03)" }}
         />
