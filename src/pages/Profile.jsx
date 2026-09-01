@@ -44,10 +44,13 @@ import {
 } from "recharts";
 import { useAuth } from "@/lib/AuthContext";
 import { useLearningProgress } from "@/hooks/useLearningProgress";
+import AbilitySection from "@/components/dashboard/AbilitySection";
+import SpeakingTrendChart from "@/components/charts/SpeakingTrendChart";
 import { getAllCourseSummary } from "@/lib/courseProgress";
 import { getLevelInfo } from "@/lib/level";
 import { lessonData } from "@/data/lessons";
 import { courses } from "@/data/courses";
+import { getSpeakingHistory, getDailyAverages } from "@/lib/speakingHistory";
 import VipPanel from "@/components/common/VipPanel";
 
 import {
@@ -275,6 +278,20 @@ export default function Profile() {
       (learning?.daily_goal || 20)) *
       100
   );
+
+  /* 口语练习统计 */
+  const speakingHistory = useMemo(() => getSpeakingHistory(), []);
+  const speakingStats = useMemo(() => {
+    if (speakingHistory.length === 0) return null;
+    const recent = speakingHistory.slice(-20);
+    const avg = Math.round(recent.reduce((s, r) => s + (r.score || 0), 0) / recent.length);
+    const avgAcc = Math.round(recent.reduce((s, r) => s + (r.accuracy || 0), 0) / recent.length);
+    const avgTone = Math.round(recent.reduce((s, r) => s + (r.tone || 0), 0) / recent.length);
+    const avgFlu = Math.round(recent.reduce((s, r) => s + (r.fluency || 0), 0) / recent.length);
+    const avgComp = Math.round(recent.reduce((s, r) => s + (r.completeness || 0), 0) / recent.length);
+    return { total: speakingHistory.length, avg, avgAcc, avgTone, avgFlu, avgComp };
+  }, [speakingHistory]);
+  const speakingTrend = useMemo(() => getDailyAverages(30), []);
 
   const courseSummary = useMemo(() => {
     const { completedCount, recent } =
@@ -1835,6 +1852,76 @@ export default function Profile() {
           />
         </div>
       </motion.div>
+
+      {/* ======================================================
+          泰语能力评估（六维雷达 + 成长曲线）
+      ====================================================== */}
+
+      <AbilitySection />
+
+      {/* ======================================================
+          口语练习记录
+      ====================================================== */}
+
+      {speakingStats && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 backdrop-blur-xl"
+        >
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-white">口语练习记录</h2>
+              <p className="mt-1 text-xs text-white/30">共 {speakingStats.total} 次练习</p>
+            </div>
+            <Mic className="h-5 w-5 text-cyan-300/50" />
+          </div>
+
+          {/* 四维均值 */}
+          <div className="mb-4 grid grid-cols-5 gap-2">
+            {[
+              { label: "总分", value: speakingStats.avg, color: "text-white" },
+              { label: "发音", value: speakingStats.avgAcc, color: "text-emerald-300" },
+              { label: "声调", value: speakingStats.avgTone, color: "text-yellow-300" },
+              { label: "流利度", value: speakingStats.avgFlu, color: "text-blue-300" },
+              { label: "完整度", value: speakingStats.avgComp, color: "text-purple-300" },
+            ].map((d) => (
+              <div key={d.label} className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-2 py-2.5 text-center">
+                <div className="text-[9px] text-white/25">{d.label}</div>
+                <div className={`mt-0.5 text-base font-black ${d.color}`}>{d.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 趋势图 */}
+          <SpeakingTrendChart data={speakingTrend} />
+
+          {/* 最近 5 次练习 */}
+          <div className="mt-4">
+            <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/20">最近练习</div>
+            <div className="space-y-1.5">
+              {speakingHistory.slice(-5).reverse().map((r, i) => {
+                const sc = r.score >= 90 ? "text-emerald-300" : r.score >= 70 ? "text-yellow-300" : "text-red-300";
+                const time = new Date(r.timestamp).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                return (
+                  <div key={i} className="flex items-center justify-between rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/40">{time}</span>
+                      <span className="text-[10px] text-white/25">{r.mode === "word" ? "单词" : r.mode === "sentence" ? "句子" : "段落"}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-white/30">发音 {r.accuracy || "—"}</span>
+                      <span className="text-[10px] text-white/30">声调 {r.tone || "—"}</span>
+                      <span className={`text-sm font-black ${sc}`}>{r.score}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* ======================================================
           最近学习

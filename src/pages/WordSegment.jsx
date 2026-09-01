@@ -2,9 +2,10 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, CheckCircle2, RotateCcw, ArrowRight } from "lucide-react";
 import WordBookPicker from "@/components/practice/WordBookPicker";
-import { mergeBooks, generateSegmentQuestions, getSavedBookId, saveBookId, fetchWrongBook, formatWrongDate } from "@/lib/wordBooks";
+import { mergeBooks, generateSegmentQuestions, getSavedBookId, saveBookId, fetchWrongBook, formatWrongDate, getVocabBooks } from "@/lib/wordBooks";
 
-/* ── 分词题库 ── */
+/* 词书来源统一使用 getVocabBooks()（与词汇学习板块一致）
+   generateSegmentQuestions 从词书例句中自动生成分词题目 */
 const segmentSets = [
   [
     {
@@ -82,11 +83,8 @@ const segmentSets = [
   ],
 ];
 
-/* ── 内置词书名称 ── */
-const builtinBooks = [
-  { name: "入门句子", emoji: "🌱", words: segmentSets[0] },
-  { name: "进阶句子", emoji: "🌿", words: segmentSets[1] },
-];
+/* 词书来源统一使用 getVocabBooks()（与词汇学习板块一致） */
+const builtinBooks = [];
 
 function speak(text) {
   if (!window.speechSynthesis) return;
@@ -109,7 +107,7 @@ export default function WordSegment() {
   }, [refreshWrongBook]);
 
   const allBooks = useMemo(
-    () => mergeBooks(builtinBooks, wrongBook ? [wrongBook] : []),
+    () => mergeBooks([], wrongBook ? [wrongBook] : []),
     [wrongBook]
   );
   const [bookId, setBookId] = useState(() => {

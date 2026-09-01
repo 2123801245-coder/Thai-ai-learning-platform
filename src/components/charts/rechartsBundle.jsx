@@ -13,6 +13,12 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceLine,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
 } from "recharts";
 
 export default function RechartsBundle({ render }) {
@@ -24,5 +30,11 @@ export default function RechartsBundle({ render }) {
     YAxis,
     Tooltip,
     CartesianGrid,
+    ReferenceLine,
+    RadarChart,
+    Radar,
+    PolarGrid,
+    PolarAngleAxis,
+    PolarRadiusAxis,
   });
 }

@@ -1,6 +1,3 @@
-// src/data/conversations.js
-// ThaiAI 对话场景数据 v2 — 多轮对话树 + 分支 + 场景氛围
-
 export const conversationScenes = [
   // ═══════════════════════════════════════
   // 日常交流
@@ -877,9 +874,967 @@ export const conversationScenes = [
       grammar: "",
     },
   },
+  // ═══════════════════════════════════════
+  // AI 情景模拟 — 沉浸式角色扮演
+  // ═══════════════════════════════════════
+  {
+    id: "airport",
+    title: "机场值机",
+    subtitle: "曼谷素万那普机场",
+    description: "在曼谷机场办理登机、过安检、找到登机口，体验泰国机场的真实流程。",
+    icon: "Plane",
+    sceneEmoji: "✈️",
+    sceneTip: "泰国机场工作人员通常会说泰语和英语，但用泰语沟通会更亲切。记住机场常用词：เที่ยวบิน（航班）、บัตรโดยสาร（登机牌）。",
+    roleplay: { character: "机场工作人员", role: "airport staff" },
+    greeting: {
+      thai: "สวัสดีครับ! ยินดีต้อนรับสู่สนามบินสุวรรณภูมิ ช่วยแสดงพาสปอร์ตกับตั๋วเครื่องบินด้วยครับ",
+      roman: "sà-wàt-dii kráp! yin-dii tɔ̂ɔn-ráp sùu sà-nǎam-bin sù-wan-ná-phûum, chûay tâang pâat-bpòt kap tûua krʉ̌ng-bin dwóy kráp",
+      chinese: "你好！欢迎来到素万那普机场，请出示护照和机票。",
+      speakRate: 0.72,
+    },
+    dialogueTree: [
+      {
+        stage: 1,
+        prompt: "办理值机手续",
+        suggestions: ["ขอเช็คอิน", "มีเที่ยวบินไปภูเก็ต", "ขอดูบัตรโดยสาร", "ขอบัตรนั่งริมหน้าต่าง"],
+        responses: [
+          {
+            keywords: ["เช็คอิน", "check", "值机"],
+            thai: "ได้เลยครับ! ขอพาสปอร์ตกับหมายเลขเที่ยวบินด้วยครับ คุณเดินทางไปไหนครับ",
+            roman: "dâi loei kráp! khǎw pâat-bpòt kap mãai-lêe-aai thîiao-bin dwóy kráp, khun dəən-thaang pai nǎi kráp",
+            chinese: "好的！请给我护照和航班号。您要去哪里？",
+            vocab: [
+              { th: "เช็คอิน", roman: "check-in", cn: "值机/登记" },
+              { th: "หมายเลขเที่ยวบิน", roman: " mãai-lêe-aai thîiao-bin", cn: "航班号" },
+              { th: "พาสปอร์ต", roman: "pâat-bpòt", cn: "护照" },
+            ],
+            grammar: "「ขอ」= 请给我…，是泰国最常用的礼貌请求词。ขอ + 名词 = 请给我某物。",
+          },
+          {
+            keywords: ["ภูเก็ต", "phuket", "普吉"],
+            thai: "เที่ยวบิน TG201 ไปภูเก็ตครับ ออกเดินทาง 14:30 น. ตอนนี้柜台เปิดแล้ว คุณมีกระเป๋าโหลดไหมครับ",
+            roman: "thîiao-bin TG201 pai phûu-gèt kráp, àwk dəən-thaang 14:30 ní, tɔ̀ɔn-níi柜台 bəət láew, khun mii grà-bpaa lôod mái kráp",
+            chinese: "TG201航班飞普吉，14:30出发。现在柜台已经开了，有行李要托运吗？",
+            vocab: [
+              { th: "ออกเดินทาง", roman: "àwk dəən-thaang", cn: "出发" },
+              { th: "กระเป๋า", roman: "grà-bpaa", cn: "行李/包" },
+              { th: "โหลด", roman: "lôod", cn: "托运" },
+            ],
+            grammar: "「น.」是泰语「นาฬิกา」的缩写，用于报时间。14:30 น. = 下午2点半。",
+            culturalNote: "泰国机场安检时需要脱鞋和腰带，建议穿方便穿脱的鞋子。",
+          },
+        ],
+        nextStage: 2,
+      },
+      {
+        stage: 2,
+        prompt: "询问座位和行李",
+        suggestions: ["ขอบัตรนั่งริมหน้าต่าง", "มีน้ำหนักเกิน", "ขอเปลี่ยนที่นั่ง", "ขอบัตรขึ้นเครื่อง"],
+        responses: [
+          {
+            keywords: ["หน้าต่าง", "window", "窗口"],
+            thai: "ได้เลยครับ! คุณนั่ง窗口Aครับ ใกล้หน้าต่างมองเห็นวิวสวยมาก น้ำหนักกระเป๋าเกินนะครับ กิโลเกิน 2 กิโล ต้องจ่ายเพิ่ม 600 บาท",
+            roman: "dâi loei kráp! khun nâng windowA kráp, glàai nàa-dtàang mɔɔng hěn wíiwa sǔay mâak",
+            chinese: "好的！您坐A靠窗位，靠近窗户可以看到漂亮风景。行李超重了，超2公斤需要加600泰铢。",
+            vocab: [
+              { th: "ริมหน้าต่าง", roman: "rim nàa-dtàang", cn: "靠窗" },
+              { th: "น้ำหนักเกิน", roman: "nám-nàk gəən", cn: "超重" },
+              { th: "จ่ายเพิ่ม", roman: "jài pə̂əm", cn: "加钱" },
+            ],
+            grammar: "「เกิน」= 超过/超出。น้ำหนักเกิน = 超重，时间เกิน = 超时。",
+          },
+        ],
+        nextStage: 3,
+      },
+      {
+        stage: 3,
+        prompt: "过安检",
+        suggestions: ["ต้องถอดรองเท้า", "กระเป๋ามีโน้ตบุ๊ค", "ของเหลวต้องนำออกมา", "ขอบคุณครับ"],
+        responses: [
+          {
+            keywords: ["ถอด", "shoes", "脱"],
+            thai: "ครับ ต้องถอดรองเท้า สายรัดเข็มขัด และนำnotebook ออกจากกระเป๋าด้วยนะครับ ของเหลวต้องใส่ถุงziplockไม่เกิน100มล",
+            roman: "kráp, dtông thòt rɔɔng-táe, sǎai-rák khěm-kàt láe nam notebook àwk jàak grà-bpaa dwóy ná kráp, khɔ̌ɔng-lěu dtông sài dûuk ziplock mâi gəən 100 m.l.",
+            chinese: "是的，要脱鞋、解腰带，笔记本电脑要从包里拿出来。液体要装在ziplock袋里不超过100毫升。",
+            vocab: [
+              { th: "ถอด", roman: "thòt", cn: "脱（衣物）" },
+              { th: "สายรัดเข็มขัด", roman: "sǎai-rák khěm-kàt", cn: "腰带" },
+              { th: "ของเหลว", roman: "khɔ̌ɔng-lěu", cn: "液体" },
+            ],
+            grammar: "「ต้อง」= 必须/需要。是最常用的情态动词之一。ต้อง + 动词 = 必须做某事。",
+            culturalNote: "泰国安检相对严格，电子设备和液体都要单独取出。",
+          },
+        ],
+        nextStage: 4,
+      },
+      {
+        stage: 4,
+        prompt: "找到登机口",
+        suggestions: ["gate อยู่ตรงไหน", "ขึ้นเครื่องกี่โมง", "ขอบคุณครับ", "ลาก่อนครับ"],
+        responses: [
+          {
+            keywords: ["gate", "登机口", "ขึ้นเครื่อง"],
+            thai: "Gate อยู่ชั้น 2 ตรงป้ายไปทางซ้ายครับ ขึ้นเครื่อง 14:00 น. ควรไปถึงก่อน 30 นาทีนะครับ สนุกกับเที่ยวบินครับ!",
+            roman: "Gate yùu chán sɔ̌ɔng trong paai taang sáai kráp, khʉ̌ng krʉ̌ung 14:00 ní, khuan pai thʉ̌ung gɔ̀awn sǎam-sìp naa-thíi ná kráp, sà-nùk khap thîiao-bin kráp!",
+            chinese: "登机口在2楼，往左走看指示牌。14:00登机，建议提前30分钟到。祝旅途愉快！",
+            vocab: [
+              { th: "ชั้น", roman: "chán", cn: "楼层" },
+              { th: "ก่อน", roman: "gɔ̀awn", cn: "之前/提前" },
+              { th: "สนุก", roman: "sà-nùk", cn: "开心/愉快" },
+            ],
+            grammar: "「ควร」= 应该/最好。.should 是比「ต้อง」更柔和的建议语气。",
+          },
+        ],
+        nextStage: null,
+      },
+    ],
+    fallback: {
+      thai: "ไม่เป็นไรครับ ลองพูดเป็นภาษาไทยอีกครั้งนะครับ! 机场里常用：ขอ... ด้วยครับ",
+      roman: "mâi bpen-rai kráp, lɔɔng pûut bpen phaa-sǎa thai ìik kráng ná kráp!",
+      chinese: "没关系，再试着用泰语说一次！机场里常用：请给我…",
+      vocab: [],
+      grammar: "",
+    },
+  },
+  {
+    id: "hotel",
+    title: "酒店入住",
+    subtitle: "曼谷精品酒店",
+    description: "在泰国酒店办理入住、询问设施、请求服务，学习酒店场景的实用泰语。",
+    icon: "Landmark",
+    sceneEmoji: "🏨",
+    sceneTip: "泰国酒店服务员通常会主动说泰语打招呼。入住时可以用「ขอเช็คอิน」，退房用「เช็คเอาท์」。",
+    roleplay: { character: "酒店前台", role: "hotel receptionist" },
+    greeting: {
+      thai: "สวัสดีค่ะ! ยินดีต้อนรับสู่โรงแรมค่ะ มีอะไรให้ช่วยคะ จองห้องไว้แล้วใช่ไหมคะ",
+      roman: "sà-wàt-dii ká! yin-dii tɔ̂ɔn-ráp sùu rohng-raem ká, mii à-rai hâi chûay ká, jɔ̌ɔng hɔ̌ɔng wái láew châi mái ká",
+      chinese: "你好！欢迎来到酒店。有什么可以帮您的？已经预订了房间对吗？",
+      speakRate: 0.72,
+    },
+    dialogueTree: [
+      {
+        stage: 1,
+        prompt: "办理入住",
+        suggestions: ["ขอเช็คอิน", "จองห้องไว้แล้ว", "ขอห้องวิวสวย", "มีสระว่ายน้ำไหม"],
+        responses: [
+          {
+            keywords: ["เช็คอิน", "check", "จอง"],
+            thai: "ค่ะ ขอพาสปอร์ตด้วยค่ะ คุณจองห้อง Deluxe วิวสระว่ายน้ำไว้ 3 คืน ใช่ไหมคะ ราคาคืนละ 2,500 บาท",
+            roman: "ká, khǎw pâat-bpòt dwóy ká, khun jɔ̌ɔng hɔ̌ɔng Deluxe wíiwa sà-wâang-náam wái sǎam kʉn châi mái ká, raakaa kʉn lá 2,500 bàat",
+            chinese: "好的，请给我护照。您预订了豪华泳池景房3晚对吗？每晚2500泰铢。",
+            vocab: [
+              { th: "ห้อง", roman: "hɔ̌ɔng", cn: "房间" },
+              { th: "สระว่ายน้ำ", roman: "sà-wâang-náam", cn: "游泳池" },
+              { th: "คืนละ", roman: "kʉn lá", cn: "每晚" },
+            ],
+            grammar: "「ละ」用在价格后面表示「每个」，如 คืนละ = 每晚，อันละ = 每个。",
+            culturalNote: "泰国酒店一般下午2点入住、中午12点退房。提前入住可能需要加钱。",
+          },
+        ],
+        nextStage: 2,
+      },
+      {
+        stage: 2,
+        prompt: "询问酒店设施",
+        suggestions: [" WiFi รหัสอะไร", "อาหารเช้ากี่โมง", "มีสปาไหม", "ขอยืมผ้าเช็ดตัว"],
+        responses: [
+          {
+            keywords: ["wifi", "WiFi", "รหัส"],
+            thai: "WiFi ชื่อ Hotel_Guest รหัสอยู่ในบัตรคีย์การ์ดค่ะ อาหารเช้าเสริฟ 6:30-10:00 ที่ห้องอาหารชั้น 1 ค่ะ",
+            roman: "WiFi chʉʉ Hotel_Guest rá-kàt yùu nai bâat key card ká, aa-hǎan cháo sǎ-ríp 6:30-10:00 thîi hɔ̌ɔng aa-hǎan chán nʉ̀ng ká",
+            chinese: "WiFi名是Hotel_Guest，密码在房卡上。早餐6:30-10:00在1楼餐厅。",
+            vocab: [
+              { th: "รหัส", roman: "rá-kàt", cn: "密码" },
+              { th: "อาหารเช้า", roman: "aa-hǎan cháo", cn: "早餐" },
+              { th: "ห้องอาหาร", roman: "hɔ̌ɔng aa-hǎan", cn: "餐厅" },
+            ],
+            grammar: "「ที่」= 在某处，是地点介词。ที่ห้องอาหาร = 在餐厅。",
+          },
+        ],
+        nextStage: 3,
+      },
+      {
+        stage: 3,
+        prompt: "请求客房服务",
+        suggestions: ["ขอผ้าเช็ดตัวเพิ่ม", "สั่งอาหารไปห้อง", "ขอหมอนเพิ่ม", "น้ำหมดแล้ว"],
+        responses: [
+          {
+            keywords: ["ผ้าเช็ดตัว", "towel", "毛巾"],
+            thai: "ได้ค่ะ ส่งไปให้เลยค่ะ อีก 5 นาที ค่ะ ระหว่างรอ อยากสั่งอะไรไปทานในห้องไหมคะ มีเซ็ตอาหารไทยด้วยค่ะ",
+            roman: "dâi ká, sùng pai hâi loei ká, ìik hâa naa-thíi ká, rá-wàang rǎw yàak sâng à-rai pai thaan nai hɔ̌ɔng mái ká, mii set aa-hǎan thai dwóy ká",
+            chinese: "好的，马上给您送过去，5分钟内。等待的时候想点什么吃的吗？有泰式套餐。",
+            vocab: [
+              { th: "ผ้าเช็ดตัว", roman: "phâa khèt dtua", cn: "毛巾" },
+              { th: "สั่ง", roman: "sâng", cn: "点/下单" },
+              { th: "ในห้อง", roman: "nai hɔ̌ɔng", cn: "在房间里" },
+            ],
+            grammar: "「ระหว่าง」= 在…期间。ระหว่างรอ = 在等待的时候。",
+          },
+        ],
+        nextStage: 4,
+      },
+      {
+        stage: 4,
+        prompt: "退房",
+        suggestions: ["เช็คเอาท์", "ขอบิล", "ขอเช็คเอาท์", "ขอบคุณมาก"],
+        responses: [
+          {
+            keywords: ["เช็คเอาท์", "check out", "บิล"],
+            thai: "ค่ะ บิลอยู่นี้ค่ะ รวม 7,500 บาท ค่ะ จ่ายเงินสดหรือบัตรเครดิตคะ ต้องการใบเสร็จไหมคะ",
+            roman: "ká, bin yùu níi ká, ruam 7,500 bàat ká, jài ngəən sòt rá-rûe bâat credit ká, dtông-gaan baai-rèt mái ká",
+            chinese: "好的，账单在这里，共7500泰铢。现金还是信用卡？需要收据吗？",
+            vocab: [
+              { th: "บิล", roman: "bin", cn: "账单" },
+              { th: "ใบเสร็จ", roman: "baai-rèt", cn: "收据" },
+              { th: "เงินสด", roman: "ngəən sòt", cn: "现金" },
+            ],
+            grammar: "「หรือ」= 或者，用于连接两个选项。จ่ายเงินสดหรือบัตร = 现金还是卡？",
+          },
+        ],
+        nextStage: null,
+      },
+    ],
+    fallback: {
+      thai: "ไม่เป็นไรค่ะ ลองพูดใหม่อีกครั้งนะคะ! 酒店里常用：ขอ... ด้วยค่ะ",
+      roman: "mâi bpen-rai ká, lɔɔng pûut mài ìik kráng ná ká!",
+      chinese: "没关系，再试一次！酒店里常用：请给我…",
+      vocab: [],
+      grammar: "",
+    },
+  },
+  {
+    id: "nightmarket",
+    title: "夜市淘宝",
+    subtitle: "曼谷拉差达火车夜市",
+    description: "在泰国热闹的夜市里讨价还价、品尝小吃、购买纪念品，学习购物实用泰语。",
+    icon: "ShoppingBag",
+    sceneEmoji: "🌙",
+    sceneTip: "泰国夜市砍价可以从开价的50-70%开始还，但不要太低以免不礼貌。微笑是砍价的最好武器！",
+    roleplay: { character: "夜市摊主", role: "night market vendor" },
+    greeting: {
+      thai: "สวัสดีค่ะ! เดินดูอะไรดีคะ มีของสวยๆ เยอะเลยค่ะ ลองดูได้เลยนะคะ",
+      roman: "sà-wàt-dii ká! dəən duu à-rai dii ká, mii khɔ̌ɔng sǔay-sǔay yəə loei ká, lɔɔng duu dâi loei ná ká",
+      chinese: "你好！随便看看，有很多漂亮的东西哦！随便看。",
+      speakRate: 0.75,
+    },
+    dialogueTree: [
+      {
+        stage: 1,
+        prompt: "看看想买什么",
+        suggestions: ["ของนี้多少钱", "ลดได้ไหม", "มีสีอื่นไหม", "ขอจับได้ไหม"],
+        responses: [
+          {
+            keywords: ["多少钱", "ราคา", "ราคาเท่าไหร่", "บาท"],
+            thai: "อันนี้ 350 บาทค่ะ ลายสวยมากเลยนะคะ ทำมือนะคะ ไม่ใช่ของโรงงานค่ะ",
+            roman: "an níi sǎam-mûn-háa-róii bàat ká, laai sǔay mâak loei ná ká, tham mʉ̌an ná ká, mâi châi khɔ̌ɔng rɔ́ng-gaan ká",
+            chinese: "这个350泰铢，花纹很漂亮哦，手工做的，不是工厂货。",
+            vocab: [
+              { th: "ราคาเท่าไหร่", roman: "raakaa tâo-rài", cn: "多少钱" },
+              { th: "ทำมือ", roman: "tham mʉ̌an", cn: "手工" },
+              { th: "ของโรงงาน", roman: "khɔ̌ɔng rɔ́ng-gaan", cn: "工厂货" },
+            ],
+            grammar: "「ไม่ใช่」= 不是，是「不是」的正式说法。口语中也常用「ไม่ใช่」。",
+          },
+        ],
+        nextStage: 2,
+      },
+      {
+        stage: 2,
+        prompt: "开始砍价",
+        suggestions: ["ลดหน่อยได้ไหม", "200 ได้ไหม", "300 ก็ได้", "ซื้อ 2 อัน"],
+        responses: [
+          {
+            keywords: ["ลด", "ลดหน่อย", "200"],
+            thai: "300 ลดให้เลยค่ะ ไม่ได้ลดมากกว่านี้แล้วนะคะ กำไรนิดเดียวเองค่ะ ซื้อเลยดีกว่าค่ะ",
+            roman: "sǎam-mûn rót hâi loei ká, mâi dâi rót mâak gwàa níi láew ná ká, gaa-rùai nít-diao eeng ká, sʉ́ léu dii gwàa ká",
+            chinese: "300泰铢给您最低了，不能再低了哦，就赚一点点。买吧！",
+            vocab: [
+              { th: "ลด", roman: "rót", cn: "打折/降价" },
+              { th: "กำไร", roman: "gaa-rùai", cn: "利润" },
+              { th: "ซื้อ", roman: "sʉ́", cn: "买" },
+            ],
+            grammar: "「เลย」= 就/直接，用于加强语气。ซื้อเลย = 就买吧（催促语气）。",
+          },
+        ],
+        nextStage: 3,
+      },
+      {
+        stage: 3,
+        prompt: "决定购买",
+        suggestions: ["เอาอันนี้", "จ่ายเงินสด", "โอนได้ไหม", "ใส่ถุงหน่อย"],
+        responses: [
+          {
+            keywords: ["เอา", "เอาอันนี้", "买"],
+            thai: "เลือกได้เลยค่ะ! จ่ายเงินสดหรือโอนผ่านPromptPayคะ ใส่ถุงให้สวยๆ ด้วยนะคะ เอาถุงผ้าหรือถุงพลาสติกคะ",
+            roman: "lʉ̌ak dâi loei ká! jài ngəən sòt rá-rûe õon pǎan PromptPay ká, sài thûuk hâi sǔay-sǔay dwóy ná ká, àw thûuk phǎa rá-rûe thûuk plà-sèt ká",
+            chinese: "随便挑！现金还是PromptPay转账？给您装漂亮的袋子。要布袋还是塑料袋？",
+            vocab: [
+              { th: "เลือก", roman: "lʉ̌ak", cn: "挑选" },
+              { th: "โอน", roman: "õon", cn: "转账" },
+              { th: "ถุง", roman: "thûuk", cn: "袋子" },
+            ],
+            grammar: "「ผ่าน」= 通过。โอนผ่าน PromptPay = 通过PromptPay转账。",
+            culturalNote: "PromptPay是泰国最常用的电子支付方式，几乎所有摊位都支持。",
+          },
+        ],
+        nextStage: 4,
+      },
+      {
+        stage: 4,
+        prompt: "结束购物",
+        suggestions: ["ขอบคุณมาก", "อร่อยมาก", "จะกลับมาอีก", "ลาก่อนค่ะ"],
+        responses: [
+          {
+            keywords: ["ขอบคุณ", "thank", "กลับมา"],
+            thai: "ขอบคุณค่ะ! ขอบคุณที่อุดหนุนค่ะ ถ้าชอบก็กลับมาอีกนะคะ มีของใหม่ทุกสัปดาห์ค่ะ สนุกกับตลาดนัดนะคะ!",
+            roman: "khàawp-khun ká! khàawp-khun thîi ùd-nûun ká, thâa chɔ̀ɔp gɔ̀o glàap maa ìik ná ká, mii khɔ̌ɔng mài thûuk sà-pà-dtii ká, sà-nùk khap dtà-làat-nát ná ká",
+            chinese: "谢谢！谢谢光临。喜欢的话再来哦，每周有新品。逛夜市愉快！",
+            vocab: [
+              { th: "อุดหนุน", roman: "ùd-nûun", cn: "光顾/购买" },
+              { th: "ทุกสัปดาห์", roman: "thûuk sà-pà-dtii", cn: "每周" },
+            ],
+            grammar: "「ถ้า...ก็...」= 如果…就…。ถ้าชอบก็กลับมา = 喜欢就再来。",
+          },
+        ],
+        nextStage: null,
+      },
+    ],
+    fallback: {
+      thai: "ลองถามราคานะคะ! เท่าไหร่ หรือ ลดได้ไหม",
+      roman: "lɔɔng thaam raakaa ná ká! tâo-rài rá-rûe rót dâi mái",
+      chinese: "试着问问价格吧！多少钱？能便宜吗？",
+      vocab: [],
+      grammar: "",
+    },
+  },
+  {
+    id: "taxi",
+    title: "打车出行",
+    subtitle: "曼谷出租车/Grab",
+    description: "在泰国打出租车或叫Grab，告诉司机目的地、讨论路线和车费，学习交通实用泰语。",
+    icon: "Briefcase",
+    sceneEmoji: "🚕",
+    sceneTip: "曼谷出租车起步价35泰铢。一定要要求司机打表（เปิดมิเตอร์）。用Grab更方便，价格透明。",
+    roleplay: { character: "出租车司机", role: "taxi driver" },
+    greeting: {
+      thai: "สวัสดีครับ! จะไปไหนครับ ขึ้นรถเลยครับ",
+      roman: "sà-wàt-dii kráp! jà pai nǎi kráp, khʉ̌ng rót loei kráp",
+      chinese: "你好！要去哪里？上车吧。",
+      speakRate: 0.78,
+    },
+    dialogueTree: [
+      {
+        stage: 1,
+        prompt: "告诉司机目的地",
+        suggestions: ["ไปสนามบิน", "ไปสยามพารากอน", "เปิดมิเตอร์ด้วย", "ไปสยามครับ"],
+        responses: [
+          {
+            keywords: ["ไป", "ไปสนามบิน", "ไปสยาม"],
+            thai: "ได้เลยครับ! ไปสนามบินใช่ไหมครับ ระยะทางประมาณ 30 กม. ครับ เปิดมิเตอร์ให้เลยครับ",
+            roman: "dâi loei kráp! pai sà-nǎam-bin châi mái kráp, rá-yaa-thaang bpa-raam 30 k.m. kráp, bəət meter hâi loei kráp",
+            chinese: "好的！去机场对吧？大约30公里。给您打表。",
+            vocab: [
+              { th: "ระยะทาง", roman: "rá-yaa-thaang", cn: "距离" },
+              { th: "เปิดมิเตอร์", roman: "bəət meter", cn: "打表" },
+              { th: "กิโลเมตร", roman: "kílô-mêet", cn: "公里" },
+            ],
+            grammar: "「ระยะทาง」= 距离。「ประมาณ」= 大约。30 กม. = 30公里。",
+            culturalNote: "如果司机不愿意打表，可以礼貌拒绝并换一辆车。Grab就没有这个问题。",
+          },
+        ],
+        nextStage: 2,
+      },
+      {
+        stage: 2,
+        prompt: "途中聊天",
+        suggestions: ["ไปสนามบินกี่ชั่วโมง", "กรุงเทพรถติดมาก", "เคยไปประเทศไทยไหม", "อากาศดีมาก"],
+        responses: [
+          {
+            keywords: ["กี่ชั่วโมง", "时间", "ติด", "堵车"],
+            thai: "ถ้าไม่ติดรถ ประมาณ 40 นาทีครับ แต่ตอนนี้รถติดมาก อาจเป็นชั่วโมงเลยครับ กรุงเทพฯ รถติดช่วงเช้ากับเย็นครับ",
+            roman: "thâa mâi tìt rót bpa-raam sìi-sìp naa-thíi kráp, dtàe tɔ̀ɔn-níi rót tìt mâak, àat bpen chûa-hɔɔn loei kráp, grung-têep rót tìt chûang cháo kap yēn kráp",
+            chinese: "不堵车大约40分钟。但现在很堵，可能要一个小时。曼谷早晚高峰很堵。",
+            vocab: [
+              { th: "รถติด", roman: "rót tìt", cn: "堵车" },
+              { th: "ชั่วโมง", roman: "chûa-hɔɔn", cn: "小时" },
+              { th: "ช่วง", roman: "chûang", cn: "时段/期间" },
+            ],
+            grammar: "「อาจ」= 可能/也许。比「อาจจะ」更口语化。อาจ + 动词 = 可能会…",
+          },
+        ],
+        nextStage: 3,
+      },
+      {
+        stage: 3,
+        prompt: "到达目的地",
+        suggestions: ["จอดตรงไหน", "เท่าไหร่ครับ", "ไม่ต้องทอน", "ขอบคุณครับ"],
+        responses: [
+          {
+            keywords: ["เท่าไหร่", "多少钱", "จอด"],
+            thai: "ถึงแล้วครับ! มิเตอร์ 420 บาทครับ จอดตรงนี้ได้เลยครับ",
+            roman: "thʉ̌ung láew kráp! meter sìi-hâa-róii bàat kráp, jɔ̀ɔt trong níi dâi loei kráp",
+            chinese: "到了！计价器420泰铢。可以停这里。",
+            vocab: [
+              { th: "ถึง", roman: "thʉ̌ung", cn: "到达" },
+              { th: "มิเตอร์", roman: "meter", cn: "计价器" },
+              { th: "จอด", roman: "jɔ̀ɔt", cn: "停车" },
+            ],
+            grammar: "「แล้ว」在此表示「已经」的动作完成。ถึงแล้ว = 已经到了。",
+          },
+        ],
+        nextStage: 4,
+      },
+      {
+        stage: 4,
+        prompt: "付钱下车",
+        suggestions: ["ขอบคุณครับ", "เก่งมาก", "ไม่ต้องทอน", "ลาก่อนครับ"],
+        responses: [
+          {
+            keywords: ["ขอบคุณ", "thank", "ทอน"],
+            thai: "ขอบคุณครับ! ขอบคุณที่ใช้บริการครับ ไม่ต้องทอนก็ได้ครับ ขอบคุณมากครับ!",
+            roman: "khàawp-khun kráp! khàawp-khun thîi chái baw-ri-gaan kráp, mâi dtông thon gɔ̀o dâi kráp, khàawp-khun mâak kráp!",
+            chinese: "谢谢！谢谢坐我的车。不用找了。非常感谢！",
+            vocab: [
+              { th: "บริการ", roman: "baw-ri-gaan", cn: "服务" },
+              { th: "ทอน", roman: "thon", cn: "找零" },
+            ],
+            grammar: "「ไม่ต้อง」= 不用/不需要。不用找了 = ไม่ต้องทอน。泰国小费文化不强，但可以给司机凑整。",
+          },
+        ],
+        nextStage: null,
+      },
+    ],
+    fallback: {
+      thai: "ลองบอกจุดหมายปลายทางเป็นภาษาไทยสิครับ! เช่น ไปสนามบิน หรือ ไปสยาม",
+      roman: "lɔɔng bàawk jùt-mǎai plaai-thaang bpen phaa-sǎa thai sì kráp!",
+      chinese: "试着用泰语说目的地！比如去机场或去暹罗。",
+      vocab: [],
+      grammar: "",
+    },
+  },
+  {
+    id: "convenience",
+    title: "便利店购物",
+    subtitle: "7-Eleven / Lawson",
+    description: "在泰国7-Eleven便利店买东西、加热食物、付款结账，学习最日常的购物泰语。",
+    icon: "ShoppingBag",
+    sceneEmoji: "🏪",
+    sceneTip: "泰国7-Eleven非常普及，几乎所有东西都能买到。店员会问「มีบัตร积分ไหม」(有积分卡吗)。",
+    roleplay: { character: "便利店店员", role: "convenience store clerk" },
+    greeting: {
+      thai: "สวัสดีค่ะ! いらっしゃいませ มีอะไรให้ช่วยคะ",
+      roman: "sà-wàt-dii ká! irasshaimase, mii à-rai hâi chûay ká",
+      chinese: "你好！欢迎光临，有什么需要帮忙的吗？",
+      speakRate: 0.80,
+    },
+    dialogueTree: [
+      {
+        stage: 1,
+        prompt: "找想买的东西",
+        suggestions: ["ขอน้ำดื่ม", "มีบะหมี่สำเร็จรูปไหม", "ของร้อนอยู่ตรงไหน", "ขอซองบุหรี่"],
+        responses: [
+          {
+            keywords: ["น้ำ", "น้ำดื่ม", "水"],
+            thai: "มีค่ะ น้ำดื่มอยู่ช่องเย็นค่ะ มีน้ำเปล่า น้ำอัดลม น้ำผลไม้ค่ะ อยากได้แบบไหนคะ",
+            roman: "mii ká, nám dʉ̌m yùu chɔ̂ɔng yen ká, mii nám plào nám àt-lom nám pǒn-lá-máii ká, yàak dâi bâep nǎi ká",
+            chinese: "有的，饮用水在冷柜。有矿泉水、汽水、果汁。想要哪种？",
+            vocab: [
+              { th: "น้ำดื่ม", roman: "nám dʉ̌m", cn: "饮用水" },
+              { th: "น้ำเปล่า", roman: "nám plào", cn: "矿泉水/白水" },
+              { th: "น้ำอัดลม", roman: "nám àt-lom", cn: "汽水" },
+            ],
+            grammar: "「แบบ」= 种类/类型。อยากได้แบบไหน = 想要哪种？",
+          },
+        ],
+        nextStage: 2,
+      },
+      {
+        stage: 2,
+        prompt: "加热食物",
+        suggestions: ["ช่วยอุ่นให้หน่อย", "เข้าไมโครเวฟได้ไหม", "กี่วินาที", "ขอบคุณค่ะ"],
+        responses: [
+          {
+            keywords: ["อุ่น", "加热", "ไมโครเวฟ", " microwave"],
+            thai: "ได้ค่ะ เดี๋ยวอุ่นให้ค่ะ 放入ไมโครเวฟ 2 นาทีค่ะ รอแป๊บเดียวนะคะ ของร้อนอร่อยมากค่ะ",
+            roman: "dâi ká, dǐao àn hâi ká, saang microwave sǎam naa-thíi ká, rǎw bpâep-diao ná ká, khɔ̌ɔng rɔ́ɔn a-rɔ̀i mâak ká",
+            chinese: "好的，帮您加热。微波炉2分钟。稍等一下，热食很好吃哦。",
+            vocab: [
+              { th: "อุ่น", roman: "àn", cn: "加热" },
+              { th: "ของร้อน", roman: "khɔ̌ɔng rɔ́ɔn", cn: "热食/热的东西" },
+              { th: "แป๊บ", roman: "bpâep", cn: "一下/一会儿" },
+            ],
+            grammar: "「เดี๋ยว」= 等一下/马上。是非常口语化的表达。เดี๋ยวอุ่นให้ = 马上帮你加热。",
+          },
+        ],
+        nextStage: 3,
+      },
+      {
+        stage: 3,
+        prompt: "付款",
+        suggestions: ["จ่ายเงินสด", "โอนได้ไหม", "มีถุงไหม", "ขอบัตร积分"],
+        responses: [
+          {
+            keywords: ["จ่าย", "จ่ายเงิน", "เงินสด"],
+            thai: "รวม 187 บาทค่ะ จ่ายเงินสดหรือโอนค่ะ มีบัตร积分ไหมคะ ใส่ถุงไหมคะ",
+            roman: "ruambpai hâa-sìip-jèt bàat ká, jài ngəən sòt rá-rûe õon ká, mii bâat seek-kaan mái ká, sài thûuk mái ká",
+            chinese: "一共187泰铢。现金还是转账？有积分卡吗？要袋子吗？",
+            vocab: [
+              { th: "รวม", roman: "ruam", cn: "一共/总共" },
+              { th: "ถุง", roman: "thûuk", cn: "袋子" },
+              { th: "积分", roman: "seek-kaan", cn: "积分" },
+            ],
+            grammar: "「รวม」= 总共/合计。รวม...บาท = 一共...泰铢。",
+          },
+        ],
+        nextStage: 4,
+      },
+      {
+        stage: 4,
+        prompt: "离开",
+        suggestions: ["ขอบคุณค่ะ", "อร่อยมาก", "ไปก่อนค่ะ", "ราตรีสวัสดิ์"],
+        responses: [
+          {
+            keywords: ["ขอบคุณ", "thank", "ไป"],
+            thai: "ขอบคุณค่ะ! ไปก่อนนะคะ อร่อยๆ ค่ะ แล้วเจอกันค่ะ",
+            roman: "khàawp-khun ká! pai gàawn ná ká, a-rɔ̀i-a-rɔ̀i ká, láew jəə gan ká",
+            chinese: "谢谢！先走了哦。好吃好吃。下次见！",
+            vocab: [
+              { th: "ไปก่อน", roman: "pai gàawn", cn: "先走了" },
+              { th: "แล้วเจอกัน", roman: "láew jəə gan", cn: "下次见" },
+            ],
+            grammar: "「ไปก่อน」= 先走了，是泰国人告别的常用说法。「ไปก่อนนะ」更亲切。",
+          },
+        ],
+        nextStage: null,
+      },
+    ],
+    fallback: {
+      thai: "ลองถามหาของในร้านเป็นภาษาไทยสิค่ะ! เช่น ขอน้ำ หรือ ของร้อน",
+      roman: "lɔɔng thaam hǎa khɔ̌ɔng nai rán bpen phaa-sǎa thai sì ká!",
+      chinese: "试着用泰语问店员要东西！比如要水或热食。",
+      vocab: [],
+      grammar: "",
+    },
+  },
+
+{
+    id: "hospital",
+    title: "医院看病",
+    subtitle: "曼谷医院就诊",
+    description: "在泰国医院挂号、描述病情、拿药，学习医疗场景的实用泰语。",
+    icon: "MessageCircle",
+    sceneEmoji: "🏥",
+    sceneTip: "泰国医院通常分为门诊（_OPD）和急诊。看病前先挂号（ลงทะเบียน），描述症状时用「เจ็บ」（疼）或「ไม่สบาย」（不舒服）。",
+    roleplay: { character: "医生/护士", role: "hospital staff" },
+    greeting: {
+      thai: "สวัสดีครับ/ค่ะ นั่งตรงนี้ครับ/ค่ะ มีอะไรไม่สบายครับ/ค่ะ",
+      roman: "sà-wàt-dii kráp/ká, nâng trong níi kráp/ká, mii à-rai mâi sà-baai kráp/ká",
+      chinese: "你好，坐这里。哪里不舒服？",
+      speakRate: 0.72,
+    },
+    dialogueTree: [
+      {
+        stage: 1,
+        prompt: "描述症状",
+        suggestions: ["เจ็บหัว", "มีไข้", "เจ็บท้อง", "ไม่สบายมาก"],
+        responses: [
+          {
+            keywords: ["เจ็บ", "pain", "疼"],
+            thai: "เจ็บตรงไหนครับ/ค่ะ เจ็บมานานแล้วหรือยังครับ/ค่ะ มีไข้ด้วยไหมครับ",
+            roman: "jèp trong nǎi kráp/ká, jèp maa naan láew rá-rûe yung kráp, mii khâai dwóy mái kráp",
+            chinese: "哪里疼？疼多久了？有发烧吗？",
+            vocab: [
+              { th: "เจ็บ", roman: "jèp", cn: "疼/痛" },
+              { th: "มีไข้", roman: "mii khâai", cn: "发烧" },
+              { th: "มานาน", roman: "maa naan", cn: "很久了" },
+            ],
+            grammar: "「เจ็บ」= 疼/痛，是最常用的疼痛词。เจ็บ + 部位 = 哪里疼。",
+          },
+        ],
+        nextStage: 2,
+      },
+      {
+        stage: 2,
+        prompt: "检查身体",
+        suggestions: ["วัดไข้", "ฟังเสียงหัวใจ", "ตรวจเลือด", "กินยาอะไร"],
+        responses: [
+          {
+            keywords: ["ตรวจ", "exam", "检查"],
+            thai: "หมอจะวัดไข้ให้ก่อนครับ 37.8 องศา นิดหน่อย มีไข้นะครับ ต้องกินยาลดไข้ด้วย",
+            roman: "mɔ̌ɔ jà wát khâai hâi gɔ̀awn kráp, sǎam-sìip-jèt ponto sǎa, nít-nài, mii khâai ná kráp, dtông gin yaa lót khâai dwóy",
+            chinese: "医生先量体温，37.8度，有点发烧。要吃退烧药。",
+            vocab: [
+              { th: "วัดไข้", roman: "wát khâai", cn: "量体温" },
+              { th: "องศา", roman: "ɔng-sǎa", cn: "度（温度）" },
+              { th: "ยาลดไข้", roman: "yaa lót khâai", cn: "退烧药" },
+            ],
+            grammar: "「ต้อง」= 必须/要。ต้องกินยา = 要吃药。",
+          },
+        ],
+        nextStage: 3,
+      },
+      {
+        stage: 3,
+        prompt: "拿药",
+        suggestions: ["กินยาตอนไหน", "มีผลข้างเคียงไหม", "ต้องมาอีกไหม", "ขอบคุณหมอ"],
+        responses: [
+          {
+            keywords: ["กิน", "eat", "吃药"],
+            thai: "ยานี่กินหลังอาหารครับ วันละ 3 ครั้ง ครั้งละ 1 เม็ด ถ้า 3 วันไม่ดีขึ้นต้องมาหาหมอใหม่นะครับ",
+            roman: "yaa nîi gin lǎng aa-hǎan kráp, wan lá sǎam kráng, kráng lá nèung mèt, thâa sǎam wan mâi dee khʉ̌ung dtông maa hǎa mɔ̌ɔ mài ná kráp",
+            chinese: "这药饭后吃，每天3次，每次1粒。如果3天没好转要再来复诊。",
+            vocab: [
+              { th: "หลังอาหาร", roman: "lǎng aa-hǎan", cn: "饭后" },
+              { th: "เม็ด", roman: "mèt", cn: "粒（药量词）" },
+              { th: "ดีขึ้น", roman: "dee khʉ̌ung", cn: "好转" },
+            ],
+            grammar: "「หลัง」= 之后。หลังอาหาร = 饭后。「วันละ」= 每天。",
+          },
+        ],
+        nextStage: 4,
+      },
+      {
+        stage: 4,
+        prompt: "结束问诊",
+        suggestions: ["ขอบคุณค่ะ", "จ่ายเงินที่ไหน", "กลับบ้านเลย", "จะพักผ่อน"],
+        responses: [
+          {
+            keywords: ["ขอบคุณ", "thank", "จ่าย"],
+            thai: "พักผ่อนเยอะๆ ดื่มน้ำเยอะๆ นะครับ จ่ายเงินที่เคาน์เตอร์ชั้น 1 ครับ สวัสดีครับ!",
+            roman: "phàk-phɔ̀ɔn yə́-yə́, dʉ̀m nám yə́-yə́ ná kráp, jài ngəən thîi counter chán nʉ̀ng kráp, sà-wàt-dii kráp!",
+            chinese: "多休息多喝水。到1楼柜台付款。再见！",
+            vocab: [
+              { th: "พักผ่อน", roman: "phàk-phɔ̀ɔn", cn: "休息" },
+              { th: "เคาน์เตอร์", roman: "counter", cn: "柜台" },
+              { th: "ชั้น", roman: "chán", cn: "楼层" },
+            ],
+            grammar: "「ที่」= 在某处。จ่ายเงินที่ = 在…付款。",
+          },
+        ],
+        nextStage: null,
+      },
+    ],
+    fallback: {
+      thai: "ลองอธิบายอาการเป็นภาษาไทยครับ! เช่น ฉันเจ็บ... หรือ ฉันไม่สบาย...",
+      roman: "lɔɔng à-tì-baan aa-gaan bpen phaa-sǎa thai kráp!",
+      chinese: "试着用泰语描述症状！比如 我疼… 或 我不舒服…",
+      vocab: [],
+      grammar: "",
+    },
+  },
+  {
+    id: "bank",
+    title: "银行办事",
+    subtitle: "泰国银行柜台",
+    description: "在泰国银行开户、换汇、转账，学习银行金融场景的实用泰语。",
+    icon: "Briefcase",
+    sceneEmoji: "🏦",
+    sceneTip: "泰国主要银行有 Bangkok Bank、Kasikorn Bank、SCB 等。外国人可以用护照开户。换汇推荐 SuperRich。",
+    roleplay: { character: "银行柜员", role: "bank clerk" },
+    greeting: {
+      thai: "สวัสดีครับ ต้องการอะไรครับ เปิดบัญชี หรือ ทำธุรกรรมอะไรครับ",
+      roman: "sà-wàt-dii kráp, dtông-gaan à-rai kráp, bəət bpaan-jii rá-rûe tham tá-ruu-gaan à-rai kráp",
+      chinese: "你好，需要什么？开户还是办业务？",
+      speakRate: 0.72,
+    },
+    dialogueTree: [
+      {
+        stage: 1,
+        prompt: "办理业务",
+        suggestions: ["เปิดบัญชี", "แลกเงิน", "โอนเงิน", "ถอนเงิน"],
+        responses: [
+          {
+            keywords: ["เปิด", "open", "开户"],
+            thai: "เปิดบัญชีใหม่ใช่ไหมครับ ขอพาสปอร์ตด้วยครับ จะเปิดบัญชีออมทรัพย์ หรือ กระแสรายวันครับ",
+            roman: "bəət bpaan-jii mài châi mái kráp, khǎw pâat-bpòt dwóy kráp, jà bəət bpaan-jii ɔ̂ɔm-sáp rá-rûe kra-sà-raai-wan kráp",
+            chinese: "开户对吗？请给我护照。要开储蓄账户还是活期账户？",
+            vocab: [
+              { th: "เปิดบัญชี", roman: "bəət bpaan-jii", cn: "开户" },
+              { th: "ออมทรัพย์", roman: "ɔ̂ɔm-sáp", cn: "储蓄" },
+              { th: "กระแสรายวัน", roman: "kra-sà-raai-wan", cn: "活期" },
+            ],
+            grammar: "「ครับ/ค่ะ」在服务场景中非常必要，不用会显得不礼貌。",
+          },
+        ],
+        nextStage: 2,
+      },
+      {
+        stage: 2,
+        prompt: "填写表格",
+        suggestions: ["กรอกข้อมูลอะไร", "เซ็นต์ตรงไหน", "ใส่ลายเซ็น", "ขอดูแบบฟอร์ม"],
+        responses: [
+          {
+            keywords: ["กรอก", "fill", "填"],
+            thai: "กรอกชื่อ ที่อยู่ เบอร์โทรศัพท์ แล้วเซ็นต์ด้านล่างครับ ถ้ามีภาษาอังกฤษก็ได้ครับ",
+            roman: "gràwk chʉʉ thîi-yùu bɛɛr-dtɔ-rá-sáp láew sêen dâan lǎang kráp, thâa mii phaa-sǎa ang-grìt gɔ̀o dâi kráp",
+            chinese: "填写姓名、地址、电话，然后签下面。用英文也可以。",
+            vocab: [
+              { th: "กรอก", roman: "gràwk", cn: "填写" },
+              { th: "ที่อยู่", roman: "thîi-yùu", cn: "地址" },
+              { th: "เบอร์โทรศัพท์", roman: "bɛɛr-dtɔ-rá-sáp", cn: "电话" },
+            ],
+            grammar: "「แล้ว」= 然后。กรอก...แล้วเซ็นต์ = 填好...然后签。",
+          },
+        ],
+        nextStage: 3,
+      },
+      {
+        stage: 3,
+        prompt: "完成开户",
+        suggestions: ["ขอดูบัตร", "ตั้งรหัส PIN", "ฝากเงิน", "ได้บัตรแล้ว"],
+        responses: [
+          {
+            keywords: ["บัตร", "card", "卡"],
+            thai: "บัตรเดบิตจะออกให้ภายใน 7 วัน ตอนนี้ใช้สมุดบัญชีไปก่อนครับ ตั้งรหัส PIN 6 หลักด้วยครับ",
+            roman: "bâat-dee-bìt jà òk hâi bpaai-nai sǎam-jìt wan, tɔ̀ɔn-níi chái sà-mùt bpaan-jii bpai gɔ̀awn kráp, dtâng rá-kàt PIN hòk lák dwóy kráp",
+            chinese: "借记卡7天内寄出，先用存折。设置6位PIN密码。",
+            vocab: [
+              { th: "บัตรเดบิต", roman: "bâat-dee-bìt", cn: "借记卡" },
+              { th: "สมุดบัญชี", roman: "sà-mùt bpaan-jii", cn: "存折" },
+              { th: "รหัส", roman: "rá-kàt", cn: "密码" },
+            ],
+            grammar: "「ภายใน」= 在…之内。ภายใน 7 วัน = 7天之内。",
+          },
+        ],
+        nextStage: 4,
+      },
+      {
+        stage: 4,
+        prompt: "结束",
+        suggestions: ["ขอบคุณครับ", "จะไปแล้ว", "ฝากเงินเข้า", "ลาก่อนครับ"],
+        responses: [
+          {
+            keywords: ["ขอบคุณ", "thank", "ไป"],
+            thai: "ครับ เปิดบัญชีเรียบร้อยแล้วครับ ถ้ามีอะไรสงสัยโทรมาถามได้เลยครับ สวัสดีครับ!",
+            roman: "kráp, bəət bpaan-jii rîap-rɔ́i láew kráp, thâa mii à-rai sǒng-sǎi taw maa thaam dâi loei kráp, sà-wàt-dii kráp!",
+            chinese: "开户完成了。有问题随时打电话问。再见！",
+            vocab: [
+              { th: "เรียบร้อย", roman: "rîap-rɔ́i", cn: "完成了" },
+              { th: "สงสัย", roman: "sǒng-sǎi", cn: "疑问" },
+            ],
+            grammar: "「เรียบร้อย」= 完成/好了。常用于表示某事已完成。",
+          },
+        ],
+        nextStage: null,
+      },
+    ],
+    fallback: {
+      thai: "ลองบอกว่าต้องการอะไรเป็นภาษาไทยสิครับ! เช่น เปิดบัญชี หรือ แลกเงิน",
+      roman: "lɔɔng bàawk wa dtông-gaan à-rai bpen phaa-sǎa thai sì kráp!",
+      chinese: "试着用泰语说你要做什么！比如开户或换汇。",
+      vocab: [],
+      grammar: "",
+    },
+  },
+  {
+    id: "salon",
+    title: "理发店",
+    subtitle: "泰国理发/美容",
+    description: "在泰国理发店剪发、染发、沟通发型，学习美容美发场景的实用泰语。",
+    icon: "ShoppingBag",
+    sceneEmoji: "💇",
+    sceneTip: "泰国理发价格非常亲民。普通剪发约 100-200 泰铢。可以拿图片给理发师看。说「ตัด」= 剪。",
+    roleplay: { character: "理发师", role: "hairdresser" },
+    greeting: {
+      thai: "สวัสดีค่ะ นั่งตรงนี้ค่ะ อยากทำอะไรคะ ตัดผม หรือ ทำสีคะ",
+      roman: "sà-wàt-dii ká, nâng trong níi ká, yàak tham à-rai ká, dtàt pɔ̌m rá-rûe tham sǐi ká",
+      chinese: "你好，坐这里。想做什么？剪发还是染发？",
+      speakRate: 0.75,
+    },
+    dialogueTree: [
+      {
+        stage: 1,
+        prompt: "沟通需求",
+        suggestions: ["ตัดสั้น", "ตัดยาวนิดหน่อย", "ทำสี", "สระผมด้วย"],
+        responses: [
+          {
+            keywords: ["ตัด", "cut", "剪"],
+            thai: "อยากตัดแบบไหนคะ ตัดสั้นมาก หรือ ตัดแค่ปลายผมคะ มีรูปแบบที่ชอบไหมคะ",
+            roman: "yàak dtàt bâep nǎi ká, dtàt sǎn mâak rá-rûe dtàt khàe bplai pɔ̌m ká, mii rúu-pai bâep thîi chɔ̀ɔp mái ká",
+            chinese: "想怎么剪？剪很短还是只修一下？有喜欢的图片吗？",
+            vocab: [
+              { th: "ตัด", roman: "dtàt", cn: "剪" },
+              { th: "สั้น", roman: "sǎn", cn: "短" },
+              { th: "ปลายผม", roman: "bplai pɔ̌m", cn: "发梢" },
+            ],
+            grammar: "「แบบ」= 样式/方式。ตัดแบบไหน = 怎么剪。",
+          },
+        ],
+        nextStage: 2,
+      },
+      {
+        stage: 2,
+        prompt: "开始理发",
+        suggestions: ["สั้นมากไม่ได้", "ขอรูปให้ดู", "ตัดตรงนี้", "อย่าตัดมาก"],
+        responses: [
+          {
+            keywords: ["สั้น", "short", "短"],
+            thai: "ค่ะ จะตัดประมาณนี้นะคะ ลองดู镜子ค่ะ ถ้าอยากตัดเพิ่มอีกก็บอกได้เลยค่ะ",
+            roman: "ká, jà dtàt bpa-raam níi ná ká, lɔɔng duu镜子 ká, thâa yàak dtàt pə̂əm ìik gɔ̀o bàawk dâi loei ká",
+            chinese: "好的，大概剪到这里。看看镜子。还想再剪就说。",
+            vocab: [
+              { th: "ประมาณ", roman: "bpa-raam", cn: "大约" },
+              { th: "เพิ่ม", roman: "pə̂əm", cn: "增加/再" },
+            ],
+            grammar: "「ลอง」= 试试/看看。ลองดู = 看看。",
+          },
+        ],
+        nextStage: 3,
+      },
+      {
+        stage: 3,
+        prompt: "洗头/造型",
+        suggestions: ["สระผมแรงๆ", "ไม่ต้องนวด", "ไดร์ผมด้วย", "ขอยาวอีกนิด"],
+        responses: [
+          {
+            keywords: ["สระ", "wash", "洗"],
+            thai: "สระผมเสร็จแล้วค่ะ จะไดร์ให้พองๆ หรือ ตรงๆ คะ ใช้แชมพูอะไรคะ",
+            roman: "sà pɔ̌m sèt láew ká, jà dryer hâi pɔng-pɔng rá-rûe trong-trong ká, chái shampoo à-rai ká",
+            chinese: "洗好了。要吹蓬松还是直顺？用什么洗发水？",
+            vocab: [
+              { th: "สระผม", roman: "sà pɔ̌m", cn: "洗头" },
+              { th: "ไดร์", roman: "dryer", cn: "吹" },
+              { th: "พอง", roman: "pɔng", cn: "蓬松" },
+            ],
+            grammar: "「เสร็จ」= 完成。สระเสร็จ = 洗好了。",
+          },
+        ],
+        nextStage: 4,
+      },
+      {
+        stage: 4,
+        prompt: "付款",
+        suggestions: ["เท่าไหร่", "จ่ายเงินสด", "โอนได้ไหม", "ขอบคุณค่ะ"],
+        responses: [
+          {
+            keywords: ["เท่าไหร่", "price", "多少钱"],
+            thai: "ตัด 200 สระ+ไดร์ 100 รวม 300 บาทค่ะ จ่ายเงินสดหรือโอนค่ะ",
+            roman: "dtàt sǎang-hóii, sà+dryer nùung-hóii, ruam sǎam-hóii bàat ká, jài ngəən sòt rá-rûe õon ká",
+            chinese: "剪发200，洗吹100，一共300泰铢。现金还是转账？",
+            vocab: [
+              { th: "รวม", roman: "ruam", cn: "总共" },
+              { th: "สด", roman: "sòt", cn: "现金" },
+            ],
+            grammar: "泰语价格表达：数字 + บาท。200 = สองร้อย。",
+          },
+        ],
+        nextStage: null,
+      },
+    ],
+    fallback: {
+      thai: "ลองบอกช่างทำผมเป็นภาษาไทยสิค่ะ! เช่น ตัดสั้น หรือ ทำสี",
+      roman: "lɔɔng bàawk châng tham pɔ̌m bpen phaa-sǎa thai sì ká!",
+      chinese: "试着用泰语跟理发师说！比如剪短或染发。",
+      vocab: [],
+      grammar: "",
+    },
+  },
+  {
+    id: "gym",
+    title: "健身房",
+    subtitle: "泰国健身房/运动",
+    description: "在泰国健身房注册会员、使用器材、找教练，学习运动健身场景的实用泰语。",
+    icon: "MessageCircle",
+    sceneEmoji: "💪",
+    sceneTip: "泰国健身房价格亲民。Basic Fit、Fitness First、Virgin Active 是连锁品牌。月卡约 1000-2000 泰铢。",
+    roleplay: { character: "健身房教练", role: "gym trainer" },
+    greeting: {
+      thai: "สวัสดีครับ! ยินดีต้อนรับ คุณเคยมาออกกำลังกายที่นี่มาก่อนไหมครับ",
+      roman: "sà-wàt-dii kráp! yin-dii tɔ̂ɔn-ráp, khun kəəi maa àwk gam-lang-gaae thîi nîi maa gɔ̀awn mái kráp",
+      chinese: "你好！欢迎。之前来过这里健身吗？",
+      speakRate: 0.75,
+    },
+    dialogueTree: [
+      {
+        stage: 1,
+        prompt: "注册/询问",
+        suggestions: ["สมัครสมาชิก", "ราคาเท่าไหร่", "มีเทรนเนอร์ไหม", "อยากลดน้ำหนัก"],
+        responses: [
+          {
+            keywords: ["สมัคร", "register", "注册"],
+            thai: "สมัครรายเดือน 1,500 บาท ไม่จำกัด หรือ แบบ 10 ครั้ง 800 บาท คุณอยากออกกำลังกายแบบไหนครับ",
+            roman: "sà-mák raai-dʉ̂an nûng-phan-hâa-róii bàat, mâi jam-gàt rá-rûe bâep sìp kráng bpàa-róii bàat, khun yàak àwk gam-lang-gaae bâep nǎi kráp",
+            chinese: "月卡1500泰铢不限次，或10次卡800泰铢。你想怎么健身？",
+            vocab: [
+              { th: "สมัครสมาชิก", roman: "sà-mák sà-maa-jìk", cn: "注册会员" },
+              { th: "รายเดือน", roman: "raai-dʉ̂an", cn: "月付" },
+              { th: "จำกัด", roman: "jam-gàt", cn: "限制" },
+            ],
+            grammar: "「แบบ」= 方式/类型。แบบ 10 ครั้ง = 10次的方式。",
+          },
+        ],
+        nextStage: 2,
+      },
+      {
+        stage: 2,
+        prompt: "训练计划",
+        suggestions: ["อยากลดพุง", "อยากกล้ามใหญ่", "วิ่งบนลู่วิ่ง", "ซื้อแพ็กเกจ"],
+        responses: [
+          {
+            keywords: ["ลด", "lose", "减"],
+            thai: "ถ้าอยากลดน้ำหนัก แนะนำให้ cardio 30 นาที แล้ว weight training 30 นาที ทุก 3 วันครับ",
+            roman: "thâa yàak lót nám-nàk, náe-nam hâi cardio sǎam-sìp naa-thíi láew weight training sǎam-sìp naa-thíi thûk sǎam wan kráp",
+            chinese: "想减重的话，建议有氧30分钟+力量训练30分钟，每3天一次。",
+            vocab: [
+              { th: "ลดน้ำหนัก", roman: "lót nám-nàk", cn: "减重" },
+              { th: "แนะนำ", roman: "náe-nam", cn: "推荐" },
+              { th: "ทุก", roman: "thûk", cn: "每" },
+            ],
+            grammar: "「ถ้า...แนะนำให้」= 如果…建议。是很自然的建议句型。",
+          },
+        ],
+        nextStage: 3,
+      },
+      {
+        stage: 3,
+        prompt: "使用器材",
+        suggestions: ["เครื่องนี้ใช้ยังไง", "ช่วยสอนหน่อย", "ยกน้ำหนัก", "พักก่อน"],
+        responses: [
+          {
+            keywords: ["เครื่อง", "machine", "器材"],
+            thai: "เครื่องนี้ปรับเบาะให้เหมาะกับคุณก่อน แล้วค่อยเพิ่มน้ำหนักทีละนิดครับ ถ้าเจ็บต้องหยุดเลยนะครับ",
+            roman: "krʉ̂ang níi bpràn bpàw hâi mɔ̀p gap khun gɔ̀awn, láew gɔ̀oi pə̂əm nám-nàk thîi lá nìt kráp, thâa jèp dtông yùt loei ná kráp",
+            chinese: "先调整座椅适合你，然后一点点加重量。如果疼要立刻停。",
+            vocab: [
+              { th: "เบาะ", roman: "bpàw", cn: "座椅" },
+              { th: "น้ำหนัก", roman: "nám-nàk", cn: "重量" },
+              { th: "หยุด", roman: "yùt", cn: "停止" },
+            ],
+            grammar: "「ทีละ」= 每次/逐一。ทีละนิด = 一点点。非常实用的渐进表达。",
+          },
+        ],
+        nextStage: 4,
+      },
+      {
+        stage: 4,
+        prompt: "结束",
+        suggestions: ["สนุกมาก", "เหนื่อยมาก", "จะมาอีก", "ขอบคุณครับ"],
+        responses: [
+          {
+            keywords: ["สนุก", "fun", "开心"],
+            thai: "เก่งมากครับ! ออกกำลังกายสม่ำเสมอนะครับ สัปดาห์ละ 3-4 ครั้ง แล้วจะเห็นผลภายใน 2 เดือนครับ!",
+            roman: "gèng mâak kráp! àwk gam-lang-gaae sà-mám-sà-měn ná kráp, sà-pà-dtii lá sǎam-sìi kráng, láew jà hěn pǒn bpaai-nai sǎng-deuan kráp",
+            chinese: "很棒！坚持锻炼，每周3-4次，2个月内会看到效果！",
+            vocab: [
+              { th: "สม่ำเสมอ", roman: "sà-mám-sà-měn", cn: "持续/坚持" },
+              { th: "เห็นผล", roman: "hěn pǒn", cn: "看到效果" },
+            ],
+            grammar: "「สม่ำเสมอ」= 持续/经常。是坚持做某事的核心词。",
+          },
+        ],
+        nextStage: null,
+      },
+    ],
+    fallback: {
+      thai: "ลองคุยเรื่องออกกำลังกายเป็นภาษาไทยสิครับ! เช่น อยากลดน้ำหนัก",
+      roman: "lɔɔng khui rʉ̂ang àwk gam-lang-gaae bpen phaa-sǎa thai sì kráp!",
+      chinese: "试着用泰语聊健身！比如想减肥。",
+      vocab: [],
+      grammar: "",
+    },
+  },
 ];
 
-// 通用对话进度配置
 export const CONVERSATION_CONFIG = {
   maxStages: 4,
   typingDelay: { min: 800, max: 1800 },

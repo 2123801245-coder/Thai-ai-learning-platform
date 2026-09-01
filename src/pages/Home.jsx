@@ -31,6 +31,7 @@ import { useNavigate } from "react-router-dom";
 
 import AITeacher from "@/components/AITeacher";
 import AiTodayMission from "@/components/ai/AiTodayMission";
+import AbilitySection from "@/components/dashboard/AbilitySection";
 import VipPanel from "@/components/common/VipPanel";
 import {
   ThaiCorner,
@@ -1674,6 +1675,12 @@ function LegacyHome() {
         ===================================================== */}
 
         <AiTodayMission />
+
+        {/* =====================================================
+            泰语能力评估（六维雷达 + 成长曲线）
+        ===================================================== */}
+
+        <AbilitySection progress={progress} loading={loading} />
 
         {/* =====================================================
             移动端快捷入口

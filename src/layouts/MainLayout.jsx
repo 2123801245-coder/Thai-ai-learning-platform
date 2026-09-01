@@ -7,6 +7,7 @@ import MobileTabBar from "@/components/MobileTabBar";
 import { ThaiPatternBand } from "@/components/common/ThaiMotifs";
 import { MouseGlow } from "@/components/common/ThaiDecor";
 import ThemeQuickSwitcher from "@/components/theme/ThemeQuickSwitcher";
+import AiFloatingAssistant from "@/components/ai/AiFloatingAssistant";
 import { useAuth } from "@/lib/AuthContext";
 import OnboardingGuide from "@/components/OnboardingGuide";
 
@@ -115,6 +116,9 @@ export default function MainLayout({ children }) {
       <Sidebar />
 
       <MobileTabBar />
+
+      {/* AI 浮动老师助手（全站） */}
+      <AiFloatingAssistant />
 
       {/* 移动端顶部品牌栏 */}
       <header className="safe-area-top fixed left-0 right-0 top-0 z-40 border-b border-white/[0.08] backdrop-blur-2xl md:hidden" style={{ background: 'color-mix(in srgb, var(--tp-bg, #0f1a1e) 72%, transparent)' }}>

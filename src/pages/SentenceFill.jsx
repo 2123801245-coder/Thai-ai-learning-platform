@@ -2,9 +2,10 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, CheckCircle2, XCircle, RotateCcw, ArrowRight } from "lucide-react";
 import WordBookPicker from "@/components/practice/WordBookPicker";
-import { mergeBooks, generateFillQuestions, getSavedBookId, saveBookId, fetchWrongBook, recordWrongWord, formatWrongDate } from "@/lib/wordBooks";
+import { mergeBooks, generateFillQuestions, getSavedBookId, saveBookId, fetchWrongBook, recordWrongWord, formatWrongDate, getVocabBooks } from "@/lib/wordBooks";
 
-/* ── 句子填空题库 ── */
+/* 词书来源统一使用 getVocabBooks()（与词汇学习板块一致）
+   generateFillQuestions 从词书例句中自动挖空生成题目 */
 const sentenceSets = [
   [
     {
@@ -149,12 +150,9 @@ const sentenceSets = [
   ],
 ];
 
-/* ── 内置词书名称 ── */
-const builtinBooks = [
-  { name: "基础句型", emoji: "✏️", words: sentenceSets[0] },
-  { name: "生活场景", emoji: "🏠", words: sentenceSets[1] },
-  { name: "进阶表达", emoji: "🚀", words: sentenceSets[2] },
-];
+/* 词书来源统一使用 getVocabBooks()（与词汇学习板块一致）
+   generateFillQuestions 从词书例句中自动挖空生成题目 */
+const builtinBooks = [];
 
 function shuffle(arr) {
   const a = [...arr];
@@ -186,7 +184,7 @@ export default function SentenceFill() {
   }, [refreshWrongBook]);
 
   const allBooks = useMemo(
-    () => mergeBooks(builtinBooks, wrongBook ? [wrongBook] : []),
+    () => mergeBooks([], wrongBook ? [wrongBook] : []),
     [wrongBook]
   );
   const [bookId, setBookId] = useState(() => {

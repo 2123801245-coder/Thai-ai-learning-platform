@@ -1,4 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
+
+import SceneCertificate from "@/components/ai/SceneCertificate";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageCircle, Plane, Utensils, GraduationCap, ShoppingBag,
@@ -47,10 +50,18 @@ function useTypewriter(text, speed = 22, enabled = true) {
    Conversation 主组件
    ════════════════════════════════════════ */
 export default function Conversation() {
+  const [searchParams] = useSearchParams();
   const [activeScene, setActiveScene] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+
+  /* 浮动 AI 助手「解释这个词」携带的待翻译问题 → 预填输入框 */
+  useEffect(() => {
+    const q = (searchParams.get("q") || "").trim();
+    if (q) setInput(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [currentStage, setCurrentStage] = useState(0);
   const [currentDialogueIndex, setCurrentDialogueIndex] = useState(0);
   const [score, setScore] = useState({ vocabLearned: 0, stagesComplete: 0 });
@@ -149,6 +160,7 @@ export default function Conversation() {
           title: activeScene.title,
           description: activeScene.description,
           sceneTip: activeScene.sceneTip,
+          roleplay: activeScene.roleplay || null,
         },
         stage: dialogue
           ? { stage: dialogue.stage, prompt: dialogue.prompt }
@@ -321,6 +333,10 @@ export default function Conversation() {
               <p className="mt-2 text-sm text-white/40">
                 选择场景，和 AI 泰语老师进行多轮真实对话
               </p>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="rounded-lg border border-purple-300/15 bg-purple-400/[0.06] px-2 py-0.5 text-[10px] font-bold text-purple-300/60">🎭 沉浸式情景模拟</span>
+                <span className="rounded-lg border border-emerald-300/15 bg-emerald-400/[0.06] px-2 py-0.5 text-[10px] font-bold text-emerald-300/60">💬 AI 自由对话</span>
+              </div>
             </div>
             <AiStatusBadge />
           </div>
@@ -385,6 +401,14 @@ export default function Conversation() {
                     </div>
                   )}
 
+                  {/* 角色扮演标签 */}
+                  {scene.roleplay && (
+                    <div className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-purple-300/15 bg-purple-400/[0.06] px-2.5 py-1">
+                      <span className="text-[10px] font-bold text-purple-300/70">🎭 角色扮演</span>
+                      <span className="text-[10px] text-purple-200/40">{scene.roleplay.character}</span>
+                    </div>
+                  )}
+
                   {/* 阶段数指示 */}
                   <div className="mt-4 flex items-center gap-2">
                     <div className="flex gap-1">
@@ -437,6 +461,24 @@ export default function Conversation() {
         </div>
         <AiStatusBadge compact />
       </motion.div>
+
+      {/* 角色扮演 HUD */}
+      {activeScene.roleplay && (
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-purple-300/[0.12] bg-gradient-to-r from-purple-400/[0.06] via-white/[0.02] to-emerald-400/[0.04] px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-purple-300/15 bg-purple-400/10">
+              <span className="text-lg">🎭</span>
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-purple-300/60">ROLEPLAY</span>
+                <span className="rounded-md border border-purple-300/15 bg-purple-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-purple-200/60">{activeScene.roleplay.character}</span>
+              </div>
+              <p className="mt-1 text-[11px] text-white/35">AI 正在以「{activeScene.roleplay.character}」的身份与你对话</p>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* 对话进度条 */}
       <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
@@ -556,31 +598,24 @@ export default function Conversation() {
           </form>
         )}
 
-        {/* 对话完成卡片 */}
+        {/* 场景完成证书 */}
         <AnimatePresence>
           {completed && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="border-t border-white/[0.06] p-6 text-center"
+              className="border-t border-white/[0.06] p-6"
             >
-              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-400/10">
-                <Check className="h-7 w-7 text-emerald-300" />
-              </div>
-              <h3 className="text-lg font-bold text-white">对话完成！</h3>
-              <p className="mt-1 text-sm text-white/40">你完成了「{activeScene.title}」的全部对话</p>
-
-              <div className="mx-auto mt-4 grid max-w-xs grid-cols-2 gap-3">
-                <div className="rounded-xl border border-emerald-300/10 bg-emerald-400/[0.05] p-3">
-                  <div className="text-2xl font-bold text-emerald-300">{score.vocabLearned}</div>
-                  <div className="mt-1 text-[10px] text-white/30">学习词汇</div>
-                </div>
-                <div className="rounded-xl border border-yellow-300/10 bg-yellow-300/[0.05] p-3">
-                  <div className="text-2xl font-bold text-yellow-300">{score.stagesComplete}</div>
-                  <div className="mt-1 text-[10px] text-white/30">完成轮次</div>
-                </div>
-              </div>
+              <SceneCertificate
+                sceneTitle={activeScene.title}
+                sceneSubtitle={activeScene.subtitle}
+                characterName={activeScene.roleplay?.character}
+                vocabLearned={score.vocabLearned}
+                stagesComplete={score.stagesComplete}
+                totalStages={activeScene.dialogueTree?.length || 4}
+                sceneEmoji={activeScene.sceneEmoji}
+              />
 
               <div className="mt-5 flex gap-3 justify-center">
                 <button

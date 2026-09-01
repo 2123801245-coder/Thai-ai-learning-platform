@@ -2,6 +2,7 @@
 // 词书管理：把 localVocabulary 按分类组织成可选词书，并提供练习题目生成器
 
 import { localVocabulary } from "@/data/vocabulary";
+import { vocabAllBooks } from "@/data/vocabAllBooks";
 import { base44 } from "@/api/base44Client";
 
 /* ════════════════════════════════════════
@@ -247,23 +248,50 @@ function shuffle(arr) {
   return a;
 }
 
-/* ── 词书列表（来自 localVocabulary 分类）── */
+/* ── 词书列表（来自 localVocabulary + vocabAllBooks，与词汇学习板块一致）── */
 export function getVocabBooks() {
   const byCat = {};
+
+  // 1) localVocabulary（结构化词条）
   localVocabulary.forEach((w) => {
     const cat = (w.category || w.book || w.book_name || "基础泰语1").trim();
     if (!byCat[cat]) byCat[cat] = [];
-    byCat[cat].push(w);
+    byCat[cat].push(normalizeWord(w));
+  });
+
+  // 2) vocabAllBooks（完整 5000+ 词库，字段：w/p/m/s/t/c/b/d）
+  vocabAllBooks.forEach((v) => {
+    const cat = (v.b || "基础泰语1").trim();
+    if (!byCat[cat]) byCat[cat] = [];
+    byCat[cat].push({
+      thai: v.w || "",
+      roman: v.p || "",
+      chinese: v.m || "",
+      sentence: v.t || "",
+      sentenceCn: v.c || "",
+      pos: v.s || "",
+    });
+  });
+
+  // 去重（同一泰语词保留先出现的）
+  const seen = new Set();
+  Object.keys(byCat).forEach((cat) => {
+    byCat[cat] = byCat[cat].filter((w) => {
+      if (!w.thai || seen.has(w.thai)) return false;
+      seen.add(w.thai);
+      return true;
+    });
   });
 
   return Object.entries(byCat)
+    .filter(([, words]) => words.length > 0)
     .map(([name, words]) => ({
       id: `vocab-${name}`,
       name,
       emoji: CATEGORY_EMOJI[name] || "📖",
       kind: "vocab",
       count: words.length,
-      words: words.map(normalizeWord),
+      words,
     }))
     .sort((a, b) => b.count - a.count);
 }

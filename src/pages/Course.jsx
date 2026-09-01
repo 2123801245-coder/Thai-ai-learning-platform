@@ -1,17 +1,13 @@
 // src/pages/Course.jsx
+// =========================================================
+// ThaiAI 泰语视频学习库
+// =========================================================
 
-import React, {
-  useMemo,
-  useState,
-} from "react";
-
+import React, { useMemo, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  motion,
-} from "framer-motion";
-
-import {
-  BookOpen,
   Play,
+  Pause,
   Clock3,
   ChevronRight,
   Sparkles,
@@ -21,56 +17,478 @@ import {
   Lock,
   Crown,
   Video,
+  BookOpen,
+  X,
+  Volume2,
+  VolumeX,
+  Maximize,
+  CheckCircle2,
+  ListVideo,
 } from "lucide-react";
-
-import {
-  useNavigate,
-} from "react-router-dom";
-
-import {
-  AnimatedProgress,
-} from "@/components/ui/premium";
-
-import {
-  courses,
-} from "@/data/courses";
-
-import {
-  getLessonsByCourseId,
-} from "@/data/lessons";
-
-import {
-  getCourseStats,
-} from "@/lib/courseProgress";
+import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/lib/AuthContext";
-
 import VipPanel from "@/components/common/VipPanel";
-
 import {
   ThaiCorner,
   ThaiSectionDivider,
   BangkokSkyline,
 } from "@/components/common/ThaiDecor";
 
+import {
+  videoCategories,
+  videos,
+  getVideosByCategory,
+  getFreeVideos,
+} from "@/data/videoLibrary";
+
 
 // =========================================================
-// 分类
+// localStorage 进度 Key
 // =========================================================
 
-const categories = [
-  "全部",
-  "基础",
-  "口语",
-  "语法",
-  "听力",
-  "文化",
-  "发音",
-  "场景",
-  "阅读",
-  "商务",
-  "外交",
-];
+function getProgressKey(videoId) {
+  return `thaiai_video_progress_${videoId}`;
+}
+
+function getProgress(videoId) {
+  try {
+    return parseInt(localStorage.getItem(getProgressKey(videoId)) || "0", 10);
+  } catch {
+    return 0;
+  }
+}
+
+function saveProgress(videoId, pct) {
+  try {
+    localStorage.setItem(getProgressKey(videoId), String(Math.min(100, pct)));
+  } catch {}
+}
+
+
+// =========================================================
+// 播放速度选项
+// =========================================================
+
+const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5, 2];
+
+
+// =========================================================
+// YouTube IFrame API（懒加载）
+// =========================================================
+
+let ytApiPromise = null;
+
+function loadYouTubeApi() {
+  if (typeof window !== "undefined" && window.YT?.Player) {
+    return Promise.resolve();
+  }
+  if (ytApiPromise) return ytApiPromise;
+
+  ytApiPromise = new Promise((resolve, reject) => {
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      resolve();
+    };
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    tag.async = true;
+    tag.onerror = () => {
+      ytApiPromise = null;
+      reject(new Error("YouTube API 加载失败"));
+    };
+    document.head.appendChild(tag);
+  });
+
+  return ytApiPromise;
+}
+
+
+// =========================================================
+// YouTube 播放器组件
+// =========================================================
+
+function YouTubePlayer({ videoId, onProgress, onEnded }) {
+  const containerRef = React.useRef(null);
+  const playerRef = React.useRef(null);
+  const [isReady, setIsReady] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(80);
+  const [speed, setSpeed] = useState(1);
+  const [showSpeed, setShowSpeed] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  React.useEffect(() => {
+    let destroyed = false;
+
+    loadYouTubeApi().then(() => {
+      if (destroyed || !containerRef.current) return;
+
+      playerRef.current = new window.YT.Player(containerRef.current, {
+        videoId,
+        playerVars: {
+          autoplay: 0,
+          rel: 0,
+          modestbranding: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          iv_load_policy: 3,
+          playsinline: 1,
+        },
+        events: {
+          onReady: () => setIsReady(true),
+          onStateChange: (e) => {
+            if (e.data === window.YT.PlayerState.PLAYING) {
+              setIsPlaying(true);
+            } else if (
+              e.data === window.YT.PlayerState.PAUSED ||
+              e.data === window.YT.PlayerState.ENDED
+            ) {
+              setIsPlaying(false);
+            }
+            if (e.data === window.YT.PlayerState.ENDED) {
+              onEnded?.();
+            }
+          },
+        },
+      });
+    });
+
+    return () => {
+      destroyed = true;
+      try {
+        playerRef.current?.destroy();
+      } catch {}
+    };
+  }, [videoId]);
+
+  // 进度轮询
+  React.useEffect(() => {
+    if (!isReady) return;
+    const iv = setInterval(() => {
+      try {
+        const p = playerRef.current;
+        if (!p?.getCurrentTime) return;
+        const ct = p.getCurrentTime();
+        const dur = p.getDuration();
+        setCurrentTime(ct);
+        setDuration(dur);
+        if (dur > 0) {
+          onProgress?.(Math.round((ct / dur) * 100));
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [isReady, onProgress]);
+
+  const togglePlay = useCallback(() => {
+    try {
+      if (isPlaying) playerRef.current?.pauseVideo();
+      else playerRef.current?.playVideo();
+    } catch {}
+  }, [isPlaying]);
+
+  const toggleMute = useCallback(() => {
+    try {
+      if (isMuted) playerRef.current?.unMute();
+      else playerRef.current?.mute();
+      setIsMuted(!isMuted);
+    } catch {}
+  }, [isMuted]);
+
+  const handleVolume = useCallback((v) => {
+    try {
+      playerRef.current?.setVolume(v);
+      setVolume(v);
+      if (v > 0 && isMuted) {
+        playerRef.current?.unMute();
+        setIsMuted(false);
+      }
+    } catch {}
+  }, [isMuted]);
+
+  const handleSpeed = useCallback((s) => {
+    try {
+      playerRef.current?.setPlaybackRate(s);
+      setSpeed(s);
+      setShowSpeed(false);
+    } catch {}
+  }, []);
+
+  const seekTo = useCallback((pct) => {
+    try {
+      const dur = playerRef.current?.getDuration();
+      if (dur) playerRef.current?.seekTo((pct / 100) * dur, true);
+    } catch {}
+  }, []);
+
+  const formatTime = (sec) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
+      {/* YouTube iframe 容器 */}
+      <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+        <div ref={containerRef} className="absolute inset-0" />
+      </div>
+
+      {/* 自定义控制栏 */}
+      <div className="relative bg-gradient-to-t from-black/90 via-black/60 to-transparent px-4 pb-4 pt-16 -mt-16">
+        {/* 进度条 */}
+        <div
+          className="group/progress relative h-1.5 rounded-full bg-white/10 cursor-pointer mb-3 hover:h-2.5 transition-all"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pct = ((e.clientX - rect.left) / rect.width) * 100;
+            seekTo(pct);
+          }}
+        >
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-300 transition-all"
+            style={{ width: `${progress}%` }}
+          />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-emerald-400 opacity-0 group-hover/progress:opacity-100 transition-opacity shadow-lg"
+            style={{ left: `calc(${progress}% - 6px)` }}
+          />
+        </div>
+
+        {/* 控制按钮 */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {/* 播放/暂停 */}
+            <button
+              onClick={togglePlay}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition text-white"
+            >
+              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+            </button>
+
+            {/* 音量 */}
+            <div className="flex items-center gap-2 group/vol">
+              <button
+                onClick={toggleMute}
+                className="text-white/60 hover:text-white transition"
+              >
+                {isMuted || volume === 0 ? (
+                  <VolumeX className="h-4 w-4" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={isMuted ? 0 : volume}
+                onChange={(e) => handleVolume(Number(e.target.value))}
+                className="w-0 group-hover/vol:w-20 transition-all accent-emerald-400 h-1 cursor-pointer"
+              />
+            </div>
+
+            {/* 时间 */}
+            <span className="text-xs text-white/50 font-mono">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* 倍速 */}
+            <div className="relative">
+              <button
+                onClick={() => setShowSpeed(!showSpeed)}
+                className="text-xs text-white/50 hover:text-white transition px-2 py-1 rounded bg-white/5"
+              >
+                {speed}x
+              </button>
+              {showSpeed && (
+                <div className="absolute bottom-full right-0 mb-2 bg-[#0a1a17] border border-white/10 rounded-xl p-2 flex flex-col gap-1 z-50">
+                  {SPEED_OPTIONS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => handleSpeed(s)}
+                      className={`text-xs px-3 py-1.5 rounded-lg transition ${
+                        speed === s
+                          ? "bg-emerald-500/20 text-emerald-300"
+                          : "text-white/50 hover:bg-white/5 hover:text-white"
+                      }`}
+                    >
+                      {s}x
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// =========================================================
+// 统计卡片
+// =========================================================
+
+function StatCard({ icon: Icon, label, value, suffix, color = "emerald" }) {
+  const colorMap = {
+    emerald: "text-emerald-300 bg-emerald-400/[0.07] border-emerald-300/10",
+    yellow: "text-yellow-300 bg-yellow-400/[0.07] border-yellow-300/10",
+    cyan: "text-cyan-300 bg-cyan-400/[0.07] border-cyan-300/10",
+    purple: "text-purple-300 bg-purple-400/[0.07] border-purple-300/10",
+  };
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 backdrop-blur-xl ${colorMap[color]}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/[0.04]">
+          <Icon className="h-5 w-5 opacity-70" />
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-widest opacity-40">
+            {label}
+          </div>
+          <div className="text-xl font-black mt-0.5">
+            {value}
+            {suffix && (
+              <span className="text-xs font-normal opacity-50 ml-1">
+                {suffix}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// =========================================================
+// 视频卡片
+// =========================================================
+
+function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
+  const [localProgress, setLocalProgress] = useState(() =>
+    getProgress(video.id)
+  );
+
+  React.useEffect(() => {
+    setLocalProgress(getProgress(video.id));
+  }, [video.id]);
+
+  const locked = !video.free && !isVipUser;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04, duration: 0.35 }}
+      onClick={() => !locked && onPlay(video)}
+      className={`group relative cursor-pointer rounded-2xl border transition-all duration-300 overflow-hidden ${
+        isActive
+          ? "border-emerald-400/30 bg-emerald-400/[0.08] shadow-lg shadow-emerald-500/10"
+          : locked
+          ? "border-white/[0.05] bg-white/[0.02] opacity-60 hover:opacity-80"
+          : "border-white/[0.06] bg-white/[0.03] hover:border-white/[0.12] hover:bg-white/[0.05] hover:shadow-lg hover:shadow-black/20"
+      }`}
+    >
+      {/* 缩略图 */}
+      <div className="relative aspect-video bg-black/40 overflow-hidden">
+        {video.youtubeId ? (
+          <img
+            src={`https://img.youtube.com/vi/${video.youtubeId}/mqdefault.jpg`}
+            alt={video.title}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-900/40 to-teal-900/40">
+            <Video className="h-10 w-10 text-white/20" />
+          </div>
+        )}
+
+        {/* 播放按钮叠加 */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
+              locked
+                ? "bg-white/10"
+                : "bg-emerald-500/80 group-hover:bg-emerald-400 group-hover:scale-110 shadow-lg shadow-emerald-500/30"
+            }`}
+          >
+            {locked ? (
+              <Lock className="h-5 w-5 text-white/50" />
+            ) : (
+              <Play className="h-5 w-5 text-white ml-0.5" />
+            )}
+          </div>
+        </div>
+
+        {/* 时长 */}
+        <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-white/70 font-mono">
+          {video.duration}
+        </div>
+
+        {/* 免费标签 */}
+        {video.free && (
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-emerald-500/80 text-[10px] font-semibold text-white">
+            免费
+          </div>
+        )}
+
+        {/* VIP 锁 */}
+        {locked && (
+          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-yellow-500/80 text-[10px] font-semibold text-black flex items-center gap-1">
+            <Crown className="h-3 w-3" />
+            VIP
+          </div>
+        )}
+
+        {/* 进度条 */}
+        {localProgress > 0 && (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10">
+            <div
+              className="h-full bg-emerald-400"
+              style={{ width: `${localProgress}%` }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* 信息 */}
+      <div className="p-3.5">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-sm font-bold text-white/90 line-clamp-2 leading-snug group-hover:text-emerald-200 transition">
+            {video.title}
+          </h3>
+        </div>
+        <p className="mt-1.5 text-xs text-white/35 line-clamp-2 leading-relaxed">
+          {video.description}
+        </p>
+        <div className="mt-2.5 flex items-center gap-2">
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/40">
+            {video.level}
+          </span>
+          <span className="text-[10px] text-white/25">
+            {localProgress > 0 ? `已看 ${localProgress}%` : ""}
+          </span>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 
 // =========================================================
@@ -78,2081 +496,274 @@ const categories = [
 // =========================================================
 
 export default function Course() {
-
-  const navigate =
-    useNavigate();
-
+  const navigate = useNavigate();
   const { user } = useAuth();
   const isVipUser = !!user?.isVip;
 
-  const [
-    category,
-    setCategory,
-  ] = useState("全部");
+  const [category, setCategory] = useState("all");
+  const [vipOpen, setVipOpen] = useState(false);
+  const [activeVideo, setActiveVideo] = useState(null);
+  const [sortBy, setSortBy] = useState("default"); // default | free | duration
 
-  const [
-    vipOpen,
-    setVipOpen,
-  ] = useState(false);
+  // 筛选视频
+  const filteredVideos = useMemo(() => {
+    let list = getVideosByCategory(category);
+    if (sortBy === "free") list = list.filter((v) => v.free);
+    return list;
+  }, [category, sortBy]);
 
+  // 统计
+  const totalVideos = videos.length;
+  const freeVideos = getFreeVideos().length;
+  const watchedCount = useMemo(() => {
+    return videos.filter((v) => getProgress(v.id) > 0).length;
+  }, []);
 
-  // =======================================================
-  // 每门课程的实时进度（localStorage 持久化）
-  // =======================================================
-
-  const courseStats =
-    useMemo(() => {
-      const map = {};
-
-      courses.forEach((course) => {
-        map[course.id] =
-          getCourseStats(
-            course.id,
-            getLessonsByCourseId(
-              course.id
-            )
-          );
-      });
-
-      return map;
-    }, []);
-
-
-  // =======================================================
-  // 已发布课程
-  // =======================================================
-
-  const publishedCourses =
-    courses.filter(
-      (course) =>
-        course.status !== "coming"
-    );
-
-
-  // =======================================================
-  // 正在学习（有真实进度，或标记为 learning）
-  // =======================================================
-
-  const learningCourses =
-    courses.filter(
-      (course) =>
-        course.status ===
-          "learning" ||
-        (courseStats[
-          course.id
-        ]?.progressPercent ||
-          0) > 0
-    );
-
-
-  // =======================================================
-  // 未来课程
-  // =======================================================
-
-  const comingCourses =
-    courses.filter(
-      (course) =>
-        course.status ===
-        "coming"
-    );
-
-
-  // =======================================================
-  // 当前筛选
-  // =======================================================
-
-  const filteredCourses =
-    useMemo(() => {
-
-      if (
-        category ===
-        "全部"
-      ) {
-        return publishedCourses;
-      }
-
-      return publishedCourses.filter(
-        (course) =>
-          course.category ===
-          category
-      );
-
-    }, [
-      category,
-      publishedCourses.length,
-    ]);
-
-
-  // =======================================================
-  // 总课程数（按真实视频数据）
-  // =======================================================
-
-  const totalLessons =
-    courses.reduce(
-      (
-        sum,
-        course
-      ) =>
-        sum +
-        getLessonsByCourseId(
-          course.id
-        ).length,
-      0
-    );
-
-
-  // =======================================================
-  // 已完成课程（实时统计）
-  // =======================================================
-
-  const completedLessons =
-    courses.reduce(
-      (
-        sum,
-        course
-      ) =>
-        sum +
-        (courseStats[
-          course.id
-        ]?.completedCount ||
-          0),
-      0
-    );
-
-
-  // =======================================================
-  // 总进度
-  // =======================================================
-
-  const overallProgress =
-    totalLessons > 0
-      ? Math.round(
-          (
-            completedLessons /
-            totalLessons
-          ) * 100
-        )
-      : 0;
-
+  // 分类标签
+  const categoryObj = videoCategories.find((c) => c.id === category);
 
   return (
-
-    <div className="relative space-y-7 pb-10">
-
+    <div className="relative space-y-6 pb-10">
 
       {/* =====================================================
           HERO
       ===================================================== */}
-
       <motion.div
-
-        initial={{
-          opacity: 0,
-          y: -15,
-        }}
-
-        animate={{
-          opacity: 1,
-          y: 0,
-        }}
-
-        className="
-          relative
-          overflow-hidden
-          rounded-[28px]
-          border
-          border-white/[0.08]
-          bg-gradient-to-br
-          from-emerald-400/[0.10]
-          via-white/[0.035]
-          to-yellow-300/[0.06]
-          p-6
-          backdrop-blur-xl
-          sm:p-7
-        "
+        initial={{ opacity: 0, y: -15 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-gradient-to-br from-emerald-400/[0.10] via-white/[0.035] to-yellow-300/[0.06] p-6 backdrop-blur-xl sm:p-7"
       >
-
-
         {/* 光晕 */}
+        <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-400/[0.08] blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-[40%] h-48 w-48 rounded-full bg-yellow-300/[0.05] blur-3xl" />
 
-        <div className="
-          pointer-events-none
-          absolute
-          -right-20
-          -top-20
-          h-56
-          w-56
-          rounded-full
-          bg-emerald-400/[0.08]
-          blur-3xl
-        " />
+        <ThaiCorner corners={["tl", "tr", "bl", "br"]} size={28} className="z-10" />
+        <BangkokSkyline className="pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full opacity-[0.12]" opacity={0.6} />
 
-
-        <div className="
-          pointer-events-none
-          absolute
-          -bottom-24
-          left-[40%]
-          h-48
-          w-48
-          rounded-full
-          bg-yellow-300/[0.05]
-          blur-3xl
-        " />
-
-        {/* 泰式金线角饰（Temple Gold） */}
-
-        <ThaiCorner
-          corners={["tl", "tr", "bl", "br"]}
-          size={28}
-          className="z-10"
-        />
-
-        {/* 曼谷剪影（极淡，装饰课程 Hero 背景） */}
-
-        <BangkokSkyline
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full opacity-[0.12]"
-          opacity={0.6}
-        />
-
-
-        <div className="
-          relative
-          flex
-          flex-col
-          gap-6
-          lg:flex-row
-          lg:items-end
-          lg:justify-between
-        ">
-
-
-          {/* 左侧 */}
-
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-
-            <div className="
-              flex
-              items-center
-              gap-2
-              text-xs
-              font-semibold
-              tracking-[0.2em]
-              text-emerald-300/70
-            ">
-
+            <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.2em] text-emerald-300/70">
               <Sparkles className="h-4 w-4" />
-
-              THAI LEARNING COURSES
-
+              THAI VIDEO LIBRARY
             </div>
-
-
-            <h1 className="
-              mt-3
-              text-3xl
-              font-black
-              tracking-tight
-              text-white
-              sm:text-4xl
-            ">
-              课程学习
+            <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+              泰语视频学习
             </h1>
-
-
-            <p className="
-              mt-2
-              max-w-xl
-              text-sm
-              leading-6
-              text-white/40
-              sm:text-base
-            ">
-              从泰语发音开始，
-              逐步进入拼读、口语、
-              听力与真实交流。
-              每一门课程都以视频学习为核心。
+            <p className="mt-2 max-w-xl text-sm leading-6 text-white/40 sm:text-base">
+              精选泰语教学视频，从发音入门到日常会话。
+              沉浸式观看，轻松提升泰语能力。
             </p>
 
-
-            <div className="
-              mt-5
-              flex
-              flex-wrap
-              gap-2
-            ">
-
-
-              {/* 学习路径 */}
-
-              <span className="
-                flex
-                items-center
-                gap-1.5
-                rounded-full
-                border
-                border-emerald-300/10
-                bg-emerald-400/[0.07]
-                px-3
-                py-1.5
-                text-xs
-                text-emerald-200/70
-              ">
-
+            <div className="mt-5 flex flex-wrap gap-2">
+              <span className="flex items-center gap-1.5 rounded-full border border-emerald-300/10 bg-emerald-400/[0.07] px-3 py-1.5 text-xs text-emerald-200/70">
                 <GraduationCap className="h-3.5 w-3.5" />
-
-                泰语学习路径
-
+                分类学习
               </span>
-
-
-              {/* 视频 */}
-
-              <span className="
-                flex
-                items-center
-                gap-1.5
-                rounded-full
-                border
-                border-white/[0.07]
-                bg-white/[0.04]
-                px-3
-                py-1.5
-                text-xs
-                text-white/40
-              ">
-
+              <span className="flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-3 py-1.5 text-xs text-white/40">
                 <Video className="h-3.5 w-3.5" />
-
-                视频课程
-
+                {totalVideos} 个视频
               </span>
-
-
-              {/* 课程数量 */}
-
-              <span className="
-                flex
-                items-center
-                gap-1.5
-                rounded-full
-                border
-                border-white/[0.07]
-                bg-white/[0.04]
-                px-3
-                py-1.5
-                text-xs
-                text-white/40
-              ">
-
+              <span className="flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-3 py-1.5 text-xs text-white/40">
                 <BookOpen className="h-3.5 w-3.5" />
-
-                {publishedCourses.length}
-                {" "}门课程
-
+                {freeVideos} 个免费
               </span>
-
             </div>
-
           </div>
 
-
-          {/* =================================================
-              总进度
-          ================================================= */}
-
-          <div className="
-            min-w-[220px]
-            rounded-2xl
-            border
-            border-white/[0.08]
-            bg-black/10
-            p-4
-          ">
-
-            <div className="
-              flex
-              items-center
-              justify-between
-            ">
-
-              <span className="
-                text-[10px]
-                uppercase
-                tracking-widest
-                text-white/30
-              ">
-                总体学习进度
+          {/* 总进度 */}
+          <div className="min-w-[220px] rounded-2xl border border-white/[0.08] bg-black/10 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-widest text-white/30">
+                学习进度
               </span>
-
-              <span className="
-                text-sm
-                font-bold
-                text-emerald-300
-              ">
-                {overallProgress}%
+              <span className="text-sm font-bold text-emerald-300">
+                {totalVideos > 0 ? Math.round((watchedCount / totalVideos) * 100) : 0}%
               </span>
-
             </div>
-
-
-            <div className="
-              mt-3
-              h-2
-              overflow-hidden
-              rounded-full
-              bg-white/[0.06]
-            ">
-
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
               <motion.div
-
-                initial={{
-                  width: 0,
-                }}
-
-                animate={{
-                  width:
-                    `${overallProgress}%`,
-                }}
-
-                transition={{
-                  duration: 1,
-                  ease: "easeOut",
-                }}
-
-                className="
-                  h-full
-                  rounded-full
-                  bg-gradient-to-r
-                  from-emerald-400
-                  via-teal-300
-                  to-yellow-300
-                "
+                initial={{ width: 0 }}
+                animate={{ width: `${totalVideos > 0 ? (watchedCount / totalVideos) * 100 : 0}%` }}
+                transition={{ duration: 1, ease: "easeOut" }}
+                className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-300 to-yellow-300"
               />
-
             </div>
-
-
-            <div className="
-              mt-2
-              text-[10px]
-              text-white/25
-            ">
-
-              已完成{" "}
-              {completedLessons}
-              {" / "}
-              {totalLessons}
-              {" "}节课程
-
+            <div className="mt-2 text-[10px] text-white/25">
+              已观看 {watchedCount} / {totalVideos} 个视频
             </div>
-
           </div>
-
         </div>
-
       </motion.div>
 
 
-
       {/* =====================================================
-          数据统计
+          统计
       ===================================================== */}
-
-      <div className="
-        grid
-        grid-cols-2
-        gap-3
-        lg:grid-cols-4
-      ">
-
-
-        <CourseStat
-          icon={BookOpen}
-          label="课程数量"
-          value={publishedCourses.length}
-          suffix="门"
-        />
-
-
-        <CourseStat
-          icon={Video}
-          label="视频课程"
-          value={totalLessons}
-          suffix="节"
-        />
-
-
-        <CourseStat
-          icon={Target}
-          label="平均进度"
-          value={overallProgress}
-          suffix="%"
-        />
-
-
-        <CourseStat
-          icon={Flame}
-          label="学习状态"
-          value={
-            learningCourses.length >
-            0
-              ? "进行中"
-              : "待开始"
-          }
-        />
-
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard icon={Video} label="视频总数" value={totalVideos} suffix="个" color="emerald" />
+        <StatCard icon={BookOpen} label="免费视频" value={freeVideos} suffix="个" color="cyan" />
+        <StatCard icon={Target} label="已观看" value={watchedCount} suffix="个" color="purple" />
+        <StatCard icon={Flame} label="学习状态" value={watchedCount > 0 ? "进行中" : "待开始"} color="yellow" />
       </div>
 
 
-
       {/* =====================================================
-          继续学习
+          正在播放
       ===================================================== */}
-
-      {learningCourses.length >
-        0 && (
-
-        <section>
-
-          <div className="
-            mb-4
-            flex
-            items-end
-            justify-between
-          ">
-
-            <div>
-
-              <div className="
-                flex
-                items-center
-                gap-2
-              ">
-
-                <span className="
-                  h-1.5
-                  w-1.5
-                  rounded-full
-                  bg-emerald-300
-                  shadow-[0_0_10px_rgba(110,231,183,.7)]
-                " />
-
-                <h2 className="
-                  text-lg
-                  font-bold
-                  text-white
-                ">
-                  继续学习
-                </h2>
-
+      <AnimatePresence>
+        {activeVideo && (
+          <motion.section
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,.7)]" />
+                <h2 className="text-lg font-bold text-white">正在播放</h2>
               </div>
-
-
-              <p className="
-                mt-1
-                text-xs
-                text-white/30
-              ">
-                从上次停下的地方继续
-              </p>
-
+              <button
+                onClick={() => setActiveVideo(null)}
+                className="p-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] transition text-white/50 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
-          </div>
-
-
-          <div className="
-            grid
-            gap-4
-            lg:grid-cols-2
-          ">
-
-            {learningCourses
-              .slice(0, 2)
-              .map(
-                (
-                  course,
-                  index
-                ) => (
-
-                  <LearningCard
-                    key={
-                      course.id
-                    }
-                    course={
-                      course
-                    }
-                    index={
-                      index
-                    }
-                    progress={
-                      courseStats[
-                        course.id
-                      ]?.progressPercent ||
-                      0
-                    }
-                    completedCount={
-                      courseStats[
-                        course.id
-                      ]?.completedCount ||
-                      0
-                    }
-                    onOpen={() =>
-                      navigate(
-                        `/course/${course.id}`
-                      )
-                    }
-                  />
-
-                )
-              )}
-
-          </div>
-
-        </section>
-
-      )}
-
-
-
-      {/* =====================================================
-          免费基础
-      ===================================================== */}
-
-      <section>
-
-        <div className="mb-4">
-
-          <div className="
-            flex
-            items-center
-            gap-2
-          ">
-
-            <GraduationCap className="
-              h-5
-              w-5
-              text-emerald-300
-            " />
-
-            <h2 className="
-              text-lg
-              font-bold
-              text-white
-            ">
-              基础课程
-            </h2>
-
-          </div>
-
-
-          <p className="
-            mt-1
-            text-xs
-            text-white/30
-          ">
-            免费开放，适合刚开始学习泰语的同学
-          </p>
-
-        </div>
-
-
-        <div className="
-          grid
-          gap-4
-          sm:grid-cols-2
-          xl:grid-cols-3
-        ">
-
-          {courses
-            .filter(
-              (course) =>
-                course.levelKey ===
-                "basic"
-            )
-            .map(
-              (
-                course,
-                index
-              ) => (
-
-                <CourseCard
-                  key={
-                    course.id
-                  }
-                  course={
-                    course
-                  }
-                  index={
-                    index
-                  }
-                  isVipUser={isVipUser}
-                  progress={
-                    courseStats[
-                      course.id
-                    ]?.progressPercent ||
-                    0
-                  }
-                  onOpen={() =>
-                    navigate(
-                      `/course/${course.id}`
-                    )
-                  }
-                />
-
-              )
-            )}
-
-        </div>
-
-      </section>
-
-
-
-      {/* =====================================================
-          VIP
-      ===================================================== */}
-
-      <section>
-
-        <div className="mb-4">
-
-          <div className="
-            flex
-            items-center
-            gap-2
-          ">
-
-            <Crown className="
-              h-5
-              w-5
-              text-yellow-300
-            " />
-
-            <h2 className="
-              text-lg
-              font-bold
-              text-white
-            ">
-              VIP 进阶课程
-            </h2>
-
-            <span className="
-              rounded-full
-              border
-              border-yellow-300/10
-              bg-yellow-300/[0.06]
-              px-2
-              py-0.5
-              text-[9px]
-              font-semibold
-              text-yellow-200/60
-            ">
-              VIP
-            </span>
-
-          </div>
-
-
-          <p className="
-            mt-1
-            text-xs
-            text-white/30
-          ">
-            深入学习泰语，进入真实交流场景
-          </p>
-
-        </div>
-
-
-        <div className="
-          grid
-          gap-4
-          sm:grid-cols-2
-          xl:grid-cols-3
-        ">
-
-          {courses
-            .filter(
-              (course) =>
-                course.isVip &&
-                course.status ===
-                  "vip"
-            )
-            .map(
-              (
-                course,
-                index
-              ) => (
-
-                <CourseCard
-                  key={
-                    course.id
-                  }
-                  course={
-                    course
-                  }
-                  index={
-                    index
-                  }
-                  isVipUser={isVipUser}
-                  progress={
-                    courseStats[
-                      course.id
-                    ]?.progressPercent ||
-                    0
-                  }
-                  onOpen={() =>
-                    navigate(
-                      `/course/${course.id}`
-                    )
-                  }
-                  onVip={() =>
-                    setVipOpen(true)
-                  }
-                />
-
-              )
-            )}
-
-        </div>
-
-      </section>
-
-
-
-      {/* 泰式装饰分隔线 */}
-
-      <ThaiSectionDivider
-        className="mx-auto max-w-2xl"
-        compact
-      />
-
-
-
-      {/* =====================================================
-          分类
-      ===================================================== */}
-
-      <section>
-
-        <div className="mb-4">
-
-          <h2 className="
-            text-lg
-            font-bold
-            text-white
-          ">
-            全部课程
-          </h2>
-
-          <p className="
-            mt-1
-            text-xs
-            text-white/30
-          ">
-            根据学习方向选择课程
-          </p>
-
-        </div>
-
-
-        <div className="
-          mb-5
-          flex
-          gap-2
-          overflow-x-auto
-          pb-1
-        ">
-
-          {categories.map(
-            (
-              item
-            ) => {
-
-              const active =
-                category ===
-                item;
-
-              return (
-
-                <button
-                  key={
-                    item
-                  }
-
-                  onClick={() =>
-                    setCategory(
-                      item
-                    )
-                  }
-
-                  className={`
-                    whitespace-nowrap
-                    rounded-full
-                    border
-                    px-4
-                    py-2
-                    text-xs
-                    font-medium
-                    transition-all
-                    ${
-                      active
-                        ? "border-emerald-300/20 bg-emerald-400/15 text-emerald-200 shadow-lg shadow-emerald-900/10"
-                        : "border-white/[0.08] bg-white/[0.035] text-white/35 hover:bg-white/[0.07] hover:text-white/70"
-                    }
-                  `}
-                >
-
-                  {item}
-
-                </button>
-
-              );
-
-            }
-          )}
-
-        </div>
-
-
-        <div className="
-          grid
-          gap-4
-          sm:grid-cols-2
-          xl:grid-cols-3
-        ">
-
-          {filteredCourses.map(
-            (
-              course,
-              index
-            ) => (
-
-              <CourseCard
-                key={
-                  course.id
-                }
-                course={
-                  course
-                }
-                index={
-                  index
-                }
-                isVipUser={isVipUser}
-                progress={
-                  courseStats[
-                    course.id
-                  ]?.progressPercent ||
-                  0
-                }
-                onOpen={() =>
-                  navigate(
-                    `/course/${course.id}`
-                  )
-                }
-                onVip={() =>
-                  setVipOpen(true)
-                }
-              />
-
-            )
-          )}
-
-        </div>
-
-      </section>
-
-
-
-      {/* =====================================================
-          即将上线
-      ===================================================== */}
-
-      {comingCourses.length >
-        0 && (
-
-        <section>
-
-          <div className="mb-4">
-
-            <div className="
-              flex
-              items-center
-              gap-2
-            ">
-
-              <Sparkles className="
-                h-5
-                w-5
-                text-yellow-300/60
-              " />
-
-              <h2 className="
-                text-lg
-                font-bold
-                text-white
-              ">
-                更多课程即将上线
-              </h2>
-
-            </div>
-
-
-            <p className="
-              mt-1
-              text-xs
-              text-white/30
-            ">
-              课程内容会持续增加
-            </p>
-
-          </div>
-
-
-          <div className="
-            grid
-            gap-4
-            sm:grid-cols-2
-            xl:grid-cols-4
-          ">
-
-            {comingCourses.map(
-              (
-                course,
-                index
-              ) => (
-
-                <ComingCard
-                  key={
-                    course.id
-                  }
-                  course={
-                    course
-                  }
-                  index={
-                    index
-                  }
-                />
-
-              )
-            )}
-
-          </div>
-
-        </section>
-
-      )}
-
-      {/* VIP 权益面板 */}
-
-      <VipPanel
-        open={vipOpen}
-        onClose={() =>
-          setVipOpen(false)
-        }
-      />
-
-    </div>
-  );
-}
-
-
-// =========================================================
-// 数据统计卡片
-// =========================================================
-
-function CourseStat({
-  icon: Icon,
-  label,
-  value,
-  suffix = "",
-}) {
-
-  return (
-
-    <motion.div
-
-      whileHover={{
-        y: -2,
-      }}
-
-      className="
-        rounded-2xl
-        border
-        border-white/[0.08]
-        bg-white/[0.035]
-        p-4
-        backdrop-blur-xl
-      "
-    >
-
-      <div className="
-        flex
-        items-center
-        justify-between
-      ">
-
-        <div className="
-          flex
-          h-9
-          w-9
-          items-center
-          justify-center
-          rounded-xl
-          border
-          border-emerald-300/10
-          bg-emerald-400/[0.07]
-        ">
-
-          <Icon className="
-            h-4
-            w-4
-            text-emerald-300
-          " />
-
-        </div>
-
-
-        <Sparkles className="
-          h-3.5
-          w-3.5
-          text-yellow-300/20
-        " />
-
-      </div>
-
-
-      <div className="mt-3">
-
-        <p className="
-          text-[10px]
-          text-white/30
-        ">
-          {label}
-        </p>
-
-
-        <div className="
-          mt-1
-          flex
-          items-baseline
-          gap-1
-        ">
-
-          <span className="
-            text-xl
-            font-black
-            text-white
-          ">
-            {value}
-          </span>
-
-
-          {suffix && (
-
-            <span className="
-              text-xs
-              text-white/30
-            ">
-              {suffix}
-            </span>
-
-          )}
-
-        </div>
-
-      </div>
-
-    </motion.div>
-  );
-}
-
-
-// =========================================================
-// 继续学习
-// =========================================================
-
-function LearningCard({
-  course,
-  index,
-  onOpen,
-  progress,
-  completedCount,
-}) {
-
-  return (
-
-    <motion.div
-
-      initial={{
-        opacity: 0,
-        y: 12,
-      }}
-
-      animate={{
-        opacity: 1,
-        y: 0,
-      }}
-
-      transition={{
-        delay:
-          index * 0.08,
-      }}
-
-      className="
-        group
-        relative
-        overflow-hidden
-        rounded-3xl
-        border
-        border-emerald-300/[0.10]
-        bg-gradient-to-br
-        from-emerald-400/[0.10]
-        via-white/[0.035]
-        to-teal-400/[0.06]
-        p-5
-        backdrop-blur-xl
-      "
-    >
-
-      <div className="
-        pointer-events-none
-        absolute
-        -right-10
-        -top-10
-        h-32
-        w-32
-        rounded-full
-        bg-emerald-300/[0.08]
-        blur-3xl
-      " />
-
-
-      <div className="relative">
-
-        <div className="
-          flex
-          items-start
-          justify-between
-        ">
-
-          <div>
-
-            <span className="
-              rounded-full
-              border
-              border-emerald-300/10
-              bg-emerald-400/[0.08]
-              px-2.5
-              py-1
-              text-[10px]
-              text-emerald-200/70
-            ">
-              正在学习
-            </span>
-
-
-            <h3 className="
-              mt-3
-              text-lg
-              font-bold
-              text-white
-            ">
-              {course.title}
-            </h3>
-
-
-            <p className="
-              mt-1
-              text-xs
-              text-white/35
-            ">
-              第{" "}
-              {completedCount + 1}
-              {" "}节 · 共{" "}
-              {course.lessons}
-              {" "}节
-            </p>
-
-          </div>
-
-
-          <div className="
-            flex
-            h-11
-            w-11
-            items-center
-            justify-center
-            rounded-2xl
-            bg-emerald-400/10
-          ">
-
-            <Video className="
-              h-5
-              w-5
-              text-emerald-300
-            " />
-
-          </div>
-
-        </div>
-
-
-        <div className="mt-5">
-
-          <div className="
-            mb-2
-            flex
-            items-center
-            justify-between
-            text-[10px]
-          ">
-
-            <span className="text-white/30">
-              学习进度
-            </span>
-
-            <span className="
-              font-semibold
-              text-emerald-300
-            ">
-              {progress}%
-            </span>
-
-          </div>
-
-
-          <div className="
-            h-2
-            overflow-hidden
-            rounded-full
-            bg-white/[0.06]
-          ">
-
-            <motion.div
-
-              initial={{
-                width: 0,
-              }}
-
-              animate={{
-                width:
-                  `${progress}%`,
-              }}
-
-              transition={{
-                duration: 0.8,
-              }}
-
-              className="
-                h-full
-                rounded-full
-                bg-gradient-to-r
-                from-emerald-400
-                to-teal-300
-              "
+            <YouTubePlayer
+              key={activeVideo.id}
+              videoId={activeVideo.youtubeId}
+              onProgress={(pct) => saveProgress(activeVideo.id, pct)}
+              onEnded={() => saveProgress(activeVideo.id, 100)}
             />
 
-          </div>
-
-        </div>
-
-
-        <button
-
-          onClick={
-            onOpen
-          }
-
-          className="
-            mt-5
-            flex
-            w-full
-            items-center
-            justify-center
-            gap-2
-            rounded-xl
-            bg-gradient-to-r
-            from-emerald-400
-            to-teal-400
-            py-2.5
-            text-sm
-            font-semibold
-            text-white
-            shadow-lg
-            shadow-emerald-900/20
-            transition-all
-            hover:-translate-y-0.5
-            hover:shadow-emerald-400/20
-          "
-        >
-
-          <Play className="
-            h-4
-            w-4
-            fill-current
-          " />
-
-          继续学习
-
-          <ChevronRight className="
-            h-4
-            w-4
-          " />
-
-        </button>
-
-      </div>
-
-    </motion.div>
-  );
-}
-
-
-// =========================================================
-// 普通课程
-// =========================================================
-
-/* 课程封面泰文字母池（抽象装饰） */
-const COVER_THAI = ["สวัสดี", "ภาษาไทย", "เรียน", "อักษร", "เสียง", "คำ"];
-
-/* 课程封面渐变（按课程 color 字段） */
-const COVER_GRADS = {
-  emerald: "from-emerald-400/[0.16] via-teal-500/[0.05] to-transparent",
-  teal: "from-teal-400/[0.15] via-cyan-500/[0.05] to-transparent",
-  amber: "from-yellow-300/[0.14] via-amber-500/[0.05] to-transparent",
-  blue: "from-blue-400/[0.14] via-indigo-500/[0.05] to-transparent",
-  purple: "from-purple-400/[0.14] via-fuchsia-500/[0.05] to-transparent",
-  rose: "from-rose-400/[0.13] via-pink-500/[0.05] to-transparent",
-  gold: "from-yellow-300/[0.16] via-amber-400/[0.06] to-transparent",
-};
-
-function CourseCover({ course, index }) {
-  const grad =
-    COVER_GRADS[course.color] || COVER_GRADS.emerald;
-  const glyphs = [
-    COVER_THAI[(index * 3) % COVER_THAI.length],
-    COVER_THAI[(index * 3 + 1) % COVER_THAI.length],
-    COVER_THAI[(index * 3 + 2) % COVER_THAI.length],
-  ];
-
-  /* 有 cover 图片时显示实景封面，无图优雅回退到渐变封面 */
-  const hasCover = !!course.cover;
-
-  return (
-    <div
-      className={`relative mb-5 h-24 overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-br ${grad}`}
-    >
-      {hasCover ? (
-        <>
-          <img
-            src={course.cover}
-            alt={course.title}
-            loading="lazy"
-            className="absolute inset-0 h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-
-          <div className="absolute inset-0 bg-gradient-to-t from-[#04110F]/80 via-transparent to-[#04110F]/30" />
-        </>
-      ) : (
-        <>
-          {/* 漂浮泰文字母（极淡） */}
-
-          {glyphs.map((g, i) => (
-            <span
-              key={i}
-              className="absolute font-black text-white/[0.06] thai-float"
-              style={{
-                left: `${14 + i * 32}%`,
-                top: `${20 + (i % 2) * 22}%`,
-                fontSize: `${22 + (i % 3) * 10}px`,
-                animationDelay: `${i * 2}s`,
-              }}
-            >
-              {g}
-            </span>
-          ))}
-        </>
-      )}
-
-      {/* 金色音波（底部） */}
-
-      <svg
-        className="absolute inset-x-0 bottom-0 h-12 w-full"
-        viewBox="0 0 240 48"
-        preserveAspectRatio="none"
-      >
-        <path
-          d="M 0 26 Q 20 8, 40 26 T 80 26 T 120 26 T 160 26 T 200 26 T 240 26"
-          stroke="#F5D67B"
-          strokeWidth="1.4"
-          fill="none"
-          opacity="0.35"
-        />
-        <path
-          d="M 0 32 Q 24 18, 48 32 T 96 32 T 144 32 T 192 32 T 240 32"
-          stroke="#6EE7B7"
-          strokeWidth="1"
-          fill="none"
-          opacity="0.25"
-        />
-      </svg>
-
-      {/* 顶部高光 */}
-
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-    </div>
-  );
-}
-
-function CourseCard({
-  course,
-  index,
-  onOpen,
-  onVip = () => {},
-  isVipUser = false,
-  progress,
-}) {
-
-  const isVip =
-    course.isVip === true;
-
-  const coming =
-    course.status ===
-    "coming";
-
-
-  return (
-
-    <motion.div
-
-      initial={{
-        opacity: 0,
-        y: 15,
-      }}
-
-      animate={{
-        opacity: 1,
-        y: 0,
-      }}
-
-      transition={{
-        delay:
-          index * 0.06,
-      }}
-
-      whileHover={
-        coming
-          ? {}
-          : {
-              y: -4,
-            }
-      }
-
-      className={`
-        group
-        relative
-        overflow-hidden
-        rounded-3xl
-        p-5
-        card-lift
-        transition-all
-
-        ${
-          coming
-            ? "border border-white/[0.05] bg-white/[0.02]"
-            : isVip
-            ? "premium-glass-gold card-glow-gold gold-shimmer"
-            : "premium-glass card-glow-emerald"
-        }
-      `}
-    >
-
-      {!coming && (
-
-        <div className={`
-          pointer-events-none
-          absolute
-          -right-10
-          -top-10
-          h-28
-          w-28
-          rounded-full
-          blur-3xl
-
-          ${
-            isVip
-              ? "bg-yellow-300/[0.06]"
-              : "bg-emerald-400/[0.06]"
-          }
-        `} />
-
-      )}
-
-
-      <div className="relative">
-
-        {/* 课程封面视觉（泰文字母 + 金色音波） */}
-
-        {!coming && <CourseCover course={course} index={index} />}
-
-
-        {/* 顶部 */}
-
-        <div className="
-          flex
-          items-center
-          justify-between
-        ">
-
-
-          <div className="
-            flex
-            items-center
-            gap-2
-          ">
-
-
-            <div className={`
-              flex
-              h-10
-              w-10
-              items-center
-              justify-center
-              rounded-xl
-              border
-
-              ${
-                coming
-                  ? "border-white/[0.05] bg-white/[0.03]"
-                  : isVip
-                  ? "border-yellow-300/10 bg-yellow-300/[0.06]"
-                  : "border-emerald-300/10 bg-emerald-400/[0.08]"
-              }
-            `}>
-
-              {coming ? (
-
-                <Clock3 className="
-                  h-4
-                  w-4
-                  text-white/20
-                " />
-
-              ) : isVip ? (
-
-                <Crown className="
-                  h-4
-                  w-4
-                  text-yellow-300/70
-                " />
-
-              ) : (
-
-                <Video className="
-                  h-4
-                  w-4
-                  text-emerald-300
-                " />
-
-              )}
-
+            <div className="mt-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">{activeVideo.title}</h3>
+                <p className="text-xs text-white/40 mt-1">{activeVideo.description}</p>
+              </div>
+              <span className="text-[10px] px-2 py-1 rounded-full bg-white/[0.06] text-white/40">
+                {activeVideo.level}
+              </span>
             </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
 
 
-            <span className={`
-              rounded-full
-              px-2.5
-              py-1
-              text-[10px]
+      {/* =====================================================
+          分类标签
+      ===================================================== */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {videoCategories.map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => setCategory(cat.id)}
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition-all ${
+              category === cat.id
+                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/20 shadow-sm shadow-emerald-500/10"
+                : "bg-white/[0.04] text-white/40 border border-white/[0.06] hover:bg-white/[0.07] hover:text-white/60"
+            }`}
+          >
+            <span>{cat.icon}</span>
+            {cat.label}
+          </button>
+        ))}
+      </div>
 
-              ${
-                coming
-                  ? "bg-white/[0.04] text-white/20"
-                  : isVip
-                  ? "bg-yellow-300/[0.06] text-yellow-200/50"
-                  : "bg-white/[0.05] text-white/40"
-              }
-            `}>
 
-              {course.category}
-
-            </span>
-
+      {/* =====================================================
+          视频网格
+      ===================================================== */}
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">
+              {categoryObj?.icon} {categoryObj?.label || "全部视频"}
+            </h2>
+            <p className="mt-1 text-xs text-white/30">
+              共 {filteredVideos.length} 个视频
+            </p>
           </div>
 
-
-          <span className="
-            text-[10px]
-            text-white/25
-          ">
-
-            {course.level}
-
-          </span>
-
-        </div>
-
-
-        {/* 标题 */}
-
-        <h3 className={`
-          mt-5
-          text-lg
-          font-bold
-
-          ${
-            coming
-              ? "text-white/30"
-              : "text-white"
-          }
-        `}>
-
-          {course.title}
-
-        </h3>
-
-
-        {/* 描述 */}
-
-        <p className={`
-          mt-2
-          min-h-[42px]
-          text-sm
-          leading-5
-
-          ${
-            coming
-              ? "text-white/15"
-              : "text-white/35"
-          }
-        `}>
-
-          {course.description}
-
-        </p>
-
-
-        {/* 信息 */}
-
-        <div className="
-          mt-5
-          flex
-          items-center
-          gap-4
-          text-xs
-          text-white/25
-        ">
-
-
-          <span className="
-            flex
-            items-center
-            gap-1.5
-          ">
-
-            <Video className="
-              h-3.5
-              w-3.5
-            " />
-
-            {course.lessons > 0
-              ? `${course.lessons} 节视频`
-              : "即将上线"}
-
-          </span>
-
-
-          <span className="
-            flex
-            items-center
-            gap-1.5
-          ">
-
-            <Clock3 className="
-              h-3.5
-              w-3.5
-            " />
-
-            {course.duration}
-
-          </span>
-
-        </div>
-
-
-        {/* 进度 */}
-
-        <div className="mt-5">
-
-          <div className="
-            mb-2
-            flex
-            items-center
-            justify-between
-            text-[10px]
-          ">
-
-            <span className="
-              text-white/25
-            ">
-
-              {coming
-                ? "敬请期待"
-                : isVip && !isVipUser
-                ? "VIP 专属课程"
-                : "课程进度"}
-
-            </span>
-
-
-            {!coming &&
-              (!isVip || isVipUser) && (
-
-                <span className="
-                  text-emerald-300/60
-                ">
-
-                  {progress}%
-
-                </span>
-
-              )}
-
+          {/* 排序 */}
+          <div className="flex items-center gap-1 bg-white/[0.04] rounded-xl p-1">
+            {[
+              { key: "default", label: "默认" },
+              { key: "free", label: "仅免费" },
+            ].map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setSortBy(opt.key)}
+                className={`text-[11px] px-3 py-1.5 rounded-lg transition ${
+                  sortBy === opt.key
+                    ? "bg-emerald-500/20 text-emerald-300"
+                    : "text-white/40 hover:text-white/60"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
-
-
-          {!coming &&
-            (!isVip || isVipUser) && (
-
-              <AnimatedProgress
-                value={progress}
-                color={
-                  isVip ? "gold" : "emerald"
-                }
-              />
-
-            )}
-
         </div>
 
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {filteredVideos.map((video, index) => (
+            <VideoCard
+              key={video.id}
+              video={video}
+              index={index}
+              isVipUser={isVipUser}
+              onPlay={(v) => {
+                setActiveVideo(v);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              isActive={activeVideo?.id === video.id}
+            />
+          ))}
+        </div>
 
-        {/* 按钮 */}
+        {filteredVideos.length === 0 && (
+          <div className="text-center py-16 text-white/30">
+            <Video className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">暂无该分类的视频</p>
+          </div>
+        )}
+      </section>
 
-        <button
 
-          disabled={
-            coming
-          }
-
-          onClick={() => {
-
-            if (
-              coming
-            ) {
-              return;
-            }
-
-            if (isVip && !isVipUser) {
-              onVip?.();
-            } else {
-              onOpen();
-            }
-
-          }}
-
-          className={`
-            mt-5
-            flex
-            w-full
-            items-center
-            justify-center
-            gap-2
-            rounded-xl
-            border
-            py-2.5
-            text-sm
-            font-medium
-            transition-all
-
-            ${
-              coming
-                ? "cursor-not-allowed border-white/[0.05] bg-white/[0.02] text-white/15"
-                : isVip
-                ? "border-yellow-300/10 bg-yellow-300/[0.05] text-yellow-100/60 hover:bg-yellow-300/[0.09] hover:text-yellow-100"
-                : "border-white/[0.08] bg-white/[0.05] text-white/55 hover:bg-white/[0.09] hover:text-white"
-            }
-          `}
+      {/* =====================================================
+          VIP 提示
+      ===================================================== */}
+      {!isVipUser && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="rounded-2xl border border-yellow-300/10 bg-yellow-300/[0.04] p-5 backdrop-blur-xl"
         >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-yellow-400/[0.1]">
+              <Crown className="h-5 w-5 text-yellow-300" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-yellow-200/80">
+                解锁全部视频
+              </h3>
+              <p className="text-xs text-yellow-200/40 mt-0.5">
+                升级 VIP 即可观看所有 {videos.length} 个泰语教学视频，包含进阶课程。
+              </p>
+            </div>
+            <button
+              onClick={() => setVipOpen(true)}
+              className="px-4 py-2 rounded-xl bg-yellow-400/[0.12] border border-yellow-300/20 text-xs font-semibold text-yellow-200/80 hover:bg-yellow-400/[0.2] transition"
+            >
+              了解 VIP
+            </button>
+          </div>
+        </motion.div>
+      )}
 
-          {coming ? (
-
-            <>
-              <Clock3 className="
-                h-3.5
-                w-3.5
-              " />
-
-              即将上线
-            </>
-
-          ) : isVip && !isVipUser ? (
-
-            <>
-              <Crown className="
-                h-3.5
-                w-3.5
-              " />
-
-              查看 VIP 课程
-
-              <ChevronRight className="
-                h-3.5
-                w-3.5
-              " />
-            </>
-
-          ) : (
-
-            <>
-              <Play className="
-                h-3.5
-                w-3.5
-                fill-current
-              " />
-
-              进入课程
-
-              <ChevronRight className="
-                h-3.5
-                w-3.5
-              " />
-            </>
-
-          )}
-
-        </button>
-
-      </div>
-
-    </motion.div>
-  );
-}
-
-
-// =========================================================
-// 即将上线卡片
-// =========================================================
-
-function ComingCard({
-  course,
-  index,
-}) {
-
-  return (
-
-    <motion.div
-
-      initial={{
-        opacity: 0,
-        y: 10,
-      }}
-
-      animate={{
-        opacity: 1,
-        y: 0,
-      }}
-
-      transition={{
-        delay:
-          index * 0.05,
-      }}
-
-      className="
-        rounded-2xl
-        border
-        border-white/[0.05]
-        bg-white/[0.02]
-        p-4
-      "
-    >
-
-      <div className="
-        flex
-        items-center
-        justify-between
-      ">
-
-        <div className="
-          flex
-          h-9
-          w-9
-          items-center
-          justify-center
-          rounded-xl
-          bg-white/[0.04]
-        ">
-
-          {course.category ===
-          "外交" ? (
-
-            <GraduationCap className="
-              h-4
-              w-4
-              text-purple-300/30
-            " />
-
-          ) : (
-
-            <Lock className="
-              h-4
-              w-4
-              text-white/20
-            " />
-
-          )}
-
-        </div>
-
-
-        <span className="
-          rounded-full
-          bg-white/[0.04]
-          px-2
-          py-1
-          text-[9px]
-          text-white/20
-        ">
-          即将上线
-        </span>
-
-      </div>
-
-
-      <h3 className="
-        mt-4
-        font-bold
-        text-white/35
-      ">
-        {course.title}
-      </h3>
-
-
-      <p className="
-        mt-1
-        line-clamp-2
-        text-xs
-        leading-5
-        text-white/20
-      ">
-        {course.description}
-      </p>
-
-    </motion.div>
+      <VipPanel open={vipOpen} onClose={() => setVipOpen(false)} />
+    </div>
   );
 }

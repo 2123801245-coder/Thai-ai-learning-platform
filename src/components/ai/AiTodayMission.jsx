@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useLearningProgress } from "@/hooks/useLearningProgress";
 import { getAiTeacherMemory } from "@/api/aiTeacher";
+import { getSpeakingHistory } from "@/lib/speakingHistory";
 
 /* =========================================================
    AI 今日安排 · AiTodayMission
@@ -96,6 +97,13 @@ export default function AiTodayMission() {
   const mastered = p?.total_vocabulary || 0;
   const todayWords = p?.today_words || 0;
   const accuracy = p?.accuracy_rate || 0;
+
+  /* 口语练习统计 */
+  const speakingHistory = useMemo(() => getSpeakingHistory(), []);
+  const speakingSessions = speakingHistory.length;
+  const avgSpeakingScore = speakingSessions > 0
+    ? Math.round(speakingHistory.reduce((s, r) => s + (r.score || 0), 0) / speakingSessions)
+    : 0;
   const todayDone = tasks.filter(
     (t) =>
       t.id === "vocab"
@@ -147,6 +155,11 @@ export default function AiTodayMission() {
           <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/15 bg-emerald-400/[0.06] px-2.5 py-1 font-semibold text-emerald-200/80">
             <BookOpen className="h-3 w-3" /> {mastered} 词
           </span>
+          {speakingSessions > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/15 bg-cyan-400/[0.06] px-2.5 py-1 font-semibold text-cyan-200/80">
+              <Mic className="h-3 w-3" /> 口语 {avgSpeakingScore} 分
+            </span>
+          )}
         </div>
       </div>
 

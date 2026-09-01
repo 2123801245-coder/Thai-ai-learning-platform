@@ -824,7 +824,12 @@ export default function SpeakingRecorder({
 
       /* 只接受专业评分结果（本地降级结果不覆盖） */
 
-      if (data.source !== "azure") return;
+      if (data.source !== "azure") return;      /* 声调估算：基于 Azure accuracy + 错误类型 */
+      const mispronounced = (data.words || []).filter(w => w.errorType === "Mispronunciation").length;
+      const totalWords = (data.words || []).length || 1;
+      const toneBase = data.accuracy || data.score || 70;
+      const tonePenalty = Math.round((mispronounced / totalWords) * 25);
+      const tone = Math.max(20, Math.min(100, toneBase - tonePenalty));
 
       setResult((prev) => ({
         ...(prev || {}),
@@ -836,13 +841,14 @@ export default function SpeakingRecorder({
         score: data.score,
         dimensions: {
           accuracy: data.accuracy,
-          completeness:
-            data.completeness,
+          completeness: data.completeness,
           fluency: data.fluency,
+          tone,
         },
         words: data.words || [],
         feedback: data.feedback,
         tips: data.tips,
+        coaching: generateCoaching(data.score, data.accuracy, data.fluency, data.completeness, tone, data.words || []),
       }));
 
       /* 专业评分到达：取消本地延迟上报，直接上报 Azure 分 */
@@ -950,10 +956,16 @@ export default function SpeakingRecorder({
         diff
       );
 
+    /* 声调估算：基于准确度和文本差异 */
+    const toneBase = accuracy;
+    const tonePenalty = diff ? Math.round(((diff.missing?.length || 0) + (diff.extra?.length || 0)) * 5) : 0;
+    const tone = Math.max(20, Math.min(100, toneBase - tonePenalty));
+
     const dimensions = {
       accuracy,
       completeness,
       fluency,
+      tone,
     };
 
     setResult({
@@ -963,6 +975,7 @@ export default function SpeakingRecorder({
       diff,
       feedback: feedback.feedback,
       tips: feedback.tips,
+      coaching: generateCoaching(score, accuracy, fluency, completeness, tone, []),
     });
 
     /* 本地估算延迟上报：1.5s 内没有 Azure 专业分到达才用本地分 */
@@ -1741,29 +1754,37 @@ export default function SpeakingRecorder({
                     </div>
                   </div>
 
-                  {/* 评分维度 */}
+                  {/* AI 口语教练 — 雷达图 + 教练反馈 */}
 
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <DimensionChip
-                      label="发音"
-                      value={result.dimensions?.accuracy ?? null}
-                    />
+                  <div className="mt-4 grid gap-4 sm:grid-cols-[180px_1fr]">
+                    {/* 四维雷达 */}
+                    <div className="flex flex-col items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
+                      <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">
+                        能力雷达
+                      </div>
+                      <SpeakingRadar dimensions={result.dimensions} />
+                      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
+                        {[
+                          { label: "发音", val: result.dimensions?.accuracy },
+                          { label: "声调", val: result.dimensions?.tone },
+                          { label: "流利度", val: result.dimensions?.fluency },
+                          { label: "完整度", val: result.dimensions?.completeness },
+                        ].map((d) => (
+                          <div key={d.label} className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-white/30">{d.label}</span>
+                            <span className="text-[11px] font-bold text-emerald-300">{d.val ?? "—"}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-center text-[9px] text-white/20">
+                        {result.source === "azure"
+                          ? "Azure 声学评测"
+                          : "本地估算"}
+                      </div>
+                    </div>
 
-                    <DimensionChip
-                      label="完整度"
-                      value={result.dimensions?.completeness ?? null}
-                    />
-
-                    <DimensionChip
-                      label="流利度"
-                      value={result.dimensions?.fluency ?? null}
-                    />
-                  </div>
-
-                  <div className="mt-3 text-center text-[10px] text-white/25">
-                    {result.source === "azure"
-                      ? "评分来源：Azure 语音声学评测（音素级）"
-                      : "评分说明：发音看识别文字吻合度 · 完整度看漏读比例 · 流利度看朗读节奏（本地估算）"}
+                    {/* 教练反馈 */}
+                    <CoachingPanel coaching={result.coaching} score={score} />
                   </div>
 
                   <button
@@ -2015,5 +2036,259 @@ function DimensionChip({ label, value = null, pending = false }) {
         </div>
       )}
     </div>
+  );
+}
+
+
+/* =========================================================
+   AI 口语教练 — 生成个性化教练反馈
+========================================================= */
+
+function generateCoaching(score, accuracy, fluency, completeness, tone, words) {
+  const weakest = [
+    { dim: "发音", val: accuracy },
+    { dim: "声调", val: tone },
+    { dim: "流利度", val: fluency },
+    { dim: "完整度", val: completeness },
+  ].sort((a, b) => a.val - b.val);
+
+  const focusAreas = [];
+  const tips = [];
+
+  /* 最弱维度 */
+  if (weakest[0].val < 70) {
+    focusAreas.push({ label: weakest[0].dim, severity: "high", tip: `你的${weakest[0].dim}还有较大提升空间` });
+  }
+  if (weakest[1].val < 80) {
+    focusAreas.push({ label: weakest[1].dim, severity: "medium", tip: `建议多练习${weakest[1].dim}` });
+  }
+
+  /* 逐字错误分析 */
+  const mispronounced = words.filter(w => w.errorType === "Mispronunciation");
+  const omitted = words.filter(w => w.errorType === "Omission");
+  if (mispronounced.length > 0) {
+    tips.push(`有 ${mispronounced.length} 个音素发音不准，建议逐个纠正标注错误的音。`);
+  }
+  if (omitted.length > 0) {
+    tips.push(`有 ${omitted.length} 个音节被漏读，请放慢速度把每个音节读完整。`);
+  }
+
+  /* 综合评语 */
+  let summary = "";
+  if (score >= 90) {
+    summary = "非常出色！你的发音接近母语水平，继续保持！";
+  } else if (score >= 80) {
+    summary = "很好！整体发音准确，注意细节可以更完美。";
+  } else if (score >= 60) {
+    summary = "不错的开始！多练习几次，你会越来越自然。";
+  } else {
+    summary = "别灰心！建议先听标准发音，然后逐句模仿。";
+  }
+
+  if (tone < 65) {
+    tips.push("泰语有5个声调，声调不同意思完全不同。建议重点练习声调对比。");
+  }
+  if (fluency < 65) {
+    tips.push("朗读时注意连贯性，不要一个字一个字地蹦，试着把词组连起来读。");
+  }
+
+  return { summary, focusAreas, tips, weakest: weakest[0] };
+}
+
+
+/* =========================================================
+   AI 口语教练 — 评分雷达图（纯 SVG，无依赖）
+========================================================= */
+
+function SpeakingRadar({ dimensions }) {
+  if (!dimensions) return null;
+
+  const { accuracy = 0, tone = 0, fluency = 0, completeness = 0 } = dimensions;
+  const dims = [
+    { label: "发音", value: accuracy, angle: 0 },
+    { label: "声调", value: tone, angle: 90 },
+    { label: "流利度", value: fluency, angle: 180 },
+    { label: "完整度", value: completeness, angle: 270 },
+  ];
+
+  const size = 180;
+  const cx = size / 2;
+  const cy = size / 2;
+  const maxR = 70;
+
+  const getPoint = (angle, r) => {
+    const rad = ((angle - 90) * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  };
+
+  const rings = [0.25, 0.5, 0.75, 1];
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {/* 网格环 */}
+        {rings.map((r, i) => (
+          <polygon
+            key={i}
+            points={dims.map(d => `${getPoint(d.angle, maxR * r).x},${getPoint(d.angle, maxR * r).y}`).join(" ")}
+            fill="none"
+            stroke="rgba(255,255,255,0.06)"
+            strokeWidth={1}
+          />
+        ))}
+
+        {/* 轴线 */}
+        {dims.map((d, i) => {
+          const p = getPoint(d.angle, maxR);
+          return <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />;
+        })}
+
+        {/* 数据多边形 */}
+        <motion.polygon
+          points={dims.map(d => `${getPoint(d.angle, maxR * (d.value / 100)).x},${getPoint(d.angle, maxR * (d.value / 100)).y}`).join(" ")}
+          fill="rgba(52,211,153,0.15)"
+          stroke="#34d399"
+          strokeWidth={2}
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          style={{ transformOrigin: `${cx}px ${cy}px` }}
+        />
+
+        {/* 数据点 */}
+        {dims.map((d, i) => {
+          const p = getPoint(d.angle, maxR * (d.value / 100));
+          return (
+            <motion.circle
+              key={i}
+              cx={p.x}
+              cy={p.y}
+              r={4}
+              fill="#34d399"
+              stroke="#065f46"
+              strokeWidth={1.5}
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.3 + i * 0.1 }}
+            />
+          );
+        })}
+
+        {/* 标签 */}
+        {dims.map((d, i) => {
+          const p = getPoint(d.angle, maxR + 18);
+          return (
+            <text
+              key={i}
+              x={p.x}
+              y={p.y}
+              textAnchor="middle"
+              dominantBaseline="central"
+              className="fill-white/40 text-[9px] font-bold"
+            >
+              {d.label}
+            </text>
+          );
+        })}
+
+        {/* 数值 */}
+        {dims.map((d, i) => {
+          const p = getPoint(d.angle, maxR * (d.value / 100) + 12);
+          return (
+            <text
+              key={i}
+              x={p.x}
+              y={p.y}
+              textAnchor="middle"
+              dominantBaseline="central"
+              className="fill-emerald-300 text-[10px] font-black"
+            >
+              {d.value}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+
+/* =========================================================
+   AI 口语教练 — 教练反馈面板
+========================================================= */
+
+function CoachingPanel({ coaching, score }) {
+  if (!coaching) return null;
+
+  const scoreColor =
+    score >= 90 ? "text-emerald-300" :
+    score >= 80 ? "text-teal-300" :
+    score >= 60 ? "text-yellow-300" : "text-red-300";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.3 }}
+      className="mt-4 space-y-3"
+    >
+      {/* 教练评语 */}
+      <div className="rounded-2xl border border-emerald-300/[0.08] bg-emerald-400/[0.04] p-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">🤖</span>
+          <span className="text-xs font-bold text-emerald-200/70">AI 教练评语</span>
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-white/60">
+          {coaching.summary}
+        </p>
+      </div>
+
+      {/* 重点改进 */}
+      {coaching.focusAreas.length > 0 && (
+        <div className="rounded-2xl border border-yellow-300/[0.08] bg-yellow-300/[0.035] p-4">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-yellow-200/50">
+            🎯 重点改进
+          </div>
+          <div className="space-y-2">
+            {coaching.focusAreas.map((area, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${
+                  area.severity === "high" ? "bg-red-400" : "bg-yellow-400"
+                }`} />
+                <span className="text-xs text-white/50">
+                  <b className="text-white/70">{area.label}</b> — {area.tip}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* AI 建议 */}
+      {coaching.tips.length > 0 && (
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/25">
+            💡 练习建议
+          </div>
+          <div className="space-y-2">
+            {coaching.tips.map((tip, i) => (
+              <p key={i} className="text-xs leading-relaxed text-white/45">
+                {i + 1}. {tip}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 最弱维度提示 */}
+      {coaching.weakest && coaching.weakest.val < 75 && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-300/[0.06] bg-emerald-400/[0.03] px-4 py-3">
+          <span className="text-lg">⚡</span>
+          <p className="text-xs text-white/45">
+            下次练习建议重点关注 <b className="text-emerald-300">{coaching.weakest.label}</b>（当前 {coaching.weakest.val} 分）
+          </p>
+        </div>
+      )}
+    </motion.div>
   );
 }

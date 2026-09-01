@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -10,10 +10,13 @@ import {
   Type,
   AlignLeft,
   Lock,
+  TrendingUp,
+  X,
 } from "lucide-react";
 
 import Navbar from "@/components/Navbar";
 import SpeakingRecorder from "@/components/speaking/SpeakingRecorder";
+import SpeakingTrendChart from "@/components/charts/SpeakingTrendChart";
 import VipPanel from "@/components/common/VipPanel";
 import { base44 } from "@/api/base44Client";
 import { localVocabulary } from "@/data/vocabulary";
@@ -23,6 +26,7 @@ import {
 } from "@/data/speakingMaterials";
 import { useAuth } from "@/lib/AuthContext";
 import { API_BASE_URL } from "@/lib/api";
+import { saveSpeakingRecord, getDailyAverages } from "@/lib/speakingHistory";
 import {
   ThaiCorner,
   ThaiSectionDivider,
@@ -67,6 +71,25 @@ export default function SpeakingPractice() {
   const [loading, setLoading] = useState(true);
   const [azureReady, setAzureReady] = useState(false);
   const [vipOpen, setVipOpen] = useState(false);
+  const [showTrend, setShowTrend] = useState(false);
+
+  /* 保存练习记录到历史 */
+  const handleResult = (result) => {
+    if (!result?.score) return;
+    saveSpeakingRecord({
+      score: result.score,
+      accuracy: result.dimensions?.accuracy || result.score,
+      tone: result.dimensions?.tone || result.score,
+      fluency: result.dimensions?.fluency || result.score,
+      completeness: result.dimensions?.completeness || result.score,
+      mode,
+      target: result.transcription || "",
+      source: result.source || "local",
+    });
+  };
+
+  /* 趋势数据 */
+  const trendData = useMemo(() => getDailyAverages(30), [showTrend]);
 
   /* 探测后端 Azure 专业评测状态 */
 
@@ -358,11 +381,101 @@ export default function SpeakingPractice() {
               <SpeakingRecorder
                 words={words}
                 mode={mode}
+                onResult={handleResult}
                 onVipRequired={() =>
                   setVipOpen(true)
                 }
               />
             </div>
+          </motion.div>
+        )}
+
+        {/* =========================
+            评分趋势图
+        ========================= */}
+
+        {!loading && words.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.25 }}
+            className="mt-5"
+          >
+            {/* 趋势图开关 */}
+            <button
+              onClick={() => setShowTrend(!showTrend)}
+              className="flex w-full items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3 transition hover:bg-white/[0.04]"
+            >
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-emerald-300/60" />
+                <span className="text-xs font-semibold text-white/50">
+                  评分趋势图
+                </span>
+                {trendData.length > 0 && (
+                  <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[9px] font-bold text-emerald-300/60">
+                    {trendData.reduce((s, d) => s + d.count, 0)} 次练习
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-white/25">
+                {showTrend ? "收起" : "展开"}
+              </span>
+            </button>
+
+            {/* 趋势图内容 */}
+            {showTrend && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-3 overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4"
+              >
+                {/* 图例 */}
+                <div className="mb-3 flex flex-wrap items-center gap-4">
+                  {[
+                    { key: "accuracy", label: "发音", color: "#34d399" },
+                    { key: "tone", label: "声调", color: "#fbbf24" },
+                    { key: "fluency", label: "流利度", color: "#60a5fa" },
+                    { key: "completeness", label: "完整度", color: "#c084fc" },
+                  ].map((d) => (
+                    <div key={d.key} className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
+                      <span className="text-[10px] text-white/35">{d.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <SpeakingTrendChart data={trendData} />
+
+                {/* 统计摘要 */}
+                {trendData.length > 0 && (
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {[
+                      { key: "accuracy", label: "平均发音", color: "text-emerald-300" },
+                      { key: "tone", label: "平均声调", color: "text-yellow-300" },
+                      { key: "fluency", label: "平均流利度", color: "text-blue-300" },
+                      { key: "completeness", label: "平均完整度", color: "text-purple-300" },
+                    ].map((d) => {
+                      const avg = Math.round(
+                        trendData.reduce((s, r) => s + (r[d.key] || 0), 0) / trendData.length
+                      );
+                      return (
+                        <div key={d.key} className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-center">
+                          <div className="text-[9px] text-white/25">{d.label}</div>
+                          <div className={`mt-0.5 text-base font-black ${d.color}`}>{avg}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {trendData.length === 0 && (
+                  <p className="mt-2 text-center text-[11px] text-white/25">
+                    练习几次后这里会显示你的四维评分变化趋势
+                  </p>
+                )}
+              </motion.div>
+            )}
           </motion.div>
         )}
 

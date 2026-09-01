@@ -2,60 +2,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { RotateCcw, CheckCircle2, XCircle, Trophy, Volume2 } from "lucide-react";
 import WordBookPicker from "@/components/practice/WordBookPicker";
-import { mergeBooks, generateMatchPairs, getSavedBookId, saveBookId, fetchWrongBook, recordWrongWord, formatWrongDate } from "@/lib/wordBooks";
+import { mergeBooks, generateMatchPairs, getSavedBookId, saveBookId, fetchWrongBook, recordWrongWord, formatWrongDate, getVocabBooks } from "@/lib/wordBooks";
 
-/* ── 词库 ── */
-const wordSets = [
-  [
-    { thai: "สวัสดี", roman: "sà-wàt-dee", chinese: "你好", level: 1 },
-    { thai: "ขอบคุณ", roman: "khàwp-khun", chinese: "谢谢", level: 1 },
-    { thai: "ขอโทษ", roman: "khǎw-thôot", chinese: "对不起", level: 1 },
-    { thai: "ลาก่อน", roman: "laa-gɔ̂ɔn", chinese: "再见", level: 1 },
-    { thai: "ใช่", roman: "châi", chinese: "是", level: 1 },
-    { thai: "ไม่", roman: "mâi", chinese: "不", level: 1 },
-  ],
-  [
-    { thai: "น้ำ", roman: "nám", chinese: "水", level: 1 },
-    { thai: "ข้าว", roman: "khâao", chinese: "米饭", level: 1 },
-    { thai: "อาหาร", roman: "aa-hǎan", chinese: "食物", level: 2 },
-    { thai: "กิน", roman: "gin", chinese: "吃", level: 1 },
-    { thai: "ดื่ม", roman: "dùem", chinese: "喝", level: 2 },
-    { thai: "อร่อย", roman: "à-ròi", chinese: "好吃", level: 2 },
-  ],
-  [
-    { thai: "บ้าน", roman: "bâan", chinese: "家", level: 1 },
-    { thai: "โรงเรียน", roman: "roŋ-rian", chinese: "学校", level: 2 },
-    { thai: "ตลาด", roman: "dtà-làat", chinese: "市场", level: 2 },
-    { thai: "วัด", roman: "wát", chinese: "寺庙", level: 1 },
-    { thai: "สนามบิน", roman: "sà-nǎam-bin", chinese: "机场", level: 2 },
-    { thai: "โรงแรม", roman: "roŋ-raeom", chinese: "酒店", level: 2 },
-  ],
-  [
-    { thai: "พ่อ", roman: "phɔ̂ɔ", chinese: "爸爸", level: 1 },
-    { thai: "แม่", roman: "mɛ̂ɛ", chinese: "妈妈", level: 1 },
-    { thai: "พี่", roman: "phîi", chinese: "哥哥/姐姐", level: 1 },
-    { thai: "น้อง", roman: "nɔ́ɔŋ", chinese: "弟弟/妹妹", level: 1 },
-    { thai: "เพื่อน", roman: "phêuan", chinese: "朋友", level: 1 },
-    { thai: "ครอบครัว", roman: "khrop-khrua", chinese: "家庭", level: 2 },
-  ],
-  [
-    { thai: "ไป", roman: "bpai", chinese: "去", level: 1 },
-    { thai: "มา", roman: "maa", chinese: "来", level: 1 },
-    { thai: "อยู่", roman: "yùu", chinese: "在/住", level: 1 },
-    { thai: "เดิน", roman: "dern", chinese: "走", level: 2 },
-    { thai: "วิ่ง", roman: "wîŋ", chinese: "跑", level: 2 },
-    { thai: "นั่ง", roman: "nâŋ", chinese: "坐", level: 1 },
-  ],
-];
-
-/* ── 内置词书名称 ── */
-const builtinBooks = [
-  { name: "问候基础", emoji: "👋", words: wordSets[0] },
-  { name: "食物饮料", emoji: "🍜", words: wordSets[1] },
-  { name: "地点场所", emoji: "📍", words: wordSets[2] },
-  { name: "家庭关系", emoji: "👨👩👧", words: wordSets[3] },
-  { name: "动作动词", emoji: "🏃", words: wordSets[4] },
-];
+/* 词书来源统一使用 getVocabBooks()（与词汇学习板块一致） */
 
 function shuffle(arr) {
   const a = [...arr];
@@ -87,7 +36,7 @@ export default function VocabMatch() {
   }, [refreshWrongBook]);
 
   const allBooks = useMemo(
-    () => mergeBooks(builtinBooks, wrongBook ? [wrongBook] : []),
+    () => mergeBooks([], wrongBook ? [wrongBook] : []),
     [wrongBook]
   );
   const [bookId, setBookId] = useState(() => {
