@@ -132,6 +132,11 @@ app.use(
   })
 );
 
+// 生产环境位于 nginx 反代之后（nginx 设置 X-Forwarded-For），
+// 需开启 trust proxy 让 express-rate-limit 正确识别客户端真实 IP，
+// 否则抛 ERR_ERL_UNEXPECTED_X_FORWARDED_FOR 警告（限流退化为按反代 IP）。
+app.set("trust proxy", 1);
+
 // 认证/开通类接口的限流（防爆破），每个 IP 每 15 分钟：
 // 登录/注册/重置 20 次；激活码开通 30 次。
 const strictLimiter = rateLimit({
