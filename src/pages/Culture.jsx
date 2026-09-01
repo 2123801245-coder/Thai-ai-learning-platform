@@ -17,7 +17,8 @@ export default function Culture() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [query, setQuery] = useState("");
   const [speakingKey, setSpeakingKey] = useState(null);
-  const audioRef = useRef(null);
+  // speakThai 返回 cancel 函数（不是 audio 元素），用它停止上一次播放
+  const cancelRef = useRef(null);
 
   const stats = useMemo(() => getCultureStats(), []);
   const total = culturePoints.length;
@@ -41,29 +42,25 @@ export default function Culture() {
     return list;
   }, [activeCategory, query]);
 
+  const stop = () => {
+    cancelRef.current?.();
+    cancelRef.current = null;
+    setSpeakingKey(null);
+  };
+
   const speak = (key, text) => {
     if (speakingKey === key) {
       stop();
       return;
     }
-    audioRef.current?.pause();
-    const a = speakThai(text, { rate: 0.78 });
-    audioRef.current = a;
-    setSpeakingKey(key);
+    stop(); // 停掉上一次播放（cancel 函数）
     const clear = () => setSpeakingKey((k) => (k === key ? null : k));
-    if (a) {
-      a.addEventListener?.("ended", clear);
-      a.addEventListener?.("error", clear);
-    } else {
-      // 无 TTS 时 1.2s 后复位图标
-      setTimeout(clear, 1200);
-    }
-  };
-
-  const stop = () => {
-    audioRef.current?.pause();
-    audioRef.current = null;
-    setSpeakingKey(null);
+    cancelRef.current = speakThai(text, {
+      rate: 0.78,
+      onEnd: clear,
+      onError: clear,
+    });
+    setSpeakingKey(key);
   };
 
   return (

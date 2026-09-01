@@ -10,6 +10,7 @@ import {
   digits,
   specialChars,
 } from "../data/thaiAlphabet";
+import { speakThai } from "@/lib/thaiSpeech";
 
 /* ── 分类标签 ── */
 const tabs = [
@@ -23,14 +24,10 @@ const tabs = [
   { id: "special", label: "特殊字符" },
 ];
 
-/* ── 用 Web Speech API 朗读泰语 ── */
+/* ── 朗读泰语（复用全站 speakThai：speechSynthesis → 本地 TTS → Google 兜底） ── */
 function speak(text) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "th-TH";
-  u.rate = 0.8;
-  window.speechSynthesis.speak(u);
+  if (!text) return;
+  speakThai(text, { rate: 0.8 });
 }
 
 /* ── 详情面板 ── */

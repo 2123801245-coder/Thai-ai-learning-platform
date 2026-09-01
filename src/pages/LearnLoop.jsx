@@ -321,10 +321,10 @@ export default function LearnLoop() {
               {Array.isArray(rec.vocab) && rec.vocab.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {rec.vocab.slice(0, 6).map((v, i) => (
-                    <span key={i} title={v?.meaning || ""} className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[11px] text-white/70">
-                      {v?.thai}
+                    <span key={i} title={v?.cn || v?.meaning || ""} className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[11px] text-white/70">
+                      {v?.th || v?.thai}
                       {v?.roman && <span className="text-emerald-200/60">{v.roman}</span>}
-                      <button type="button" onClick={() => speak(v?.thai)} className="text-white/40 hover:text-emerald-200"><Volume2 className="h-3 w-3" /></button>
+                      <button type="button" onClick={() => speak(v?.th || v?.thai)} className="text-white/40 hover:text-emerald-200"><Volume2 className="h-3 w-3" /></button>
                     </span>
                   ))}
                 </div>
