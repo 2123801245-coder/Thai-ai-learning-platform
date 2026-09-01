@@ -385,11 +385,46 @@ async function convertToWav(mp3Buffer) {
       ["-f", "WAVE", "-d", "LEI16@24000", inPath, outPath],
       { timeout: 20000 }
     );
-    return await readFile(outPath);
+    const wav = await readFile(outPath);
+    // Edge 的 MP3 响度极满（实测峰值 1.000、多处削波，听感发燥带“电音”），
+    // 解码成 WAV 后仍会削波。这里做纯 PCM 增益衰减：峰值超过 0.85 就整体
+    // 压到 0.85，消除削波爆音；峰值未超则原样返回（say 路线不受影响）。
+    return applyWavPeakLimit(wav, 0.85);
   } finally {
     await unlink(inPath).catch(() => {});
     await unlink(outPath).catch(() => {});
   }
+}
+
+/* 对标准 PCM16 WAV 做峰值限幅：遍历 data 块求峰值，超过 target 时
+   整体乘增益（target/peak），低于则不动。零依赖、保持 RIFF 头部不变。 */
+function applyWavPeakLimit(wavBuf, target) {
+  const dataStart = findPcmOffset(wavBuf);
+  if (dataStart <= 0 || dataStart + 2 > wavBuf.length) return wavBuf;
+
+  // 16 位 PCM：data 长度须为偶数
+  const dataLen = wavBuf.length - dataStart;
+  const sampleCount = Math.floor(dataLen / 2);
+  if (sampleCount < 1) return wavBuf;
+
+  let peak = 0;
+  for (let i = 0; i < sampleCount; i += 1) {
+    const off = dataStart + i * 2;
+    const v = wavBuf.readInt16LE(off);
+    const a = v < 0 ? -v : v;
+    if (a > peak) peak = a;
+  }
+
+  // 峰值未超目标 → 原样返回（保持 say 路线的原始响度）
+  if (peak <= target * 32767) return wavBuf;
+
+  const gain = (target * 32767) / peak;
+  for (let i = 0; i < sampleCount; i += 1) {
+    const off = dataStart + i * 2;
+    const v = Math.round(wavBuf.readInt16LE(off) * gain);
+    wavBuf.writeInt16LE(v < -32768 ? -32768 : v > 32767 ? 32767 : v, off);
+  }
+  return wavBuf;
 }
 
 // ----------------------------------------------------------------
