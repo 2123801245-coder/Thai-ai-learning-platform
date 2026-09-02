@@ -1,0 +1,37 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "http://8.140.225.225:3001/api/:path*"
+    },
+    {
+      "source": "/videos/:path*",
+      "destination": "http://8.140.225.225:3001/videos/:path*"
+    },
+    {
+      "source": "/uploads/:path*",
+      "destination": "http://8.140.225.225:3001/uploads/:path*"
+    },
+    {
+      "source": "/subtitles/:path*",
+      "destination": "http://8.140.225.225:3001/subtitles/:path*"
+    },
+    {
+      "source": "/((?!api|videos|uploads|subtitles).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,DELETE,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+      ]
+    }
+  ]
+}
