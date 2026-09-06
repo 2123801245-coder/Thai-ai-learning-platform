@@ -1,0 +1,115 @@
+name: Deploy Frontend
+
+# 推送到 main 时自动构建并部署前端到阿里云服务器
+# 部署方式与 deploy/deploy.sh 一致：rsync 覆盖 /opt/thaiai/dist + 重启前端容器
+# 认证方式：SSH key（secrets.SSH_PRIVATE_KEY），不用密码
+
+on:
+  push:
+    branches: [main]
+    # 忽略纯文档改动，避免无意义部署
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  # 允许在 Actions 页面手动触发（可选择跳过部署只验证构建）
+  workflow_dispatch:
+    inputs:
+      skip_deploy:
+        description: '只构建验证，不部署'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false   # 部署不互相打断，排队执行
+
+env:
+  NODE_VERSION: '20'
+  REMOTE_HOST: 8.140.225.225
+  REMOTE_USER: root
+  REMOTE_DIST: /opt/thaiai/dist
+  SITE_URL: https://thai-ai.online
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build
+        run: |
+          npm run build
+          # 产物自检：主 JS 引用存在 + crossorigin 已剥离
+          JS=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | head -1)
+          [ -n "$JS" ] || { echo "❌ dist/index.html 无主 JS 引用"; exit 1; }
+          N=$(grep -c crossorigin dist/index.html || true)
+          [ "$N" = "0" ] || { echo "❌ 产物含 $N 处 crossorigin"; exit 1; }
+          echo "JS_HASH=$JS" >> "$GITHUB_ENV"
+          echo "本地产物: $JS (crossorigin=0)"
+
+      - name: Setup SSH key
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # 首次连接自动信任主机 key（也可用 ssh-keyscan 预填 known_hosts）
+          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<EOF
+          Host aliyun
+            HostName $REMOTE_HOST
+            User $REMOTE_USER
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking yes
+          EOF
+
+      - name: Backup current dist on server
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        run: |
+          ssh aliyun "if [ -d $REMOTE_DIST ]; then cp -a $REMOTE_DIST $REMOTE_DIST.bak-\$(date +%Y%m%d-%H%M%S) && echo backed up; else echo 'no existing dist'; fi"
+
+      - name: Rsync dist to server
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        run: |
+          rsync -az --delete --rsh='ssh -i ~/.ssh/deploy_key' dist/ "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIST/"
+
+      - name: Restart frontend container
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        run: |
+          ssh aliyun 'FE=$(docker ps --format "{{.Names}}" | grep -m1 thaiai_frontend || true); if [ -n "$FE" ]; then docker restart $FE && echo "restarted $FE"; else echo "no frontend container"; fi'
+
+      - name: Verify deployment
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        run: |
+          set -e
+          REMOTE_JS=$(ssh aliyun "grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' $REMOTE_DIST/index.html | head -1")
+          REMOTE_CO=$(ssh aliyun "grep -c crossorigin $REMOTE_DIST/index.html || true")
+          HOME_CODE=$(curl -sk -o /dev/null -w '%{http_code}' "$SITE_URL/")
+          API_CODE=$(curl -sk -o /dev/null -w '%{http_code}' "$SITE_URL/api/features")
+
+          echo "线上主 JS: $REMOTE_JS (本地: $JS_HASH)"
+          echo "crossorigin: $REMOTE_CO | 首页: $HOME_CODE | API: $API_CODE"
+
+          FAIL=0
+          [ "$REMOTE_JS" = "$JS_HASH" ] || { echo "❌ hash 不一致"; FAIL=1; }
+          [ "$REMOTE_CO" = "0" ] || { echo "❌ 线上含 crossorigin"; FAIL=1; }
+          [ "$HOME_CODE" = "200" ] || { echo "❌ 首页非 200"; FAIL=1; }
+          [ "$API_CODE" = "200" ] || { echo "❌ API 非 200"; FAIL=1; }
+
+          if [ "$FAIL" = "1" ]; then
+            echo "❌ 验证失败，回滚..."
+            ssh aliyun "BAK=\$(ls -dt $REMOTE_DIST.bak-* 2>/dev/null | head -1); if [ -n \"\$BAK\" ]; then rm -rf $REMOTE_DIST && cp -a \"\$BAK\" $REMOTE_DIST; FE=\$(docker ps --format '{{.Names}}' | grep -m1 thaiai_frontend || true); [ -n \"\$FE\" ] && docker restart \$FE; echo rolled back to \$BAK; fi"
+            exit 1
+          fi
+          echo "✅ 部署验证通过：$REMOTE_JS"
