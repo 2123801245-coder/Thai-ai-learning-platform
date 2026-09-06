@@ -51,6 +51,7 @@ import { getLessonsByCourseId } from "@/data/lessons";
 import { getCourseStats, getCourseProgress } from "@/lib/courseProgress";
 import { useAuth } from "@/lib/AuthContext";
 import { API_BASE_URL } from "@/lib/api";
+import { getPlanOverview } from "@/api/plan";
 import { speakThai } from "@/lib/thaiSpeech";
 import { useFeatureFlag } from "@/lib/features";
 import { adminGenerateCodes } from "@/api/auth";
@@ -877,7 +878,7 @@ function LegacyHome() {
 
   return (
     <div
-      className="home-theme-root relative min-h-screen w-full text-white"
+      className="apple-home-shell home-theme-root relative min-h-screen w-full text-white"
       style={{ background: 'var(--tp-bg, #0c1719)' }}
     >
       <div className="home-theme-backdrop pointer-events-none fixed inset-0 z-0" aria-hidden="true">
@@ -1233,7 +1234,7 @@ function LegacyHome() {
           <motion.section
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-yellow-300/15 bg-black/60 px-4 py-3 shadow-lg shadow-black/20 backdrop-blur-xl"
+            className="apple-surface mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-yellow-300/15 bg-black/60 px-4 py-3 shadow-lg shadow-black/20 backdrop-blur-xl"
           >
             <div className="mr-auto flex items-center gap-2">
               <Crown className="h-4 w-4 text-yellow-300" />
@@ -1273,22 +1274,7 @@ function LegacyHome() {
           transition={{
             duration: 0.7,
           }}
-          className="
-            group
-            theme-hero-card
-            relative
-            mb-5
-            min-h-[340px]
-            sm:min-h-[300px]
-            overflow-hidden
-            rounded-[30px]
-            border
-            border-white/[0.08]
-            shadow-[0_20px_80px_rgba(0,0,0,0.3)]
-            transition-all
-            duration-500
-            hover:border-white/[0.14]
-          "
+          className="apple-surface group relative mb-5 min-h-[340px] overflow-hidden rounded-[30px] border border-white/[0.08] shadow-[0_20px_80px_rgba(0,0,0,0.3)] transition-all duration-500 hover:border-white/[0.14]"
         >
 
           <img
@@ -1799,7 +1785,7 @@ function LegacyHome() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, duration: 0.5 }}
             whileHover={{ y: -2 }}
-            className="group relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-white/[0.025] p-5 backdrop-blur-xl transition-all duration-300 hover:border-white/[0.12] hover:bg-white/[0.04] hover:shadow-[0_8px_40px_rgba(0,0,0,0.15)] sm:p-6"
+            className="apple-surface relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-white/[0.025] p-5 backdrop-blur-xl transition-all duration-300 hover:border-white/[0.12] hover:bg-white/[0.04] hover:shadow-[0_8px_40px_rgba(0,0,0,0.15)] sm:p-6"
           >
 
             <div className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-teal-400/[0.05] blur-3xl transition-all duration-500 group-hover:bg-teal-400/[0.08]" />              <div className="relative flex items-center justify-between">
@@ -1882,7 +1868,7 @@ function LegacyHome() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15, duration: 0.5 }}
-              className="relative overflow-hidden rounded-[28px] border border-[#CB8DFF]/10 bg-gradient-to-br from-[#CB8DFF]/[0.12] via-white/[0.04] to-[#CB8DFF]/[0.06] p-1 shadow-2xl shadow-purple-950/40 backdrop-blur-2xl"
+              className="apple-surface relative overflow-hidden rounded-[28px] border border-[#CB8DFF]/10 bg-gradient-to-br from-[#CB8DFF]/[0.12] via-white/[0.04] to-[#CB8DFF]/[0.06] p-1 shadow-2xl shadow-purple-950/40 backdrop-blur-2xl"
             >
 
               <div className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full bg-yellow-300/10 blur-3xl" />
@@ -2317,6 +2303,27 @@ function MobileQuickActions({ aiTeacher }) {
 function HomePlanCard() {
   const navigate = useNavigate();
 
+  const isLoggedIn = !!localStorage.getItem("token");
+
+  /* 服务端打卡概览（连续天数 / 本周 / 今日打卡状态，跨设备一致） */
+  const [planOverview, setPlanOverview] = useState(null);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let alive = true;
+    getPlanOverview()
+      .then((r) => {
+        if (alive) setPlanOverview(r.data || null);
+      })
+      .catch(() => {
+        /* 服务不可用时静默降级到本地记录 */
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [records, setRecords] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("thai_ai_plan_v1")) || {};
@@ -2327,12 +2334,24 @@ function HomePlanCard() {
 
   const today = new Date().toISOString().split("T")[0];
   const todayDone = records[today] || {};
-  const completed = HOME_PLAN_TASKS.filter(
-    (task) => todayDone[task.id]
-  ).length;
+
+  /* 服务端「今天」= week 末项（服务端按其本地日期生成，避免客户端时区差） */
+  const serverToday = planOverview?.week?.length
+    ? planOverview.week[planOverview.week.length - 1]
+    : null;
+  /* 服务端判定今日计划已全部完成（含自动完成/其他设备，权威状态） */
+  const serverDoneToday = !!serverToday?.completed;
+  /* 行完成数：本地勾选 ∪ 服务端判定今日已全部完成（打卡成功=全部完成，权威） */
+  const completed = serverDoneToday
+    ? HOME_PLAN_TASKS.length
+    : HOME_PLAN_TASKS.filter((task) => todayDone[task.id]).length;
   const progress = Math.round(
     (completed / HOME_PLAN_TASKS.length) * 100
   );
+
+  /* 服务端本周已完成打卡的天数 */
+  const weekDoneCount =
+    planOverview?.week?.filter((d) => d.completed).length ?? null;
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] p-5 backdrop-blur-xl sm:p-6">
@@ -2355,9 +2374,30 @@ function HomePlanCard() {
         </button>
       </div>
 
+      {/* 服务端打卡状态行：连续天数 / 本周 / 今日打卡（登录且已同步时显示） */}
+      {isLoggedIn && planOverview && (
+        <div className="relative mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-1.5 text-[10px]">
+          <span className="flex items-center gap-1 font-medium text-orange-300/90">
+            <Flame className="h-3 w-3" />
+            连续打卡 {planOverview.streak ?? 0} 天
+          </span>
+          <span className="text-white/25">·</span>
+          <span className="text-white/50">本周 {weekDoneCount ?? 0}/7</span>
+          {serverDoneToday ? (
+            <span className="ml-auto flex items-center gap-0.5 font-medium text-emerald-300">
+              <Check className="h-3 w-3" />
+              今日已打卡
+            </span>
+          ) : (
+            <span className="ml-auto text-white/30">今日进行中</span>
+          )}
+        </div>
+      )}
+
       <div className="relative mt-4 space-y-3">
         {HOME_PLAN_TASKS.map((task) => {
-          const done = !!todayDone[task.id];
+          /* 服务端判定今日全完成 → 行级同步为已完成（跨设备/自动完成权威） */
+          const done = !!todayDone[task.id] || serverDoneToday;
           const Icon = task.icon;
 
           return (
@@ -3148,7 +3188,7 @@ function ContinueCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.06 }}
-      className="group relative overflow-hidden rounded-3xl border border-emerald-300/[0.10] bg-gradient-to-br from-[#CB8DFF]/[0.10] via-white/[0.035] to-teal-400/[0.06] p-5 backdrop-blur-xl"
+      className="apple-surface group relative overflow-hidden rounded-3xl border border-emerald-300/[0.10] bg-gradient-to-br from-[#CB8DFF]/[0.10] via-white/[0.035] to-teal-400/[0.06] p-5 backdrop-blur-xl"
     >
 
       {course.cover && (
@@ -3240,11 +3280,7 @@ function RecommendCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.06 }}
       whileHover={{ y: -4 }}
-      className={`group relative min-w-[280px] overflow-hidden rounded-3xl border p-5 backdrop-blur-xl transition-all sm:min-w-0 ${
-        isVip
-          ? "border-yellow-300/[0.08] bg-gradient-to-br from-yellow-300/[0.04] via-white/[0.025] to-purple-400/[0.04] hover:bg-white/[0.05]"
-          : "border-white/[0.08] bg-white/[0.035] hover:bg-white/[0.055]"
-      }`}
+      className="apple-surface group relative min-w-[280px] overflow-hidden rounded-3xl border p-5 backdrop-blur-xl transition-all sm:min-w-0"
     >
 
       {course.cover && (
@@ -3608,18 +3644,7 @@ function DashboardCard({
 }) {
   return (
     <div
-      className="
-        relative
-        h-full
-        overflow-hidden
-        rounded-[26px]
-        border
-        border-white/10
-        bg-white/[0.045]
-        shadow-2xl
-        shadow-black/20
-        backdrop-blur-2xl
-      "
+      className="apple-surface relative h-full overflow-hidden rounded-[26px] border border-white/10 bg-white/[0.045] shadow-2xl shadow-black/20 backdrop-blur-2xl"
     >
 
       <div

@@ -28,6 +28,7 @@ export const VOCABULARY_BOOKS = [
   "体育泰语",
   "食物泰语",
   "职业泰语",
+  "汽车泰语",
 ]
 
 export const VOCABULARY_BOOK_TARGET = 1000;

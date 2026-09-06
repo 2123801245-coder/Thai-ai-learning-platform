@@ -237,6 +237,7 @@ const CATEGORY_EMOJI = {
   颜色: "🎨",
   食物: "🍜",
   基础泰语1: "📚",
+  汽车泰语: "🚗",
 };
 
 function shuffle(arr) {

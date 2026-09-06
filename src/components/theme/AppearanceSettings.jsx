@@ -49,6 +49,7 @@ export default function AppearanceSettings() {
     setMode,
     customColors,
     setCustomColor,
+    setCustomColors,
     font,
     setFont,
     radius,
@@ -63,8 +64,11 @@ export default function AppearanceSettings() {
   // 实时预览色：自定义优先，否则取预设
   const previewColors = useMemo(() => {
     const preset = THEMES[themeId];
-    return { ...(preset?.colors || DEFAULT_CUSTOM_COLORS), ...customColors };
-  }, [themeId, customColors]);
+    const palette = mode === "light"
+      ? (preset?.lightColors || preset?.colors || DEFAULT_CUSTOM_COLORS)
+      : (preset?.colors || DEFAULT_CUSTOM_COLORS);
+    return { ...palette, ...customColors };
+  }, [themeId, mode, customColors]);
 
   return (
     <motion.div
@@ -123,8 +127,18 @@ export default function AppearanceSettings() {
 
           {/* 主题预设 */}
           <section className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-4">
-            <p className="mb-2.5 text-[11px] font-bold text-white/60">主题预设</p>
-            <ThemeSelector value={themeId} onChange={setTheme} />
+            <div className="mb-2.5 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-bold text-white/60">主题预设</p>
+                <p className="mt-0.5 text-[10px] text-white/30">
+                  {mode === "light" ? "浅色风格 · 六套独立配色" : "深色风格 · 六套独立配色"}
+                </p>
+              </div>
+              <span className="rounded-full border border-white/10 px-2 py-1 text-[9px] text-white/35">
+                {mode === "light" ? "LIGHT" : "DARK"}
+              </span>
+            </div>
+            <ThemeSelector value={themeId} mode={mode} onChange={(id) => { setTheme(id); setCustomColors({}); }} />
           </section>
 
           {/* 自定义颜色 */}

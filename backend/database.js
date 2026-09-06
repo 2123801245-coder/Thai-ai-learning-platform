@@ -312,6 +312,8 @@ db.serialize(() => {
       difficulty TEXT,
       source TEXT DEFAULT 'book',
       correct INTEGER DEFAULT 0,
+      hint_used INTEGER DEFAULT 0,
+      hint_correct INTEGER DEFAULT 0,
       total INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users (id)
@@ -320,6 +322,24 @@ db.serialize(() => {
 
   db.run(
     "CREATE INDEX IF NOT EXISTS idx_vocab_quiz_user_date ON vocab_quiz_records (user_id, date)"
+  );
+
+  // 兼容旧库：为已存在的 vocab_quiz_records 补充提示统计列（幂等，重复执行忽略）
+  db.run(
+    "ALTER TABLE vocab_quiz_records ADD COLUMN hint_used INTEGER DEFAULT 0",
+    (err) => {
+      if (err && !String(err.message || "").includes("duplicate column")) {
+        console.error("迁移 vocab_quiz_records.hint_used 失败:", err.message);
+      }
+    }
+  );
+  db.run(
+    "ALTER TABLE vocab_quiz_records ADD COLUMN hint_correct INTEGER DEFAULT 0",
+    (err) => {
+      if (err && !String(err.message || "").includes("duplicate column")) {
+        console.error("迁移 vocab_quiz_records.hint_correct 失败:", err.message);
+      }
+    }
   );
 
   // ================================
@@ -507,6 +527,39 @@ db.serialize(() => {
       last_position REAL DEFAULT 0,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (user_id, course_id, lesson_id)
+    )
+  `);
+
+  // ================================
+  // 学习计划每日打卡表
+  //（用户每天完成计划任务后写一行：完成/总任务数 + 是否全部完成）
+  // ================================
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS daily_plan_records (
+      user_id INTEGER NOT NULL,
+      plan_date TEXT NOT NULL,
+      completed_tasks INTEGER DEFAULT 0,
+      total_tasks INTEGER DEFAULT 0,
+      plan_completed INTEGER DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, plan_date)
+    )
+  `);
+
+  // ================================
+  // 连续完成奖励发放记录表
+  //（连续完成 7 天每日计划 → 解锁 3 天 VIP；每满 7 天发一次）
+  // ================================
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS streak_rewards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      milestone INTEGER NOT NULL,
+      reward_days INTEGER DEFAULT 3,
+      granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (user_id, milestone)
     )
   `);
 

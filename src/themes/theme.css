@@ -312,26 +312,26 @@ html.theme-custom[data-mode="light"] .theme-site-backdrop .site-bg-b {
   opacity: 0 !important;
 }
 html.theme-custom[data-mode="light"] .theme-site-backdrop::after {
-  background: #fff;
+  background: var(--tp-bg, #ffffff);
 }
 html.theme-custom[data-mode="light"] .home-theme-image {
   opacity: 0 !important;
 }
 html.theme-custom[data-mode="light"] .home-theme-backdrop::after {
-  background: #fff !important;
+  background: var(--tp-bg, #ffffff) !important;
   opacity: 1 !important;
   z-index: 2;
 }
 html.theme-custom[data-mode="light"] .home-theme-root {
-  background: #fff !important;
-  color: #111 !important;
+  background: var(--tp-bg, #ffffff) !important;
+  color: var(--tp-text, #111) !important;
 }
 
 /* 浅色：Sidebar 转白底 + 深色文字 */
 html.theme-custom[data-mode="light"] .theme-sidebar {
-  background-color: #ffffff !important;
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  color: #111 !important;
+  background-color: color-mix(in srgb, var(--tp-bg, #ffffff) 92%, var(--tp-secondary, #17352c)) !important;
+  border-color: color-mix(in srgb, var(--tp-secondary, #17352c) 14%, transparent) !important;
+  color: var(--tp-text, #111) !important;
 }
 
 /* 浅色：把全站硬编码白字统一转为深色（属性前缀批量覆盖）
@@ -345,10 +345,10 @@ html.theme-custom[data-mode="light"] [class*="text-white/"] {
 
 /* 浅色：bg-white/x 半透明白卡保持白色系（白底上自然融合，文字已转深） */
 html.theme-custom[data-mode="light"] [class*="bg-white"] {
-  background-color: rgba(255, 255, 255, 0.72) !important;
+  background-color: color-mix(in srgb, var(--tp-card, rgba(255,255,255,0.78)) 92%, var(--tp-primary, #087f5b)) !important;
 }
 html.theme-custom[data-mode="light"] [class*="bg-white/"] {
-  background-color: rgba(255, 255, 255, 0.72) !important;
+  background-color: color-mix(in srgb, var(--tp-card, rgba(255,255,255,0.78)) 92%, var(--tp-primary, #087f5b)) !important;
 }
 
 /* 浅色：首页硬编码半透明黑卡（bg-black/x）转白卡，避免深底深字 */
@@ -479,9 +479,9 @@ html.theme-custom[data-mode="light"] .theme-teacher-card {
 /* 浅色：premium-glass 卡转白底深字 */
 html.theme-custom[data-mode="light"] .premium-glass,
 html.theme-custom[data-mode="light"] .premium-glass-strong {
-  background: rgba(255, 255, 255, 0.75) !important;
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  color: #161616 !important;
+  background: color-mix(in srgb, var(--tp-card, rgba(255,255,255,0.78)) 88%, var(--tp-primary, #087f5b)) !important;
+  border-color: color-mix(in srgb, var(--tp-secondary, #17352c) 14%, transparent) !important;
+  color: var(--tp-text, #161616) !important;
   backdrop-filter: none !important;
 }
 

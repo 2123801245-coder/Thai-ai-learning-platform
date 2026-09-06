@@ -534,34 +534,216 @@ async function azurePronunciationAssessment(
   }
 
   /*
-   * 收集词级错误（ErrorType: Omission/Insertion/Mispronunciation）
-   * 用于逐词反馈。
+   * 收集词级错误 + 音素级数据
    */
 
-  const words = (best.Words || []).map((w) => ({
-    word: w.Word || "",
-    accuracy: Math.round(w.AccuracyScore ?? 0),
-    errorType: w.ErrorType || "None",
-    offset: w.Offset || 0,
-    duration: w.Duration || 0,
-  }));
+  const THAI_TONE_MARKS = /[\u0E48\u0E49\u0E4A\u0E4B]/g; // ่ ้ ๊ ๋
+  const THAI_VOWELS = /[\u0E30-\u0E3A\u0E47-\u0E4E]/g;
+  const isVowelPhoneme = (p) => THAI_VOWELS.test(p.Phoneme || "");
+
+  /*
+   * 泰语辅音分类（决定声调规则）：
+   * 中辅音（默认声调=.mid）：ก จ ฎ ฏ ด ต บ ป อ
+   * 高辅音（默认声调=high）：ข ฉ ถ ผ ฝ ซ ศ ษ ส ห
+   * 低辅音（默认声调=low）：ค ฅ ฆ ง ช ซ ญ ฑ ฒ ณ ท ธ น พ ฟ ภ ม ย ร ล ว ฮ
+   */
+  const MID_CONSONANTS = new Set(["ก","จ","ฎ","ฏ","ด","ต","บ","ป","อ"]);
+  const HIGH_CONSONANTS = new Set(["ข","ฉ","ถ","ผ","ฝ","ซ","ศ","ษ","ส","ห"]);
+
+  function getConsonantClass(char) {
+    if (MID_CONSONANTS.has(char)) return "mid";
+    if (HIGH_CONSONANTS.has(char)) return "high";
+    return "low";
+  }
+
+  /*
+   * 常见泰语词的声调难度词典
+   * difficulty:1=容易（默认声调）2=中等3=困难（声调易混淆）
+   * toneType: mid/high/low/falling/rising
+   */
+  const TONE_DIFFICULTY = {
+    "สวัสดี": { d: 2, t: "rising" },    // ส(高)+วัต(低)+ดี(.mid) 多音节混合
+    "ขอบคุณ": { d: 2, t: "rising" },    // ค(低)声调上升
+    "กิน": { d: 1, t: "mid" },           // 中辅音+短元音=默认声调
+    "ไป": { d: 1, t: "mid" },            // 中辅音+长元音=默认声调
+    "มา": { d: 1, t: "mid" },            // 中辅音+长元音=默认声调
+    "อยู่": { d: 2, t: "low" },          // ย(低)+ุ=低辅音低调
+    "กําลัง": { d: 3, t: "high" },       // 高辅音+temporal marker
+    "มาก": { d: 2, t: "high" },          // ม(低) but าก pattern
+    "ที่": { d: 2, t: "falling" },       // ท(低)+ี่ = 降调
+    "นี้": { d: 2, t: "falling" },       // น(低)+ี่ = 降调
+    "นี่": { d: 2, t: "falling" },
+    "นั้น": { d: 2, t: "falling" },
+    "จะ": { d: 1, t: "mid" },
+    "ไม่": { d: 2, t: "falling" },       // ม(低)+ไ+่ = 降调
+    "ใช่": { d: 2, t: "falling" },
+    "อะไร": { d: 2, t: "rising" },       // ห(高) async reading
+    "ครับ": { d: 1, t: "high" },         // ค(低)读高调 → 实际是 rising
+    "ค่ะ": { d: 2, t: "falling" },       // ค(低)+่ = 降调
+    "ของ": { d: 1, t: "high" },          // ค(高)声调
+    "ดี": { d: 1, t: "mid" },
+    "สวย": { d: 3, t: "rising" },        // สว(混合辅音)+ว์ = 复杂声调
+    "อร่อย": { d: 3, t: "rising" },     // อ(中)+ร่(低+่=falling)oy = 混合
+    "เรียน": { d: 2, t: "high" },        // ร(低)读高调
+    "ภาษา": { d: 2, t: "rising" },       // พ(低)+า = 低辅音长元音→mid, ษ+า → rising
+    "ไทย": { d: 2, t: "rising" },        // ท(低)+ไ+ย = low+ai→rising
+    "ใหม่": { d: 2, t: "falling" },      // ม(低)+ไ+่ = 降调
+    "เรื่อง": { d: 3, t: "falling" },    // ร(低)+ื้+ว+ง = 降调 复杂
+    "เข้าใจ": { d: 3, t: "falling" },    // ข(高)+้+ใ+จ(中)+ใ+ย = 混合
+    "อยาก": { d: 2, t: "high" },         // ย(低) read high
+    "เหนื่อย": { d: 3, t: "falling" },  // น(低)+ื้+ว+ย = 降调
+  };
+
+  const words = (best.Words || []).map((w) => {
+    const phonemes = (w.PronunciationAssessment?.Phonemes || []).map((p) => ({
+      phoneme: p.Phoneme || "",
+      accuracy: Math.round(p.PronunciationAssessment?.Accuracy ?? 0),
+      errorType: p.PronunciationAssessment?.ErrorType || "None",
+      offset: p.Offset || 0,
+      duration: p.Duration || 0,
+    }));
+    return {
+      word: w.Word || "",
+      accuracy: Math.round(w.AccuracyScore ?? 0),
+      errorType: w.ErrorType || "None",
+      offset: w.Offset || 0,
+      duration: w.Duration || 0,
+      phonemes,
+    };
+  });
+
+  /*
+   * 声调评分（多信号融合模型）：
+   *
+   * 信号 1：辅音分类 → 判断预期声调难度
+   * 信号 2：声调符号 → 有符号=非默认声调，更难
+   * 信号 3：音素准确率 → 元音是声调载体
+   * 信号 4：音素时长 → 声调通过时长变化表达
+   * 信号 5：词典匹配 → 常见词的已知声调难度
+   * 信号 6：错误类型 → Mispronunciation 对声调影响更大
+   */
+
+  const refText = referenceText || "";
+  const refWords = refText.split(/\s+/).filter(Boolean);
+
+  /* 逐词多信号分析 */
+  let weightedSum = 0;
+  let weightTotal = 0;
+  let mispronouncedCount = 0;
+  let toneCriticalErrors = 0; // 声调关键错误
+  let totalToneDifficulty = 0;
+  const toneWords = [];
+
+  for (const w of words) {
+    if (w.errorType === "Omission" || w.errorType === "Insertion") continue;
+
+    const toneMarkCount = (w.word.match(THAI_TONE_MARKS) || []).length;
+
+    /* 辅音分类 → 声调难度 */
+    const firstChar = w.word.charAt(0);
+    const consonantClass = getConsonantClass(firstChar);
+    // 中辅音默认声调=mid（最简单），高/低辅音需要更多声调知识
+    const consonantDifficulty = consonantClass === "mid" ? 1 : consonantClass === "high" ? 2 : 1.5;
+
+    /* 词典匹配 → 已知难度 */
+    const dictEntry = TONE_DIFFICULTY[w.word];
+    const dictDifficulty = dictEntry ? dictEntry.d : consonantDifficulty;
+
+    /* 综合权重 = 声调符号 × 2.5 + 辅音难度 × 1.2 + 词典难度 × 1.5 */
+    const weight = 1 + toneMarkCount * 2.5 + consonantDifficulty * 0.3 + dictDifficulty * 0.5;
+
+    /* 音素级分析 */
+    const vowelPhonemes = w.phonemes.filter(isVowelPhoneme);
+    const allPhonemes = w.phonemes;
+
+    let vowelAccuracy = 100;
+    let phonemeDurationRatio = 1.0;
+
+    if (vowelPhonemes.length > 0) {
+      vowelAccuracy = Math.round(
+        vowelPhonemes.reduce((s, p) => s + p.accuracy, 0) /
+        vowelPhonemes.length
+      );
+    }
+
+    // 时长分析：声调通过元音时长变化表达
+    // 如果有元音且时长很短（<100ms），可能是声调没发完整
+    if (allPhonemes.length > 0) {
+      const totalDuration = allPhonemes.reduce((s, p) => s + p.duration, 0);
+      const avgDuration = totalDuration / allPhonemes.length;
+      phonemeDurationRatio = Math.min(avgDuration / 150, 2.0); // 150ms 为基准
+    }
+
+    // 加权准确率（综合音素+时长）
+    const effectiveAccuracy = w.accuracy * Math.min(phonemeDurationRatio, 1.2);
+    weightedSum += effectiveAccuracy * weight;
+    weightTotal += weight;
+
+    totalToneDifficulty += dictDifficulty;
+
+    if (w.errorType === "Mispronunciation") {
+      mispronouncedCount++;
+      // 声调关键错误：有声调符号或高难度词的读错 = 声调问题
+      if (toneMarkCount > 0 || dictDifficulty >= 2) {
+        toneCriticalErrors++;
+      }
+    }
+
+    toneWords.push({
+      word: w.word,
+      vowelAccuracy,
+      overallAccuracy: w.accuracy,
+      toneMarkCount,
+      consonantClass,
+      consonantDifficulty: Math.round(consonantDifficulty * 10) / 10,
+      dictDifficulty,
+      errorType: w.errorType,
+      phonemeDurationRatio: Math.round(phonemeDurationRatio * 100) / 100,
+    });
+  }
+
+  const overallAccuracy = Math.round(best.AccuracyScore ?? 0);
+  const weightedAccuracy =
+    weightTotal > 0 ? weightedSum / weightTotal : overallAccuracy;
+
+  /*
+   * 声调分 = 加权准确率 × 0.6
+   *        + (1 - 声调关键错误率) × 30
+   *        + (1 - 平均声调难度/3) × 10
+   *        - 错误惩罚
+   */
+  const totalEvaluated =
+    words.filter(
+      (w) => w.errorType !== "Omission" && w.errorType !== "Insertion"
+    ).length || 1;
+
+  const toneCriticalErrorRate = toneCriticalErrors / totalEvaluated;
+  const avgToneDifficulty = totalToneDifficulty / Math.max(toneWords.length, 1);
+  const errorPenalty = Math.round(toneCriticalErrorRate * 30);
+  const difficultyBonus = Math.round((1 - avgToneDifficulty / 3) * 10);
+
+  const tone = Math.max(
+    15,
+    Math.min(
+      100,
+      Math.round(
+        weightedAccuracy * 0.6 +
+        (1 - toneCriticalErrorRate) * 30 +
+        difficultyBonus -
+        errorPenalty
+      )
+    )
+  );
 
   return {
-    transcription:
-      data.DisplayText || best.Display || "",
-    accuracy: Math.round(
-      best.AccuracyScore ?? 0
-    ),
-    fluency: Math.round(
-      best.FluencyScore ?? 0
-    ),
-    completeness: Math.round(
-      best.CompletenessScore ?? 0
-    ),
-    score: Math.round(
-      best.PronScore ?? best.AccuracyScore ?? 0
-    ),
+    transcription: data.DisplayText || best.Display || "",
+    accuracy: overallAccuracy,
+    fluency: Math.round(best.FluencyScore ?? 0),
+    completeness: Math.round(best.CompletenessScore ?? 0),
+    score: Math.round(best.PronScore ?? best.AccuracyScore ?? 0),
+    tone,
     words,
+    toneWords,
   };
 }
 

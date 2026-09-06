@@ -91,10 +91,76 @@ vim .env
 
 ---
 
-## 四、一键部署
+## 四、一键部署（前端卷挂载 · 容器重建不回退）
+
+> ⚠️ 关键：前端 dist 与 nginx 配置**以卷挂载方式**进入容器
+> （`docker-compose.prod.yml` 已将 `./dist` 挂到 `/usr/share/nginx/html`、
+> `./deploy/nginx.conf` 挂到 `/etc/nginx/conf.d/default.conf`）。
+> 容器删除重建后内容是宿主机目录，**不会回退到镜像内烘焙的旧版**——
+> 这是本轮反复白屏（镜像内旧 dist 带 crossorigin）的根治方案。
+
+### 首次部署
 
 ```bash
-docker compose up -d --build
+# 服务器上（项目根目录 = 你的项目路径，如 /opt/thaiai）
+# ⚠️ 必须用 compose v2（`docker compose`）：服务器的 docker-compose v1 与现代 Docker 不兼容（KeyError），勿用
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### 日常更新前端（一键脚本，推荐）
+
+```bash
+# 在开发机（本项目根目录）执行：
+cp deploy/deploy.env.example deploy/deploy.env   # 首次：填服务器地址
+deploy/deploy.sh                                  # 构建 + 备份 + rsync + 重启 + 验证
+
+# 跳过构建直接同步现有 dist：
+deploy/deploy.sh --skip-build
+
+# 脚本自动完成：
+#   1. 本地构建（主目录超时/失败自动回退 /tmp 干净副本，规避 iCloud dataless 卡死）
+#   2. 校验产物（主 JS 引用存在、crossorigin=0）
+#   3. 备份服务器 dist → /opt/thaiai/dist.bak-<时间戳>
+#   4. rsync 同步到 /opt/thaiai/dist（--delete，镜像目录）
+#   5. 重启前端容器（thaiai_frontend*）
+#   6. 验证：本地/线上 JS hash 一致 + crossorigin=0 + 首页/API 200
+#      任一失败自动回滚到备份并退出非零
+# SSHPASS 通过环境变量传入：export SSHPASS='密码' 后再运行
+```
+
+### 容器编排已归一化到 compose（2026-09-06 起）
+
+- `docker-compose.prod.yml` 为两个服务都加了 **`container_name`**（`thaiai_backend` / `thaiai_frontend`），
+  compose 全权管理固定容器名，**不再产生 `thaiai_backend_1` 这类漂移副本**；
+  nginx 上游 `upstream thaiai_backend` 直连该名，无需改动。
+- 服务器需用 **compose v2**：已安装为 Docker CLI 插件（`docker compose version` → v5.5.1）。
+  旧的 `docker-compose`（v1.29）会因 BuildKit 镜像缺 `ContainerConfig` 报 KeyError，勿再使用。
+- 服务器 `/opt/thaiai/docker-compose.yml` 已是指向 `docker-compose.prod.yml` 的**符号链接**
+  （旧的微信支付变体已备份为 `docker-compose.yml.legacy-*`），任何调用方式读到的都是同一份配置。
+- 两端数据都在宿主机卷（`./data`、`./dist`、`./certs`、`./deploy/nginx.conf`），compose 重建不丢。
+
+### 需要重建容器时（如改端口/依赖/后端代码）
+
+```bash
+cd /opt/thaiai
+# 重建+重启后端（先同步 backend 源码到服务器，如 streak/plan 那轮）：
+docker compose -f docker-compose.prod.yml build backend
+docker compose -f docker-compose.prod.yml up -d backend
+# 仅重建前端容器（dist 卷挂载，内容不动）：
+docker compose -f docker-compose.prod.yml up -d frontend
+# 或整体重建两端：
+docker compose -f docker-compose.prod.yml up -d
+```
+
+> 幂等：容器名固定后重复执行 `up -d` 只会显示 `Running`，不会重建、不会产生 `_1` 副本。
+
+### 回滚
+
+```bash
+# 方式一：用脚本输出的备份路径（每次部署都会打印）
+ssh root@<server> 'rm -rf /opt/thaiai/dist && cp -a /opt/thaiai/dist.bak-<时间戳> /opt/thaiai/dist'
+
+# 方式二：把旧 dist 重新上传覆盖 /opt/thaiai/dist 即可，无需动容器
 ```
 
 验证：
@@ -104,11 +170,14 @@ docker compose up -d --build
 curl -s https://your-domain.com/api/payments/status
 # → {"enabled":false,"channels":[],"plans":{...}} （未配支付时 enabled:false）
 
-# 前端首页
-curl -sI https://your-domain.com | head -1   # → HTTP/1.1 200
+# 前端首页 + 最新构建 hash + 无 crossorigin + no-cache 头
+curl -sI https://your-domain.com | head -1                     # → HTTP/1.1 200
+curl -s https://your-domain.com/ | grep -o 'index-[A-Za-z0-9_-]*\.js'
+curl -s https://your-domain.com/ | grep -c crossorigin         # → 0（无输出）
+curl -sI https://your-domain.com/ | grep -i cache-control      # → no-cache, must-revalidate
 
 # 日志
-docker compose logs -f backend
+docker logs -f thaiai_backend
 ```
 
 ---

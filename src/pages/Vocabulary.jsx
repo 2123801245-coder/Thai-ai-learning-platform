@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { preloadThaiAudio } from "@/lib/audioManager";
+import { getLocalTtsUrl } from "@/lib/thaiSpeech";
 import { base44 } from "@/api/base44Client";
 import { getVocabulary } from "@/api/vocabulary";
 import AddVocabDialog from "@/components/vocabulary/AddVocabDialog";
@@ -299,6 +301,29 @@ export default function Vocabulary() {
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE
   );
+
+  /* 预加载当前页可见词汇的音频（限前 12 个，避免一次性请求风暴）：
+     用户点击 🔊 前先把本页词条的 TTS 拉入缓存 → 点击即播、无等待 */
+  useEffect(() => {
+    if (
+      typeof document !== "undefined" &&
+      document.hidden
+    ) {
+      return;
+    }
+    if (!pageData.length) return;
+    const urls = pageData
+      .slice(0, 12)
+      .map((item) =>
+        item.thai_word
+          ? getLocalTtsUrl(item.thai_word, 0.75)
+          : null
+      )
+      .filter(Boolean);
+    if (urls.length) preloadThaiAudio(urls);
+    // pageData 是每次渲染的新数组，用其内容签名做依赖，避免每次都触发
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, page]);
 
   /* =========================
      页码

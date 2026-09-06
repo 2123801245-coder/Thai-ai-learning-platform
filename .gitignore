@@ -39,9 +39,15 @@ backend/uploads
 
 # 生成物 / 大文件（不入库）
 _extract/
+# 一次性字幕提取产物（scratch，不入库）
+subtitles/
+subtitle_refine.py
 backend/videos/
 backend/thaiai.db
 .freebuff/
 
 # .env.example 是公开模板，允许入库
 !.env.example
+
+# 部署配置（含服务器信息，不入库）
+deploy/deploy.env

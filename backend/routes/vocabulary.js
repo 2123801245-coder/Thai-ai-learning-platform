@@ -329,10 +329,15 @@ router.post("/quiz/record", authenticate, (req, res) => {
     source,
     correct,
     total,
+    hintUsed,
+    hintCorrect,
   } = req.body || {};
 
   const c = Math.max(0, Math.round(Number(correct) || 0));
   const t = Math.max(0, Math.round(Number(total) || 0));
+  // 提示统计：看过提示的题数 / 看完提示后答对的题数（均不超过本轮总题数）
+  const hu = Math.min(t, Math.max(0, Math.round(Number(hintUsed) || 0)));
+  const hc = Math.min(t, Math.max(0, Math.round(Number(hintCorrect) || 0)));
 
   if (!t) {
     return res.status(400).json({ message: "缺少测验数据" });
@@ -341,8 +346,8 @@ router.post("/quiz/record", authenticate, (req, res) => {
   db.run(
     `INSERT INTO vocab_quiz_records (
        user_id, date, quiz_type, difficulty, source,
-       correct, total, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+       correct, hint_used, hint_correct, total, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     [
       req.userId,
       thaiToday(),
@@ -350,6 +355,8 @@ router.post("/quiz/record", authenticate, (req, res) => {
       String(difficulty || "all").slice(0, 20),
       source === "wrong" ? "wrong" : "book",
       c,
+      hu,
+      hc,
       t,
     ],
     (err) => {
@@ -364,7 +371,7 @@ router.post("/quiz/record", authenticate, (req, res) => {
 
 router.get("/quiz/stats", authenticate, (req, res) => {
   db.all(
-    `SELECT id, date, quiz_type, difficulty, source, correct, total, created_at
+    `SELECT id, date, quiz_type, difficulty, source, correct, hint_used, hint_correct, total, created_at
      FROM vocab_quiz_records
      WHERE user_id = ?
      ORDER BY created_at DESC, id DESC`,
@@ -380,6 +387,8 @@ router.get("/quiz/stats", authenticate, (req, res) => {
 
       let correctSum = 0;
       let totalSum = 0;
+      let hintUsedSum = 0;
+      let hintCorrectSum = 0;
       let bestRate = 0;
       let bestScore = { correct: 0, total: 0 };
       let todaySessions = 0;
@@ -390,6 +399,8 @@ router.get("/quiz/stats", authenticate, (req, res) => {
       for (const r of list) {
         correctSum += r.correct || 0;
         totalSum += r.total || 0;
+        hintUsedSum += r.hint_used || 0;
+        hintCorrectSum += r.hint_correct || 0;
         if (r.date === today) todaySessions++;
         bySource[r.source === "wrong" ? "wrong" : "book"] =
           (bySource[r.source === "wrong" ? "wrong" : "book"] || 0) + 1;
@@ -418,6 +429,9 @@ router.get("/quiz/stats", authenticate, (req, res) => {
         accuracy: totalSum > 0 ? Math.round((correctSum / totalSum) * 100) : 0,
         totalQuestions: totalSum,
         correctQuestions: correctSum,
+        hintUsedQuestions: hintUsedSum,
+        hintCorrectQuestions: hintCorrectSum,
+        hintUsageRate: totalSum > 0 ? Math.round((hintUsedSum / totalSum) * 100) : 0,
         bestScore,
         bestAccuracy: bestScore.total > 0 ? Math.round((bestScore.correct / bestScore.total) * 100) : 0,
         byType: Object.entries(byType).map(([type, count]) => ({
@@ -436,6 +450,8 @@ router.get("/quiz/stats", authenticate, (req, res) => {
           source: r.source === "wrong" ? "wrong" : "book",
           sourceLabel: SOURCE_LABELS[r.source === "wrong" ? "wrong" : "book"] || "词书测验",
           correct: r.correct || 0,
+          hintUsed: r.hint_used || 0,
+          hintCorrect: r.hint_correct || 0,
           total: r.total || 0,
           createdAt: r.created_at,
         })),

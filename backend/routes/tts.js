@@ -1,6 +1,10 @@
 // backend/routes/tts.js
-// GET /api/tts?text=สวัสดี&rate=0.78&voice=th-TH-PremwadeeNeural
+// GET /api/tts?text=สวัสดี&rate=0.78&voice=th-TH-PremwadeeNeural&v=4
 // 返回 audio/wav（首选 macOS say/Kanya，回退 Edge TTS；内存缓存）
+//
+// v 参数 = 音频格式版本（前端 getLocalTtsUrl 固定传 v=4，WAV 格式）。
+// 带合法 v≥4 的请求允许浏览器/CDN 长缓存（immutable），消除重复播放
+// 的重复下载卡顿；无 v 或旧版本的请求保持 no-store（格式切换期防旧缓存）。
 
 import { Router } from "express";
 import {
@@ -44,15 +48,20 @@ router.get("/tts", async (req, res) => {
   const pitch = pitchToProsody(req.query.pitch); // Edge prosody 格式
   const pitchNum = Number(req.query.pitch) || 1; // say 路线数字音调
 
-  // 缓存命中直接返回
-  const cached = ttsCacheGet(text, voice, rate, pitch);
+  // v 参数（音频格式版本，≥4 表示 WAV 时代）→ 允许浏览器/CDN 长缓存。
+  // 低于 v4 / 无 v 的旧请求保持 no-store（防历史 MP3 旧缓存被误用）。
+  const v = Number(req.query.v);
+  const allowBrowserCache = Number.isInteger(v) && v >= 4;
+  const cacheControl = allowBrowserCache
+    ? "public, max-age=31536000, immutable"
+    : "no-store";
+
+  // 缓存命中直接返回（key 含 v，格式升级后旧缓存自动失效）
+  const cached = ttsCacheGet(text, voice, rate, pitch, v);
   if (cached) {
     res.set({
       "Content-Type": "audio/wav",
-      // 不能开浏览器缓存：输出格式曾从 MP3 改为 WAV，旧缓存会导致
-      // 已访问过该 URL 的浏览器继续拿旧 MP3（无法解码）。
-      // 内存缓存（tts.js）已承担去重，HTTP 层无需再缓存。
-      "Cache-Control": "no-store",
+      "Cache-Control": cacheControl,
       "X-TTS-Cache": "hit",
     });
     return res.send(cached);
@@ -60,10 +69,10 @@ router.get("/tts", async (req, res) => {
 
   try {
     const audio = await synthesizeThai(text, { voice, rate, rateNum, pitch, pitchNum });
-    ttsCacheSet(text, voice, rate, pitch, audio);
+    ttsCacheSet(text, voice, rate, pitch, v, audio);
     res.set({
       "Content-Type": "audio/wav",
-      "Cache-Control": "no-store",
+      "Cache-Control": cacheControl,
       "X-TTS-Cache": "miss",
     });
     return res.send(audio);

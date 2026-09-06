@@ -39,8 +39,7 @@ const WSS_URL =
 
 // 输出格式：MP3（audio-24khz-96kbitrate-mono-mp3）。
 // 注意：Edge 服务端只接受 MP3 格式（其他格式一律 1007 拒绝）；
-// 码率必须用 96kbps——默认 48kbps 的压缩噪声明显（高频能量高 3.4 倍，
-// 听感发闷、带“电音”），96kbps 干净很多。
+// 96kbps 是稳定且质量较好的选择，48kHz 格式连接不稳定。
 const OUTPUT_FORMAT = "audio-24khz-96kbitrate-mono-mp3";
 
 const MAX_TEXT_BYTES = 4096; // edge-tts 的分包上限（UTF-8 字节）
@@ -392,18 +391,26 @@ async function convertToWav(mp3Buffer) {
       );
     } catch (e) {
       // afconvert 不存在（Linux 容器）或转换失败 → ffmpeg 兜底
+      // 优化参数：44.1kHz 采样率 + 轻度低通滤波去高频噪声
       console.warn("[tts] afconvert 不可用，改用 ffmpeg 转 WAV:", e.message);
       await execFileAsync(
         "ffmpeg",
-        ["-y", "-i", inPath, "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", outPath],
+        [
+          "-y", "-i", inPath,
+          "-af", "lowpass=f=12000,aresample=44100",
+          "-ac", "1",
+          "-ar", "44100",
+          "-c:a", "pcm_s16le",
+          outPath,
+        ],
         { timeout: 30000 }
       );
     }
     const wav = await readFile(outPath);
     // Edge 的 MP3 响度极满（实测峰值 1.000、多处削波，听感发燥带“电音”），
-    // 解码成 WAV 后仍会削波。这里做纯 PCM 增益衰减：峰值超过 0.85 就整体
-    // 压到 0.85，消除削波爆音；峰值未超则原样返回（say 路线不受影响）。
-    return applyWavPeakLimit(wav, 0.85);
+    // 解码成 WAV 后仍会削波。这里做纯 PCM 增益衰减：峰值超过 0.80 就整体
+    // 压到 0.80，消除削波爆音；峰值未超则原样返回（say 路线不受影响）。
+    return applyWavPeakLimit(wav, 0.80);
   } finally {
     await unlink(inPath).catch(() => {});
     await unlink(outPath).catch(() => {});
@@ -448,16 +455,18 @@ function applyWavPeakLimit(wavBuf, target) {
 const cache = new Map();
 const CACHE_MAX = 500;
 
-function cacheKey(text, voice, rate, pitch) {
-  return `${voice}|${rate}|${pitch}|${text}`;
+// 缓存 key 含音频格式版本（v）：格式升级后旧缓存自动失效，
+// 避免新版请求命中旧格式（如历史 MP3→WAV 切换）的缓存字节。
+function cacheKey(text, voice, rate, pitch, version) {
+  return `${voice}|${rate}|${pitch}|v${version || 0}|${text}`;
 }
 
-export function ttsCacheGet(text, voice, rate, pitch) {
-  return cache.get(cacheKey(text, voice, rate, pitch)) || null;
+export function ttsCacheGet(text, voice, rate, pitch, version) {
+  return cache.get(cacheKey(text, voice, rate, pitch, version)) || null;
 }
 
-export function ttsCacheSet(text, voice, rate, pitch, buf) {
-  const key = cacheKey(text, voice, rate, pitch);
+export function ttsCacheSet(text, voice, rate, pitch, version, buf) {
+  const key = cacheKey(text, voice, rate, pitch, version);
   cache.set(key, buf);
   if (cache.size > CACHE_MAX) {
     const firstKey = cache.keys().next().value;

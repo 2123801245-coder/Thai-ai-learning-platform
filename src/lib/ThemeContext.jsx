@@ -73,29 +73,31 @@ export function ThemeProvider({ children }) {
     root.classList.toggle("dark", dark);
 
     // 2) 颜色变量
-    //    - 深色模式：整体底色 = 预设/自定义的 background，切换预设会改变整体色调
-    //    - 浅色模式：纯白底黑字（预设的亮色基调仅影响强调色），保证可读
-    //    - system：跟随系统偏好，深则用预设底色、浅则纯白
+    //    深色和浅色分别使用预设自己的调色板；自定义颜色仍然覆盖预设。
+    //    这样浅色模式不再只是「白底 + 一套强调色」，六个主题会保留各自气质。
     const isDarkMode = (() => {
       if (forceLight) return false;
       if (m === "dark") return true;
       if (m === "light") return false;
       return window.matchMedia("(prefers-color-scheme: dark)").matches;
     })();
-    const resolvedBg = isDarkMode ? (effective.background || "#0f1a1e") : "#FFFFFF";
-    const resolvedText = isDarkMode ? "#FFFFFF" : "#111111";
-    const resolvedCard = isDarkMode
+    const palette = isDarkMode
+      ? effective
+      : { ...(preset?.lightColors || effective), ...(customColors || {}) };
+    const resolvedBg = palette.background || (isDarkMode ? "#0f1a1e" : "#FFFFFF");
+    const resolvedText = palette.text || (isDarkMode ? "#FFFFFF" : "#111111");
+    const resolvedCard = palette.surface || (isDarkMode
       ? "rgba(255,255,255,0.07)"
-      : "rgba(0,0,0,0.05)";
+      : "rgba(255,255,255,0.78)");
     const colorMap = {
-      "--tp-primary": effective.primary,
-      "--tp-secondary": effective.secondary,
-      "--tp-accent": effective.accent,
+      "--tp-primary": palette.primary,
+      "--tp-secondary": palette.secondary,
+      "--tp-accent": palette.accent,
       "--tp-bg": resolvedBg,
       "--tp-card": resolvedCard,
       "--tp-text": resolvedText,
-      "--tp-glow": effective.primary,
-      "--tp-glow-accent": effective.accent,
+      "--tp-glow": palette.primary,
+      "--tp-glow-accent": palette.accent,
     };
     Object.entries(colorMap).forEach(([k, v]) => (v ? root.style.setProperty(k, v) : root.style.removeProperty(k)));
 
@@ -148,6 +150,8 @@ export function ThemeProvider({ children }) {
 
   const value = useMemo(() => ({
     ...resolved,
+    // 对外统一使用 theme，内部状态仍保留 themeId，兼容现有选择器 API。
+    theme: themeId,
     setTheme: setThemeId,
     setMode,
     customColors: customColors || {},

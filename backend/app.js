@@ -22,6 +22,7 @@ import notificationsRouter from "./routes/notifications.js";
 import paymentsRouter from "./routes/payments.js";
 import newsRouter from "./routes/news.js";
 import aiTeacherRouter from "./routes/aiTeacher.js";
+import planRouter from "./routes/plan.js";
 dotenv.config();
 
 const app = express();
@@ -274,6 +275,10 @@ app.use(
 app.use(
   "/api/ai",
   aiTeacherRouter
+);
+app.use(
+  "/api/plan",
+  planRouter
 );
 // ============================================================
 // 首页

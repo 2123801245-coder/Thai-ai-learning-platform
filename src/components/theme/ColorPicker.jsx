@@ -1,9 +1,13 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 /* 颜色选择器：原生色盘 + HEX/RGBA 输入框 */
 export default function ColorPicker({ label, en, value, onChange }) {
   const [text, setText] = useState(value || "");
-  const isDark = true; // 面板位于深色设置中
+
+  // 预设或明暗模式切换后，同步输入框，避免仍显示上一套主题的颜色值。
+  useEffect(() => {
+    setText(value || "");
+  }, [value]);
 
   function handleText(v) {
     setText(v);
