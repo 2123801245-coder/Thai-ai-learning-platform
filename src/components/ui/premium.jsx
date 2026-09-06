@@ -51,7 +51,7 @@ export function RippleButton({
 
   return (
     <button
-      className={`relative overflow-hidden ${className}`}
+      className={`relative overflow-hidden apple-button ${className}`}
       onClick={handleClick}
       {...props}
     >
@@ -116,7 +116,7 @@ export function GlassCard({
   return (
     <div
       className={`
-        relative
+        apple-material
         rounded-3xl
         ${toneClass}
         ${hover ? "card-lift" : ""}
@@ -176,8 +176,9 @@ export function PremiumButton({
     <motion.button
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.97 }}
-      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+      transition={{ type: "spring", stiffness: 420, damping: 38, mass: 1 }}
       className={`
+        apple-button
         inline-flex
         items-center
         justify-center
@@ -213,7 +214,7 @@ export function PageHeader({
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className={`relative mb-8 ${className}`}
+      className={`relative mb-8 apple-page-header ${className}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-4">

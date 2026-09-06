@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, CheckCircle2, XCircle, RotateCcw, ArrowRight } from "lucide-react";
 import WordBookPicker from "@/components/practice/WordBookPicker";
+import { speakThai } from "@/lib/thaiSpeech";
 import { mergeBooks, generateFillQuestions, getSavedBookId, saveBookId, fetchWrongBook, recordWrongWord, formatWrongDate, getVocabBooks } from "@/lib/wordBooks";
 
 /* 词书来源统一使用 getVocabBooks()（与词汇学习板块一致）
@@ -164,12 +165,9 @@ function shuffle(arr) {
 }
 
 function speak(text) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "th-TH";
-  u.rate = 0.8;
-  window.speechSynthesis.speak(u);
+  if (!text) return;
+  // 统一走 speakThai：单实例播放 + 缓存 + 多层兜底
+  speakThai(text, { rate: 0.8 });
 }
 
 export default function SentenceFill() {

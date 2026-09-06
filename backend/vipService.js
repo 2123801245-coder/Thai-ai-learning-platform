@@ -78,6 +78,7 @@ export function extendVipDays(db, userId, days, source) {
               alipay: "支付宝",
               card: "在线支付（卡）",
               stripe: "在线支付",
+              streak: "连续打卡奖励",
             }[source] || "激活码";
 
             createNotification({

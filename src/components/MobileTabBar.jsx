@@ -40,7 +40,7 @@ export default function MobileTabBar() {
   const aiActive = isActive(location.pathname, aiTab.path);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.08] bg-[#121e24]/92 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_32px_rgba(0,0,0,.3)] backdrop-blur-2xl md:hidden">
+    <nav className="apple-mobile-tabbar fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.08] bg-[#121e24]/92 pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_32px_rgba(0,0,0,.3)] backdrop-blur-2xl md:hidden" aria-label="主导航">
       <div className="relative mx-auto flex h-[4.25rem] max-w-lg items-stretch justify-around px-1">
         {/* 左侧两个 Tab */}
         {tabs.slice(0, 2).map((tab) => {
@@ -52,7 +52,7 @@ export default function MobileTabBar() {
               key={tab.path}
               to={tab.path}
               onMouseEnter={() => prefetchRoute(tab.path)}
-              className={`relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 transition-all ${
+              className={`apple-tab-item relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 transition-all ${
                 active
                   ? "text-emerald-400"
                   : "text-white/40 hover:text-white/70"
@@ -87,7 +87,7 @@ export default function MobileTabBar() {
               key={tab.path}
               to={tab.path}
               onMouseEnter={() => prefetchRoute(tab.path)}
-              className={`relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 transition-all ${
+              className={`apple-tab-item relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 transition-all ${
                 active
                   ? "text-emerald-400"
                   : "text-white/40 hover:text-white/70"
@@ -111,7 +111,7 @@ export default function MobileTabBar() {
           to={aiTab.path}
           onMouseEnter={() => prefetchRoute(aiTab.path)}
           aria-label={aiTab.label}
-          className="relative z-10 -mt-5 flex w-[4.75rem] shrink-0 flex-col items-center justify-start gap-0.5"
+          className="apple-ai-tab relative z-10 -mt-5 flex w-[4.75rem] shrink-0 flex-col items-center justify-start gap-0.5"
         >
           <span
             className={`relative flex h-[3.4rem] w-[3.4rem] items-center justify-center rounded-full border transition-all ${
@@ -156,8 +156,7 @@ export default function MobileTabBar() {
             <Link
               key={profileTab.path}
               to={profileTab.path}
-              onMouseEnter={() => prefetchRoute(profileTab.path)}
-              className={`relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 transition-all ${
+              onMouseEnter={() => prefetchRoute(profileTab.path)}className={`apple-tab-item relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 transition-all ${
                 active
                   ? "text-emerald-400"
                   : "text-white/40 hover:text-white/70"

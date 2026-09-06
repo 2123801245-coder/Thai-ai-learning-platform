@@ -62,6 +62,8 @@ import { API_BASE_URL, SERVER_BASE_URL } from "@/lib/api";
 import { getNewsListeningStats } from "@/api/newsListening";
 import { getVocabQuizStats } from "@/api/vocabStats";
 import { getAiTeacherMemory, updateAiTeacherMemory } from "@/api/aiTeacher";
+import { getPlanOverview } from "@/api/plan";
+import { ImagePlus, Trash2, Link2 } from "lucide-react";
 
 const getAvatarUrl = (avatar) => {
   if (!avatar) return "/default-avatar.png";
@@ -248,6 +250,31 @@ export default function Profile() {
     };
   }, []);
 
+  // ============================================================
+  // 学习计划概览（连续完成 / 累计学习天数，来自服务端）
+  // ============================================================
+
+  const [planOverview, setPlanOverview] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setPlanOverview(null);
+      return;
+    }
+    getPlanOverview()
+      .then((r) => {
+        if (alive) setPlanOverview(r.data || null);
+      })
+      .catch(() => {
+        if (alive) setPlanOverview(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const fileInputRef = useRef(null);
 
   // ============================================================
@@ -262,6 +289,14 @@ export default function Profile() {
 
   const streak =
     learning?.learning_streak || 0;
+
+  // 服务端连续打卡天数（登录且已同步时优先显示真实连续记录）
+  const serverStreak =
+    planOverview?.streak ?? null;
+  const serverTotalDays =
+    planOverview?.totalDays ?? null;
+  const displayStreak =
+    serverStreak != null ? serverStreak : streak;
 
   const totalVocab =
     learning?.total_vocabulary || 0;
@@ -451,141 +486,6 @@ export default function Profile() {
   };
 
   // ============================================================
-  // 上传头像
-  // ============================================================
-
-  const handleAvatarChange = async (event) => {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
-    setAvatarError("");
-
-    const allowedTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-      "image/gif",
-    ];
-
-    if (!allowedTypes.includes(file.type)) {
-      setAvatarError(
-        "只允许 JPG、PNG、WEBP 或 GIF 图片"
-      );
-
-      event.target.value = "";
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setAvatarError("头像图片不能超过 5MB");
-
-      event.target.value = "";
-      return;
-    }
-
-    try {
-      setUploading(true);
-
-      const token = localStorage.getItem("token");
-
-      if (!token) {
-        setAvatarError(
-          "登录状态已失效，请重新登录"
-        );
-        return;
-      }
-
-      const formData = new FormData();
-
-      formData.append(
-        "avatar",
-        file,
-        file.name
-      );
-
-      const response = await axios.post(
-        `${API_BASE_URL}/auth/avatar`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const avatarPath =
-        response.data?.avatar;
-
-      if (!avatarPath) {
-        throw new Error(
-          "服务器没有返回头像地址"
-        );
-      }
-
-      const avatarUrl =
-        getAvatarUrl(avatarPath);
-
-      // ========================================================
-      // 立即更新 Profile
-      // ========================================================
-
-      setAvatar(avatarUrl);
-
-      const updatedUser = {
-        ...user,
-        avatar: avatarPath,
-      };
-
-      setUser(updatedUser);
-
-      // ========================================================
-      // 同步 localStorage
-      // ========================================================
-
-      localStorage.setItem(
-        "user",
-        JSON.stringify(updatedUser)
-      );
-
-      // ========================================================
-      // 关键：同步 AuthContext
-      // 让侧边栏头像立即更新
-      // ========================================================
-
-      if (updateAvatar) {
-        updateAvatar(avatarPath);
-      } else if (updateUser) {
-        updateUser(updatedUser);
-      }
-
-      setAvatarError("");
-    } catch (error) {
-      console.error(
-        "Avatar upload error:",
-        error
-      );
-
-      console.error(
-        "服务器返回:",
-        error.response?.data
-      );
-
-      const message =
-        error.response?.data?.message;
-
-      setAvatarError(
-        message ||
-          "头像上传失败，请稍后重试"
-      );
-    } finally {
-      setUploading(false);
-
-      event.target.value = "";
-    }
-  };
-
-  // ============================================================
   // 开始修改昵称
   // ============================================================
 
@@ -721,6 +621,142 @@ export default function Profile() {
       );
     } finally {
       setSavingNickname(false);
+    }
+  };
+
+  // ============================================================
+  // 头像：本地压缩（>800KB 压缩到 ≤800px JPEG）再上传，手机大图也能传
+  // ============================================================
+
+  const compressAvatar = (file) =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        try {
+          const MAX = 800;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            const ratio = Math.min(MAX / width, MAX / height);
+            width = Math.round(width * ratio);
+            height = Math.round(height * ratio);
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              URL.revokeObjectURL(url);
+              if (blob) {
+                resolve(new File([blob], "avatar.jpg", { type: "image/jpeg" }));
+              } else {
+                reject(new Error("图片压缩失败"));
+              }
+            },
+            "image/jpeg",
+            0.88
+          );
+        } catch (err) {
+          URL.revokeObjectURL(url);
+          reject(err);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("图片读取失败"));
+      };
+      img.src = url;
+    });
+
+  const handleAvatarChange = async (event) => {
+    const rawFile = event.target.files?.[0];
+    if (!rawFile) return;
+    setAvatarError("");
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(rawFile.type)) {
+      setAvatarError("只允许 JPG、PNG、WEBP 或 GIF 图片");
+      event.target.value = "";
+      return;
+    }
+    if (rawFile.size > 10 * 1024 * 1024) {
+      setAvatarError("头像图片不能超过 10MB");
+      event.target.value = "";
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setAvatarError("登录状态已失效，请重新登录");
+      event.target.value = "";
+      return;
+    }
+
+    // 先本地预览
+    const previewUrl = URL.createObjectURL(rawFile);
+    setAvatar(previewUrl);
+
+    try {
+      setUploading(true);
+      // 大图压缩（PNG/GIF 转 JPEG 会变小很多）
+      const file = rawFile.size > 800 * 1024 ? await compressAvatar(rawFile) : rawFile;
+
+      const formData = new FormData();
+      formData.append("avatar", file, "avatar.jpg");
+      const response = await axios.post(`${API_BASE_URL}/auth/avatar`, formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const avatarPath = response.data?.avatar;
+      if (!avatarPath) throw new Error("服务器没有返回头像地址");
+
+      const avatarUrl = getAvatarUrl(avatarPath);
+      setAvatar(avatarUrl);
+      const updatedUser = { ...user, avatar: avatarPath };
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      if (updateAvatar) updateAvatar(avatarPath);
+      else if (updateUser) updateUser(updatedUser);
+      setAvatarError("");
+    } catch (error) {
+      console.error("Avatar upload error:", error);
+      // 失败时回退到原头像
+      setAvatar(getAvatarUrl(user?.avatar));
+      setAvatarError(error.response?.data?.message || "头像上传失败，请稍后重试");
+    } finally {
+      setUploading(false);
+      URL.revokeObjectURL(previewUrl);
+      event.target.value = "";
+    }
+  };
+
+  // ============================================================
+  // 移除头像（恢复默认）
+  // ============================================================
+
+  const handleRemoveAvatar = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setAvatarError("");
+    try {
+      setUploading(true);
+      const response = await axios.put(
+        `${API_BASE_URL}/auth/profile`,
+        { avatar: null },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const avatarPath = response.data?.user?.avatar || null;
+      setAvatar("/default-avatar.png");
+      const updatedUser = { ...user, avatar: avatarPath };
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      if (updateAvatar) updateAvatar(avatarPath);
+      else if (updateUser) updateUser(updatedUser);
+    } catch (error) {
+      setAvatarError(error.response?.data?.message || "移除头像失败，请稍后重试");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -1025,18 +1061,39 @@ export default function Profile() {
                   )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={
-                    handleSelectAvatar
-                  }
-                  disabled={uploading}
-                  className="mt-3 text-xs text-emerald-300/70 transition hover:text-emerald-300"
-                >
-                  {uploading
-                    ? "正在上传..."
-                    : "点击头像更换头像"}
-                </button>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSelectAvatar}
+                    disabled={uploading}
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-300/20 bg-emerald-400/[0.08] px-3 py-1.5 text-[11px] font-medium text-emerald-300/90 transition hover:bg-emerald-400/15 disabled:opacity-50"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    {uploading ? "上传中…" : "更换头像"}
+                  </button>
+                  {user?.avatar && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAvatar}
+                      disabled={uploading}
+                      className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-medium text-white/45 transition hover:border-red-300/25 hover:text-red-300/90 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      移除
+                    </button>
+                  )}
+                  {planOverview?.reward && (
+                    <button
+                      type="button"
+                      onClick={() => navigate("/plan")}
+                      className="inline-flex items-center gap-1 rounded-full border border-yellow-300/20 bg-yellow-300/[0.06] px-3 py-1.5 text-[11px] font-medium text-yellow-200/80 transition hover:bg-yellow-300/[0.12]"
+                      title="连续完成每日计划，满 7 天送 3 天 VIP"
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      连续 {planOverview.streak} 天 · 距下次奖励 {planOverview.reward.daysToNext} 天
+                    </button>
+                  )}
+                </div>
 
                 {avatarError && (
                   <p className="mt-2 text-xs text-red-400">
@@ -1128,10 +1185,17 @@ export default function Profile() {
 
         <ProfileStat
           icon={Flame}
-          label="学习天数"
-          value={streak}
-          description="连续学习天数"
+          label="连续学习"
+          value={displayStreak}
+          description={serverTotalDays != null ? `累计打卡 ${serverTotalDays} 天` : "连续完成每日计划天数"}
           highlight
+        />
+
+        <ProfileStat
+          icon={CalendarDays}
+          label="学习天数"
+          value={serverTotalDays != null ? serverTotalDays : Math.max(displayStreak, learning?.daily_history?.length || 0)}
+          description="有学习记录的天数"
         />
 
         <ProfileStat

@@ -824,12 +824,12 @@ export default function SpeakingRecorder({
 
       /* 只接受专业评分结果（本地降级结果不覆盖） */
 
-      if (data.source !== "azure") return;      /* 声调估算：基于 Azure accuracy + 错误类型 */
-      const mispronounced = (data.words || []).filter(w => w.errorType === "Mispronunciation").length;
-      const totalWords = (data.words || []).length || 1;
-      const toneBase = data.accuracy || data.score || 70;
-      const tonePenalty = Math.round((mispronounced / totalWords) * 25);
-      const tone = Math.max(20, Math.min(100, toneBase - tonePenalty));
+      if (data.source !== "azure") return;
+
+      /* 声调评分：优先使用后端基于音素+声调符号的精确评分 */
+      const tone =
+        data.tone ??
+        Math.round(data.accuracy || data.score || 70);
 
       setResult((prev) => ({
         ...(prev || {}),
@@ -846,9 +846,10 @@ export default function SpeakingRecorder({
           tone,
         },
         words: data.words || [],
+        toneWords: data.toneWords || [],
         feedback: data.feedback,
         tips: data.tips,
-        coaching: generateCoaching(data.score, data.accuracy, data.fluency, data.completeness, tone, data.words || []),
+        coaching: generateCoaching(data.score, data.accuracy, data.fluency, data.completeness, tone, data.words || [], data.toneWords || []),
       }));
 
       /* 专业评分到达：取消本地延迟上报，直接上报 Azure 分 */
@@ -2044,7 +2045,7 @@ function DimensionChip({ label, value = null, pending = false }) {
    AI 口语教练 — 生成个性化教练反馈
 ========================================================= */
 
-function generateCoaching(score, accuracy, fluency, completeness, tone, words) {
+function generateCoaching(score, accuracy, fluency, completeness, tone, words, toneWords = []) {
   const weakest = [
     { dim: "发音", val: accuracy },
     { dim: "声调", val: tone },
@@ -2087,6 +2088,27 @@ function generateCoaching(score, accuracy, fluency, completeness, tone, words) {
 
   if (tone < 65) {
     tips.push("泰语有5个声调，声调不同意思完全不同。建议重点练习声调对比。");
+    // 找出声调关键错误最多的词（dictDifficulty 高 + 元音准确率低）
+    const criticalToneWords = toneWords
+      .filter((tw) => (tw.errorType === "Mispronunciation") && (tw.dictDifficulty >= 2 || tw.toneMarkCount > 0))
+      .sort((a, b) => b.dictDifficulty - a.dictDifficulty)
+      .slice(0, 3);
+    if (criticalToneWords.length > 0) {
+      const wordList = criticalToneWords.map((tw) => tw.word).join("、");
+      tips.push(`重点纠正：${wordList} —— 这些词声调较复杂，多听标准发音后模仿。`);
+    }
+    // 辅音分类提示
+    const highLowWords = toneWords.filter((tw) => tw.consonantClass === "high" || tw.consonantClass === "low");
+    if (highLowWords.length > 2) {
+      tips.push(`你练习的词多含高/低辅音，注意辅音类别对声调的影响。`);
+    }
+  } else if (tone < 80) {
+    const slightlyOff = toneWords
+      .filter((tw) => tw.errorType === "Mispronunciation" && tw.toneMarkCount > 0)
+      .slice(0, 2);
+    if (slightlyOff.length > 0) {
+      tips.push(`留意声调：${slightlyOff.map((w) => w.word).join("、")}，元音发音还可以再饱满一点。`);
+    }
   }
   if (fluency < 65) {
     tips.push("朗读时注意连贯性，不要一个字一个字地蹦，试着把词组连起来读。");

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node -e \"const fs=require('fs');const f='dist/index.html';if(fs.existsSync(f)){let h=fs.readFileSync(f,'utf8');h=h.replace(/ crossorigin/g,'');fs.writeFileSync(f,h);console.log('stripped crossorigin')}\"",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",

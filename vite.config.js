@@ -43,5 +43,10 @@ export default defineConfig({
         },
       },
     },
+    // 禁用 modulepreload polyfill 并移除 crossorigin 属性
+    // （自签证书 + 微信浏览器下 crossorigin 会导致 JS 加载失败）
+    modulePreload: false,
+    // 不在 script/link 标签上加 crossorigin（同源资源不需要）
+    cssCodeSplit: true,
   },
 })

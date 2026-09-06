@@ -268,7 +268,7 @@ function YouTubePlayer({ videoId, onProgress, onEnded }) {
             {/* 播放/暂停 */}
             <button
               onClick={togglePlay}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition text-white"
+              className="apple-button flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition"
             >
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
             </button>
@@ -277,7 +277,7 @@ function YouTubePlayer({ videoId, onProgress, onEnded }) {
             <div className="flex items-center gap-2 group/vol">
               <button
                 onClick={toggleMute}
-                className="text-white/60 hover:text-white transition"
+                className="apple-button text-white/60 transition hover:text-white"
               >
                 {isMuted || volume === 0 ? (
                   <VolumeX className="h-4 w-4" />
@@ -306,7 +306,7 @@ function YouTubePlayer({ videoId, onProgress, onEnded }) {
             <div className="relative">
               <button
                 onClick={() => setShowSpeed(!showSpeed)}
-                className="text-xs text-white/50 hover:text-white transition px-2 py-1 rounded bg-white/5"
+                className="apple-button rounded bg-white/5 px-2 py-1 text-xs text-white/50 transition hover:text-white"
               >
                 {speed}x
               </button>
@@ -316,12 +316,11 @@ function YouTubePlayer({ videoId, onProgress, onEnded }) {
                     <button
                       key={s}
                       onClick={() => handleSpeed(s)}
-                      className={`text-xs px-3 py-1.5 rounded-lg transition ${
+                      className={`apple-button rounded-xl px-3 py-1.5 text-xs transition ${
                         speed === s
                           ? "bg-emerald-500/20 text-emerald-300"
                           : "text-white/50 hover:bg-white/5 hover:text-white"
-                      }`}
-                    >
+                      }`}                    >
                       {s}x
                     </button>
                   ))}
@@ -395,13 +394,22 @@ function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04, duration: 0.35 }}
-      onClick={() => !locked && onPlay(video)}
-      className={`group relative cursor-pointer rounded-2xl border transition-all duration-300 overflow-hidden ${
+      onKeyDown={(event) => {
+        if (!locked && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onPlay(video);
+        }
+      }}
+      role="button"
+      tabIndex={locked ? -1 : 0}
+      aria-disabled={locked}
+      aria-label={`${video.title}${locked ? "（VIP 专属）" : "，播放课程"}`}
+      className={`apple-course-card group relative cursor-pointer overflow-hidden rounded-2xl border transition-all duration-300 apple-surface ${
         isActive
           ? "border-emerald-400/30 bg-emerald-400/[0.08] shadow-lg shadow-emerald-500/10"
           : locked
-          ? "border-white/[0.05] bg-white/[0.02] opacity-60 hover:opacity-80"
-          : "border-white/[0.06] bg-white/[0.03] hover:border-white/[0.12] hover:bg-white/[0.05] hover:shadow-lg hover:shadow-black/20"
+          ? "opacity-60 hover:opacity-80"
+          : "hover:bg-white/[0.05]"
       }`}
     >
       {/* 缩略图 */}
@@ -523,7 +531,7 @@ export default function Course() {
   const categoryObj = videoCategories.find((c) => c.id === category);
 
   return (
-    <div className="relative space-y-6 pb-10">
+    <div className="apple-course-shell relative space-y-6 pb-10">
 
       {/* =====================================================
           HERO
@@ -531,7 +539,7 @@ export default function Course() {
       <motion.div
         initial={{ opacity: 0, y: -15 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-gradient-to-br from-emerald-400/[0.10] via-white/[0.035] to-yellow-300/[0.06] p-6 backdrop-blur-xl sm:p-7"
+        className="apple-surface apple-course-hero relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-gradient-to-br from-emerald-400/[0.10] via-white/[0.035] to-yellow-300/[0.06] p-6 backdrop-blur-xl sm:p-7"
       >
         {/* 光晕 */}
         <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-400/[0.08] blur-3xl" />
@@ -571,7 +579,7 @@ export default function Course() {
           </div>
 
           {/* 总进度 */}
-          <div className="min-w-[220px] rounded-2xl border border-white/[0.08] bg-black/10 p-4">
+          <div className="apple-course-stat min-w-[220px] rounded-2xl border border-white/[0.08] bg-black/10 p-4">
             <div className="flex items-center justify-between">
               <span className="text-[10px] uppercase tracking-widest text-white/30">
                 学习进度
@@ -659,7 +667,7 @@ export default function Course() {
           <button
             key={cat.id}
             onClick={() => setCategory(cat.id)}
-            className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition-all ${
+            className={`apple-button flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition-all ${
               category === cat.id
                 ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/20 shadow-sm shadow-emerald-500/10"
                 : "bg-white/[0.04] text-white/40 border border-white/[0.06] hover:bg-white/[0.07] hover:text-white/60"
@@ -695,7 +703,7 @@ export default function Course() {
               <button
                 key={opt.key}
                 onClick={() => setSortBy(opt.key)}
-                className={`text-[11px] px-3 py-1.5 rounded-lg transition ${
+                className={`apple-button text-[11px] px-3 py-1.5 rounded-lg transition ${
                   sortBy === opt.key
                     ? "bg-emerald-500/20 text-emerald-300"
                     : "text-white/40 hover:text-white/60"

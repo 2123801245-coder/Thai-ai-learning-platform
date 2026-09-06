@@ -22,8 +22,9 @@ export const DEFAULT_CUSTOM_COLORS = {
   text: "#FFFFFF",
 };
 
-// 预设主题（与当前墨绿一致的 Emerald 为默认）
+// 预设主题（深色与浅色各有一套完整配色）
 // style：该主题对应的「学习风格」，用于主题选择器展示
+// lightColors：浅色模式专用调色板，避免六个预设只是同一套白底换强调色
 export const THEMES = {
   emerald: {
     id: "emerald",
@@ -39,6 +40,14 @@ export const THEMES = {
       background: "#0f1a1e",
       surface: "rgba(255,255,255,0.06)",
       text: "#FFFFFF",
+    },
+    lightColors: {
+      primary: "#087F5B",
+      secondary: "#2C9A78",
+      accent: "#B7791F",
+      background: "#F4FBF7",
+      surface: "rgba(255,255,255,0.78)",
+      text: "#17352C",
     },
   },
   royal: {
@@ -56,6 +65,14 @@ export const THEMES = {
       surface: "rgba(255,255,255,0.07)",
       text: "#FFFFFF",
     },
+    lightColors: {
+      primary: "#8A5A14",
+      secondary: "#76539B",
+      accent: "#B7791F",
+      background: "#FCF8F0",
+      surface: "rgba(255,255,255,0.82)",
+      text: "#33251B",
+    },
   },
   bangkok: {
     id: "bangkok",
@@ -71,6 +88,14 @@ export const THEMES = {
       background: "#0A1122",
       surface: "rgba(255,255,255,0.06)",
       text: "#FFFFFF",
+    },
+    lightColors: {
+      primary: "#087E8B",
+      secondary: "#346B8A",
+      accent: "#C47A24",
+      background: "#F1F8FA",
+      surface: "rgba(255,255,255,0.8)",
+      text: "#17313A",
     },
   },
   chiangmai: {
@@ -88,6 +113,14 @@ export const THEMES = {
       surface: "rgba(255,255,255,0.06)",
       text: "#FFFFFF",
     },
+    lightColors: {
+      primary: "#3F7D58",
+      secondary: "#628C70",
+      accent: "#B77B32",
+      background: "#F5F9F1",
+      surface: "rgba(255,255,255,0.78)",
+      text: "#21352A",
+    },
   },
   ocean: {
     id: "ocean",
@@ -104,6 +137,14 @@ export const THEMES = {
       surface: "rgba(255,255,255,0.06)",
       text: "#FFFFFF",
     },
+    lightColors: {
+      primary: "#087F8C",
+      secondary: "#287D9A",
+      accent: "#B7791F",
+      background: "#F0FAFC",
+      surface: "rgba(255,255,255,0.82)",
+      text: "#17343A",
+    },
   },
   cyber: {
     id: "cyber",
@@ -119,6 +160,14 @@ export const THEMES = {
       background: "#0A0A0A",
       surface: "rgba(255,255,255,0.06)",
       text: "#FFFFFF",
+    },
+    lightColors: {
+      primary: "#5B3F9B",
+      secondary: "#347D75",
+      accent: "#A66919",
+      background: "#F7F4FC",
+      surface: "rgba(255,255,255,0.84)",
+      text: "#29233A",
     },
   },
 };

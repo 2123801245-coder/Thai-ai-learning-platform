@@ -6,6 +6,8 @@ import { getLessonsByCourseId } from "@/data/lessons";
 import { getCourseStats, useCourseProgress } from "@/lib/courseProgress";
 import { fetchWrongBook } from "@/lib/wordBooks";
 import { getAiTeacherMemory, getAiTeacherPlan } from "@/api/aiTeacher";
+import { getPlanOverview, checkInPlan } from "@/api/plan";
+import { Crown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Target,
@@ -116,6 +118,12 @@ const iconMap = {
 
 const getToday = () => new Date().toISOString().split("T")[0];
 
+/* 本地时区日期（服务端打卡以本地日历日为准） */
+const getLocalToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 const getWeekDays = () => {
   const labels = ["日", "一", "二", "三", "四", "五", "六"];
   const days = [];
@@ -153,6 +161,11 @@ export default function Plan() {
   const [genBusy, setGenBusy] = useState(false);
   const [genError, setGenError] = useState("");
 
+  // 服务端计划概览（连续天数 / 本周 / 7天VIP奖励进度）
+  const [planOverview, setPlanOverview] = useState(null);
+  const [rewardBanner, setRewardBanner] = useState("");
+  const isLoggedIn = !!localStorage.getItem("token");
+
   const { progress: learningProgress, loading: progressLoading } = useLearningProgress();
 
   /* 错题本数量（用于「复习错题」任务提示，无错题则视为已完成） */
@@ -177,6 +190,23 @@ export default function Plan() {
       ),
     []
   );
+
+  /* 登录后拉取服务端计划概览（连续天数 / 本周 / 奖励进度） */
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    let alive = true;
+    getPlanOverview()
+      .then((r) => {
+        if (alive) setPlanOverview(r.data || null);
+      })
+      .catch(() => {
+        /* 服务不可用时静默降级到本地记录 */
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* AI 个性化任务（有则用之，否则回退默认任务） */
   const taskList =
@@ -212,6 +242,41 @@ export default function Plan() {
 
   const completed = taskList.filter((t) => todayDone[t.id]).length;
   const progress = Math.round((completed / taskList.length) * 100);
+
+  /* 打卡同步（防抖）：任务完成数变化时上报服务端；
+     全部完成 → planCompleted=true，连续满 7 天解锁 3 天 VIP */
+  const planAllDone = completed === taskList.length && completed > 0;
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (taskList.length === 0) return;
+    const timer = setTimeout(() => {
+      checkInPlan({
+        date: getLocalToday(),
+        completedTasks: completed,
+        totalTasks: taskList.length,
+        planCompleted: planAllDone,
+      })
+        .then((r) => {
+          const d = r?.data;
+          if (d) {
+            setPlanOverview((prev) => ({
+              streak: d.streak ?? prev?.streak ?? 0,
+              totalDays: d.totalDays ?? prev?.totalDays ?? 0,
+              week: d.week ?? prev?.week ?? [],
+              reward: d.reward ?? prev?.reward ?? null,
+            }));
+            if (d.rewardGranted && d.rewardMessage) {
+              setRewardBanner(d.rewardMessage);
+            }
+          }
+        })
+        .catch(() => {
+          /* 打卡失败静默，不打断学习 */
+        });
+    }, 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completed, planAllDone, taskList.length]);
 
   const weekDone = weekDays.filter(
     (d) => records[d.date] && Object.keys(records[d.date]).length > 0
@@ -362,6 +427,28 @@ export default function Plan() {
         <p className="mt-3 text-[10px] text-white/25">AI 生成的任务自动保存到本机，可随时重新生成覆盖；生成免费不占用对话额度。</p>
       </div>
 
+      {/* 连续完成奖励横幅 */}
+      {rewardBanner && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 rounded-2xl border border-yellow-300/25 bg-gradient-to-r from-yellow-300/[0.12] to-emerald-300/[0.08] px-4 py-3"
+        >
+          <Crown className="h-6 w-6 shrink-0 text-yellow-300" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-yellow-200">{rewardBanner}</p>
+            <p className="mt-0.5 text-[11px] text-white/40">VIP 已自动到账，打开「我的 → VIP 会员」即可查看有效期</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/vip")}
+            className="shrink-0 rounded-xl border border-yellow-300/25 bg-yellow-300/10 px-3 py-1.5 text-xs font-semibold text-yellow-200 transition hover:bg-yellow-300/20"
+          >
+            查看 VIP
+          </button>
+        </motion.div>
+      )}
+
       {/* 今日目标 + 连续学习 */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="premium-glass card-lift card-glow-emerald relative overflow-hidden rounded-3xl p-6 lg:col-span-2">
@@ -392,10 +479,67 @@ export default function Plan() {
         </div>
 
         <div className="premium-glass card-lift card-glow-gold rounded-3xl p-6">
-          <Flame className="h-6 w-6 text-yellow-300" />
-          <p className="mt-5 text-xs text-white/35">连续学习</p>
-          <p className="mt-1 text-3xl font-black text-white">{streak}<span className="ml-1 text-sm font-normal text-white/35">天</span></p>
-          <p className="mt-2 text-xs text-yellow-200/50">{streak > 0 ? "保持这个节奏！" : "完成今天的任务开始连续记录"}</p>
+          <div className="flex items-start justify-between">
+            <Flame className="h-6 w-6 text-yellow-300" />
+            {planOverview?.reward?.lastRewardedMilestone ? (
+              <span className="flex items-center gap-1 rounded-full bg-yellow-300/10 px-2 py-0.5 text-[9px] font-bold text-yellow-300">
+                <Crown className="h-3 w-3" /> 已领取过奖励
+              </span>
+            ) : (
+              <span className="rounded-full border border-yellow-300/20 bg-yellow-300/[0.06] px-2 py-0.5 text-[9px] font-semibold text-yellow-200/70">
+                连续 7 天送 3 天 VIP
+              </span>
+            )}
+          </div>
+          <p className="mt-4 text-xs text-white/35">连续完成计划</p>
+          <p className="mt-1 text-3xl font-black text-white">
+            {isLoggedIn && planOverview ? planOverview.streak : streak}
+            <span className="ml-1 text-sm font-normal text-white/35">天</span>
+          </p>
+          <p className="mt-2 text-xs text-yellow-200/50">
+            {isLoggedIn && planOverview
+              ? planOverview.streak > 0
+                ? "保持这个节奏！"
+                : "完成今天的任务开始连续记录"
+              : streak > 0
+                ? "保持这个节奏！"
+                : "完成今天的任务开始连续记录"}
+          </p>
+
+          {/* 7 天 VIP 进度 */}
+          <div className="mt-4">
+            {planOverview?.reward ? (
+              <>
+                <div className="flex items-center justify-between text-[10px] text-white/35">
+                  <span>
+                    距离连续 {planOverview.reward.nextMilestone} 天
+                  </span>
+                  <span className="font-semibold text-yellow-200/80">
+                    {planOverview.reward.daysToNext} 天 → +{planOverview.reward.rewardDays} 天 VIP
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-yellow-400 to-amber-300 transition-all duration-500"
+                    style={{
+                      width: `${
+                        ((planOverview.streak % planOverview.reward.milestone) /
+                          planOverview.reward.milestone) *
+                        100
+                      }%`,
+                    }}
+                  />
+                </div>
+                <p className="mt-1.5 text-[9px] leading-4 text-white/25">
+                  连续 7 天完成全部每日计划，自动解锁 3 天 VIP；此后每满 7 天再送一次，坚持越久送越多。
+                </p>
+              </>
+            ) : (
+              <p className="text-[10px] text-white/25">
+                {isLoggedIn ? "同步计划后显示 7 天 VIP 奖励进度" : "登录后自动累计连续打卡，满 7 天送 3 天 VIP"}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

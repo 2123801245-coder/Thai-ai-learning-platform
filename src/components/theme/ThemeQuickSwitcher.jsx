@@ -13,6 +13,8 @@ export default function ThemeQuickSwitcher({ compact = false }) {
   const menuRef = useRef(null);
 
   const current = THEMES[theme] || THEMES.emerald;
+  const isLight = mode === "light";
+  const palette = (t) => (isLight ? (t.lightColors || t.colors) : t.colors);
 
   useEffect(() => {
     if (!open) return;
@@ -89,10 +91,19 @@ export default function ThemeQuickSwitcher({ compact = false }) {
         <div
           ref={menuRef}
           role="listbox"
-          className="fixed z-[200] w-[216px] origin-top-left overflow-visible rounded-2xl border border-white/10 bg-[#0d1a16]/95 p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
-          style={{ top: pos?.top ?? 0, left: pos?.left ?? 12 }}
+          className="fixed z-[200] w-[216px] origin-top-left overflow-visible rounded-2xl border p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.18)] backdrop-blur-2xl"
+          style={{
+            top: pos?.top ?? 0,
+            left: pos?.left ?? 12,
+            background: isLight ? "rgba(255,255,255,0.96)" : "rgba(13,26,22,0.95)",
+            borderColor: isLight ? "rgba(18,45,38,0.14)" : "rgba(255,255,255,0.1)",
+            color: isLight ? "#17352C" : "#FFFFFF",
+          }}
         >
-          <p className="px-2 pb-1 pt-1.5 text-[9px] font-bold tracking-[0.16em] text-white/30">
+          <p
+            className="px-2 pb-1 pt-1.5 text-[9px] font-bold tracking-[0.16em]"
+            style={{ color: isLight ? "rgba(23,53,44,0.48)" : "rgba(255,255,255,0.3)" }}
+          >
             主题预设
           </p>
           {THEME_ORDER.map((id) => {
@@ -106,25 +117,29 @@ export default function ThemeQuickSwitcher({ compact = false }) {
                 aria-selected={active}
                 onClick={() => pick(id)}
                 className={`flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition ${
-                  active ? "bg-emerald-400/[0.12]" : "hover:bg-white/[0.06]"
+                  active ? "bg-emerald-400/[0.12]" : (isLight ? "hover:bg-black/[0.04]" : "hover:bg-white/[0.06]")
                 }`}
+                style={{ color: isLight ? "#17352C" : "rgba(255,255,255,0.8)" }}
               >
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full ring-1 ring-white/15" style={{ background: t.colors.accent }} />
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full ring-1 ring-white/15" style={{ background: palette(t).accent }} />
                 <span className="flex-1 min-w-0">
-                  <span className="block truncate text-[11px] font-medium text-white/80">
+                  <span className="block truncate text-[11px] font-medium">
                     {t.nameCn}
-                    <span className="ml-1 text-[9px] text-white/35">{t.name}</span>
+                    <span className="ml-1 text-[9px]" style={{ opacity: isLight ? 0.52 : 0.35 }}>{t.name}</span>
                   </span>
-                  <span className="block truncate text-[8.5px] text-white/35">{t.style}</span>
+                  <span className="block truncate text-[8.5px]" style={{ opacity: isLight ? 0.56 : 0.35 }}>{t.style}</span>
                 </span>
                 {active && <Check className="h-3 w-3 shrink-0 text-emerald-300" />}
               </button>
             );
           })}
 
-          <div className="my-1.5 h-px bg-white/[0.08]" />
+          <div className="my-1.5 h-px" style={{ background: isLight ? "rgba(18,45,38,0.1)" : "rgba(255,255,255,0.08)" }} />
 
-          <p className="px-2 pb-1 text-[9px] font-bold tracking-[0.16em] text-white/30">显示模式</p>
+          <p
+            className="px-2 pb-1 text-[9px] font-bold tracking-[0.16em]"
+            style={{ color: isLight ? "rgba(23,53,44,0.48)" : "rgba(255,255,255,0.3)" }}
+          >显示模式</p>
           <div className="grid grid-cols-2 gap-1">
             {[
               { id: "dark", label: "深色", icon: Moon },
@@ -140,8 +155,9 @@ export default function ThemeQuickSwitcher({ compact = false }) {
                   className={`flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-[10px] font-medium transition ${
                     active
                       ? "border-emerald-400/30 bg-emerald-400/[0.12] text-emerald-200"
-                      : "border-white/10 text-white/55 hover:border-white/25"
+                      : (isLight ? "border-black/10 text-black/55 hover:border-black/20" : "border-white/10 text-white/55 hover:border-white/25")
                   }`}
+                  style={isLight ? { color: "rgba(23,53,44,0.62)" } : undefined}
                 >
                   <Icon className="h-3 w-3" />
                   {m.label}

@@ -182,7 +182,100 @@
     scrollbar-width: none;
   }
 
-  /* ===== 泰国元素 ===== */
+  /* Apple Design foundation: instant tactile feedback, stable focus rings, and a quiet material hierarchy. */
+  .apple-button {
+    -webkit-tap-highlight-color: transparent;
+    transform: translateZ(0);
+    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 240ms ease, background-color 240ms ease, border-color 240ms ease;
+  }
+  .apple-button:hover:not(:disabled) { transform: translateY(-1px) translateZ(0); }
+  .apple-button:active:not(:disabled) { transform: scale(0.97) translateZ(0); transition-duration: 90ms; }
+  .apple-button:focus-visible,
+  .apple-material:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--tp-primary) 72%, white);
+    outline-offset: 3px;
+  }
+  .apple-material {
+    background: color-mix(in srgb, var(--tp-card, rgba(255,255,255,.06)) 88%, transparent);
+    border-color: color-mix(in srgb, var(--tp-text, white) 12%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(125%);
+    backdrop-filter: blur(20px) saturate(125%);
+  }
+  .apple-page-header h1 {
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .apple-material,
+    .premium-glass,
+    .premium-glass-strong,
+    .premium-glass-gold,
+    .liquid-glass {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background: color-mix(in srgb, var(--tp-bg, #0f1a1e) 94%, var(--tp-text, white) 6%);
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    .apple-button:focus-visible,
+    .apple-material:focus-visible,
+    button:focus-visible,
+    a:focus-visible {
+      outline-width: 3px;
+      outline-color: var(--tp-accent, #f5c451);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .apple-button,
+    .apple-material,
+    .apple-page-header {
+      transition: none !important;
+    }
+    .apple-button:hover:not(:disabled),
+    .apple-button:active:not(:disabled) {
+      transform: none;
+    }
+  }
+
+  /* Shared Apple-style surfaces for Home, course cards, and mobile navigation. */
+  .apple-surface {
+    background: color-mix(in srgb, var(--tp-card, rgba(255,255,255,.06)) 88%, transparent);
+    border-color: color-mix(in srgb, var(--tp-text, white) 11%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(120%);
+    backdrop-filter: blur(18px) saturate(120%);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tp-text, white) 8%, transparent), 0 14px 38px rgba(0, 0, 0, .14);
+    transition: transform 240ms cubic-bezier(.22, 1, .36, 1), box-shadow 240ms ease, border-color 240ms ease, background-color 240ms ease;
+  }
+  .apple-surface:hover {
+    border-color: color-mix(in srgb, var(--tp-primary, #10b981) 28%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tp-text, white) 10%, transparent), 0 18px 48px rgba(0, 0, 0, .18);
+  }
+  .apple-course-card:hover { transform: translateY(-3px) translateZ(0); }
+  .apple-course-stat { min-height: 92px; }
+  .apple-mobile-tabbar {
+    background: color-mix(in srgb, var(--tp-bg, #121e24) 90%, transparent) !important;
+    border-top-color: color-mix(in srgb, var(--tp-text, white) 12%, transparent) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(135%);
+    backdrop-filter: blur(24px) saturate(135%);
+  }
+  .apple-tab-item { transition: color 180ms ease, transform 180ms cubic-bezier(.22, 1, .36, 1); }
+  .apple-tab-item:active { transform: scale(.96); }
+  .apple-ai-tab > span:first-child {
+    box-shadow: 0 8px 26px color-mix(in srgb, var(--tp-primary, #10b981) 22%, transparent);
+    transition: transform 180ms cubic-bezier(.22, 1, .36, 1), box-shadow 220ms ease, border-color 220ms ease;
+  }
+  .apple-ai-tab:active > span:first-child { transform: scale(.96); }
+  @media (prefers-reduced-motion: reduce) {
+    .apple-surface, .apple-course-card, .apple-tab-item, .apple-ai-tab > span:first-child { transition: none !important; }
+    .apple-surface:hover, .apple-course-card:hover, .apple-tab-item:active, .apple-ai-tab:active > span:first-child { transform: none; }
+    .apple-mobile-tabbar [class*="animate-ping"] { animation: none !important; }
+  }
+
+  /* ===== Apple-style foundations added above ===== */
+
 
   /* Reverie 金色渐变文字 */
   .thai-gold-text {
