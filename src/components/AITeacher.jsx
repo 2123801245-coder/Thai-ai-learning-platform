@@ -20,6 +20,7 @@ import {
 import { speakThai, stopThaiAudio, extractThaiText } from "@/lib/thaiSpeech";
 import { askAiTeacher, getAiTeacherQuota, getAiTeacherMemory, getAiTeacherRecommendation, transcribeSpeech } from "@/api/aiTeacher";
 import { createAudioRecorder } from "@/lib/audioRecorder";
+import { buildAiTeacherRequest, requireAiTeacherResponse } from "@/lib/aiTeacherContext";
 import VipPanel from "@/components/common/VipPanel";
 import ThaiContextTools from "@/components/ai/ThaiContextTools";
 
@@ -294,22 +295,19 @@ export default function AITeacher() {
 
     try {
       const result =
-        await askAiTeacher({
-          message: text,
-          action: sendAction,
-          profile,
-          history,
-          ...sendOptions,
-        });
-
-      const response =
-        result?.data?.response || "";
-
-      if (!response) {
-        throw new Error(
-          "AI 老师没有返回有效内容"
+        await askAiTeacher(
+          buildAiTeacherRequest({
+            message: text,
+            action: currentMode.action,
+            task: ctxTask,
+            tone: ctxTone,
+            persona: ctxPersona,
+            profile,
+            history,
+          })
         );
-      }
+
+      const response = requireAiTeacherResponse(result);
 
       const assistantMessage = {
         id: `${Date.now()}-assistant`,

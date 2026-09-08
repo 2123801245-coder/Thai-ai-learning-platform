@@ -1,4 +1,4 @@
-import { findThaiContext, THAI_CONTEXT_OF_DAY } from "@/data/thaiContext";
+import { findThaiContext, THAI_CONTEXT_OF_DAY } from "../data/thaiContext.js";
 
 const EMPTY_RELATIONSHIPS = [
   { label: "朋友 / 同辈", status: "待补充", key: "peer" },
