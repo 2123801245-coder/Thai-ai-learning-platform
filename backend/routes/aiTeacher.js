@@ -15,6 +15,7 @@ import db from "../database.js";
 import { authenticate } from "./auth.js";
 import { getQuotaSetting } from "./features.js";
 import { createNotification } from "./notifications.js";
+import { buildContextSystemPrompt } from "../contextPrompts.js";
 
 dotenv.config();
 
@@ -696,6 +697,42 @@ router.post("/teacher", authenticate, async (req, res) => {
       }
 
       return res.json({ success: true, ...parsed });
+    }
+
+    // ── context：Thai Context Intelligence（Explain Like Thai / Make It Natural / Explain the Culture）
+    if (action === "context") {
+      const profile = req.body?.profile || {};
+      const options = {
+        task: req.body?.task,
+        tone: req.body?.tone,
+        persona: req.body?.persona,
+      };
+      const history = Array.isArray(req.body?.history)
+        ? req.body.history.slice(-12)
+        : [];
+      const memory = await getAiMemory(req.userId);
+
+      const systemPrompt = `${buildContextSystemPrompt(options)}\n\n学生画像：${JSON.stringify(profile)}${
+        memory ? `\n长期记忆：${JSON.stringify(memory)}` : ""
+      }`;
+
+      const messages = [
+        { role: "system", content: systemPrompt },
+        ...history.map((h) => ({
+          role: h?.role === "user" ? "user" : "assistant",
+          content: String(h?.content || "").slice(0, 500),
+        })),
+        { role: "user", content: message },
+      ];
+
+      const response = await callDeepSeekMessages(messages, 0.7, 1400);
+
+      // 成功返回才扣减（超时/失败不浪费用户次数）
+      if (!isVip) {
+        await incrementChatUsage(req.userId).catch(() => {});
+      }
+
+      return res.json({ success: true, response });
     }
 
     // ── chat / pronunciation / speaking：注入学生画像 + 长期记忆 + 多轮历史 ──

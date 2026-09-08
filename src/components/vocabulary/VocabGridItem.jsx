@@ -5,12 +5,14 @@ import {
   Sparkles,
   ChevronRight,
   Heart,
+  Lightbulb,
 } from "lucide-react";
 
 import { RippleButton } from "@/components/ui/premium";
 import { ThaiPatternOverlay } from "@/components/common/ThaiMotifs";
 import { speakThai } from "@/lib/thaiSpeech";
 import { useVocabFavorites } from "@/hooks/useVocabFavorites";
+import ThaiContextPanel from "@/components/vocabulary/ThaiContextPanel";
 
 const difficultyLabels = {
   beginner: {
@@ -32,6 +34,7 @@ const difficultyLabels = {
 
 export default function VocabGridItem({ item, index }) {
   const [speaking, setSpeaking] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const { toggleFavorite, isFavorite } = useVocabFavorites();
 
   const wordId = item.id || `${item.thai_word}-${index}`;
@@ -54,7 +57,8 @@ export default function VocabGridItem({ item, index }) {
   const imageUrl = item.image || item.image_url || item.imageUrl;
 
   return (
-    <motion.div
+    <>
+      <motion.div
       initial={{
         opacity: 0,
         y: 12,
@@ -475,32 +479,30 @@ export default function VocabGridItem({ item, index }) {
             底部装饰
         ========================= */}
 
-        <div
-          className="
-            mt-3
-            flex
-            items-center
-            justify-end
-            gap-1
-            text-[10px]
-            text-white/15
-            transition-all
-            group-hover:text-emerald-300/40
-          "
-        >
-          <span>继续学习</span>
+        <div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-white/15 transition-all group-hover:text-emerald-300/40">
+          <button
+            type="button"
+            onClick={() => setContextOpen(true)}
+            className="flex items-center gap-1 rounded-full border border-emerald-300/10 bg-emerald-400/[0.04] px-2.5 py-1.5 text-emerald-200/60 transition hover:border-emerald-300/25 hover:bg-emerald-400/[0.09] hover:text-emerald-100"
+            aria-label={`查看 ${item.thai_word} 的泰语语境`}
+          >
+            <Lightbulb className="h-3 w-3" />
+            查看语境
+          </button>
 
-          <ChevronRight
-            className="
-              h-3
-              w-3
-              transition-transform
-              group-hover:translate-x-0.5
-            "
-          />
+          <div className="flex items-center gap-1">
+            <span>继续学习</span>
+            <ChevronRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+          </div>
         </div>
 
       </div>
-    </motion.div>
+      </motion.div>
+      <ThaiContextPanel
+        open={contextOpen}
+        onOpenChange={setContextOpen}
+        word={item}
+      />
+    </>
   );
 }

@@ -21,6 +21,7 @@ import { speakThai, stopThaiAudio, extractThaiText } from "@/lib/thaiSpeech";
 import { askAiTeacher, getAiTeacherQuota, getAiTeacherMemory, getAiTeacherRecommendation, transcribeSpeech } from "@/api/aiTeacher";
 import { createAudioRecorder } from "@/lib/audioRecorder";
 import VipPanel from "@/components/common/VipPanel";
+import ThaiContextTools from "@/components/ai/ThaiContextTools";
 
 const LANG_OPTIONS = [
   { value: "th-TH", label: "泰语" },
@@ -54,6 +55,10 @@ export default function AITeacher() {
   const [recommend, setRecommend] = useState(null); // { topic, goal, vocab[], sentences[], exercise[], tip, nextTopic }
   const [recommending, setRecommending] = useState(false);
   const [vipOpen, setVipOpen] = useState(false);
+  // Thai Context Intelligence 工具：任务 / 语气 / Persona（task 为空 = 普通聊天）
+  const [ctxTask, setCtxTask] = useState(""); // explain | natural | culture | ""
+  const [ctxTone, setCtxTone] = useState("natural");
+  const [ctxPersona, setCtxPersona] = useState("bangkok");
 
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -125,6 +130,7 @@ export default function AITeacher() {
     setMode(nextMode);
     setError("");
     setInput("");
+    setCtxTask("");
     setTimeout(() => inputRef.current?.focus(), 120);
   };
 
@@ -154,6 +160,7 @@ export default function AITeacher() {
   const handleModeChange = (nextMode) => {
     setMode(nextMode);
     setError("");
+    setCtxTask("");
 
     if (nextMode === "chat") {
       setInput("");
@@ -229,6 +236,12 @@ export default function AITeacher() {
       text = `我正在学习课程「${recommend.topic}」，${text}`;
     }
 
+    // 语境任务开启时切换到 context action（Explain Like Thai / Natural / Culture）
+    const sendAction = ctxTask ? "context" : currentMode.action;
+    const sendOptions = ctxTask
+      ? { task: ctxTask, tone: ctxTone, persona: ctxPersona }
+      : {};
+
     setError("");
 
     // ── 免费额度用尽：前端提前拦截，引导开通 VIP ──
@@ -283,9 +296,10 @@ export default function AITeacher() {
       const result =
         await askAiTeacher({
           message: text,
-          action: currentMode.action,
+          action: sendAction,
           profile,
           history,
+          ...sendOptions,
         });
 
       const response =
@@ -1290,6 +1304,15 @@ export default function AITeacher() {
           sm:p-5
         "
       >
+        <ThaiContextTools
+          compact
+          task={ctxTask}
+          onTaskChange={(id) => setCtxTask((prev) => (prev === id ? "" : id))}
+          tone={ctxTone}
+          onToneChange={setCtxTone}
+          persona={ctxPersona}
+          onPersonaChange={setCtxPersona}
+        />
         <div
           className="
             flex
