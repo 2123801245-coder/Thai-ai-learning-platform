@@ -33,9 +33,9 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # rsync 大量新静态资产（课程音频/视频）跨海到阿里云可能需要 15 分钟以上，
-    # 而 rsync --partial 支持断点续传：超时后重跑只需补传剩余部分。
-    timeout-minutes: 60
+    # rsync 大量新静态资产（课程音频/视频）跨海到阿里云吞吐极低（实测 <30KB/s），
+    # 需要多次 run 借助 --partial 断点续传逐步补齐，上限给足。
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
