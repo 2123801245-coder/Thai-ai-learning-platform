@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useMemo } from "react";
 import { THEMES, STORAGE_KEYS, DEFAULT_CUSTOM_COLORS, FONT_OPTIONS, RADIUS_OPTIONS } from "@/themes/theme";
+import { resolveWorld, worldTokens, WORLDS, DEFAULT_WORLD } from "@/themes/worlds";
 
 const ThemeContext = createContext(null);
 
@@ -41,7 +42,7 @@ function readLSJSON(key, fallback) {
 }
 
 export function ThemeProvider({ children }) {
-  const [themeId, setThemeId] = React.useState(() => readLS(STORAGE_KEYS.theme, "emerald"));
+  const [themeId, setThemeId] = React.useState(() => readLS(STORAGE_KEYS.theme, DEFAULT_WORLD));
   const [mode, setMode] = React.useState(() => readLS(STORAGE_KEYS.mode, "dark")); // dark | light | system
   const [customColors, setCustomColors] = React.useState(() =>
     readLSJSON(STORAGE_KEYS.customColors, {})
@@ -101,9 +102,33 @@ export function ThemeProvider({ children }) {
     };
     Object.entries(colorMap).forEach(([k, v]) => (v ? root.style.setProperty(k, v) : root.style.removeProperty(k)));
 
+    /*
+     * 2.5) Visual World 层
+     * ---------------------------------------------------------
+     * 上面那段是旧的"颜色层"（Color Switcher）。
+     * 这里把 themeId 解析成一个**视觉世界**，写出整套形态变量
+     * （radius / border / shadow / texture / animation / typography /
+     * imageFilter / density），并挂上 data-visual-mode，
+     * 让 theme.css 里的 [data-visual-mode="..."] 规则生效。
+     *
+     * 老 id（emerald / royal / bangkok / chiangmai / ocean / cyber）
+     * 由 resolveWorld 映射到最接近的世界，不打断老用户的既有选择。
+     */
+    const world = resolveWorld(themeId);
+    const wt = worldTokens(world);
+    Object.entries(wt).forEach(([k, v]) => root.style.setProperty(k, v));
+    root.setAttribute("data-visual-mode", world.visualMode);
+
     // 3) 字体
+    /* 用户显式选过字体就尊重他的选择；没选过（"auto"）则跟随世界 */
     const font = FONT_OPTIONS.find((f) => f.id === fontId) || FONT_OPTIONS[0];
-    root.style.setProperty("--tp-font-family", font.family);
+    if (font?.family) {
+      /* 用户显式选过字体 */
+      root.style.setProperty("--tp-font-family", font.family);
+    } else {
+      /* "auto"：交回给视觉世界（worldTokens 已写好 --tp-font-body） */
+      root.style.setProperty("--tp-font-family", world.form.fontBody);
+    }
 
     // 4) 圆角
     const radius = RADIUS_OPTIONS.find((o) => o.id === r) || RADIUS_OPTIONS[1];
@@ -122,8 +147,59 @@ export function ThemeProvider({ children }) {
     root.classList.toggle("theme-custom", custom);
     root.setAttribute("data-theme", themeId);
     root.setAttribute("data-bgeffect", be);
+    /*
+     * data-mode 与 data-visual-mode 的关系 —— 反直觉，但**是有意为之**。
+     * ============================================================
+     * `forceLight` 依赖 `THEMES[themeId].base`，而 paper / forest / modern
+     * 是**世界 id**、不在 THEMES 里 → preset 为 undefined → forceLight=false
+     * → data-mode 回落到 mode 状态（默认 "dark"）。
+     *
+     * 于是一个"浅色世界"（PAPER）实际挂着 `data-mode="dark"` + `.dark` 类。
+     * 这看起来像 bug，但**改成 light 会更糟**：
+     *   theme.css 里有 52 条 `html.theme-custom[data-mode="light"]` 规则，
+     *   其中 4 条带 !important 会抢走所有含 white/black 的类名
+     *   （`[class*=text-white]`→#161616、`bg-white`→color-mix(--tp-card,--tp-primary)
+     *   即偏绿的白）。那会让 world-shim.css 里为纸面手调的暖色全部失效，
+     *   PAPER 变成"emerald 浅色主题"而不是"纸本"。
+     *
+     * 所以这里**保持 dark**：让那 52 条旧浅色规则休眠，PAPER 的颜色
+     * 完全交给 world-shim.css + world token 两层。
+     *
+     * 已经处理掉的副作用：`.dark` 会写一套 shadcn 变量
+     * （--background/--card/--foreground…），全站约 30 处 `bg-background` /
+     * `text-foreground` / `bg-muted` 等会跟着变深。world-shim.css 末尾已按
+     * 世界重写这组 token（`html[data-visual-mode="x"]` 特异性高于 `.dark`），
+     * 实测四个世界都取到正确值。
+     *
+     * 如果将来要"修"这里，请先读 world-shim.css 末尾那段。
+     */
     root.setAttribute("data-mode", forceLight || m === "light" ? "light" : m === "dark" ? "dark" : dark ? "dark" : "light");
   }, [resolved, themeId, customColors]);
+
+  /*
+   * 主题切换窗口。
+   * 加 .theme-switching 420ms，让全站（包括垫片重映射的 ~2800 个
+   * 颜色类名）一起平滑过渡，而不是只有壳层平滑、内部硬切。
+   * 首次挂载时跳过：那时没有"从旧主题变过来"的过程，
+   * 加过渡只会让首屏淡入，观感更慢。
+   */
+  const firstRunRef = React.useRef(true);
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    const root = document.documentElement;
+
+    if (firstRunRef.current) {
+      firstRunRef.current = false;
+      return undefined;
+    }
+
+    root.classList.add("theme-switching");
+    const timer = setTimeout(() => root.classList.remove("theme-switching"), 420);
+    return () => {
+      clearTimeout(timer);
+      root.classList.remove("theme-switching");
+    };
+  }, [themeId]);
 
   // 持久化
   useEffect(() => { try { localStorage.setItem(STORAGE_KEYS.theme, themeId); } catch {} }, [themeId]);
@@ -139,7 +215,7 @@ export function ThemeProvider({ children }) {
   }, []);
 
   const resetTheme = useCallback(() => {
-    setThemeId("emerald");
+    setThemeId(DEFAULT_WORLD);
     setMode("dark");
     setCustomColors({});
     setFontId(FONT_OPTIONS[0].id);
@@ -153,6 +229,9 @@ export function ThemeProvider({ children }) {
     // 对外统一使用 theme，内部状态仍保留 themeId，兼容现有选择器 API。
     theme: themeId,
     setTheme: setThemeId,
+    /* 视觉世界：Theme Gallery 用它渲染预览、做切换 */
+    world: resolveWorld(themeId),
+    setWorld: setThemeId,
     setMode,
     customColors: customColors || {},
     setCustomColors,

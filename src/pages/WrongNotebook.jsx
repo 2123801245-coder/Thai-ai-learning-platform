@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
-  BookOpen,
   CheckSquare,
   ChevronDown,
   ChevronUp,
@@ -12,412 +11,532 @@ import {
   Search,
   Trash2,
   X,
-} from 'lucide-react';
-import Navbar from '@/components/Navbar';
-import WrongNotebookItem from '@/components/wrong-notebook/WrongNotebookItem';
-import { base44 } from '@/api/base44Client';
-import { useToast } from '@/components/ui/use-toast';
+  Volume2,
+} from "lucide-react";
 
-const DIFFICULTY_OPTIONS = [
-  { id: 'all', label: '全部难度' },
-  { id: 'beginner', label: '初级' },
-  { id: 'intermediate', label: '中级' },
-  { id: 'advanced', label: '高级' },
+import { useToast } from "@/components/ui/use-toast";
+import { speakThai } from "@/lib/thaiSpeech";
+import { PageShell } from "@/components/common/PageShell";
+import { Section } from "@/components/common/Section";
+import {
+  fetchWrongBook,
+  removeWrongWord,
+  clearWrongBook,
+  formatWrongDate,
+} from "@/lib/wordBooks";
+
+/* =========================================================
+   错题本 · WrongNotebook（/wrong-notebook）
+   ---------------------------------------------------------
+   本次重构修掉两个真实缺陷
+   ------------------------
+   ① **数据源错了，页面永远是空的**
+      旧实现直接读 `base44.entities.WrongNotebook`——那是平台侧通道，
+      而全站的错题其实写在本地主存储（`thaiai-wrong-notebook`，由
+      lib/wordBooks 的 recordWrongWord 写入，配对/填空/测验都在写它）。
+      两边不互通，所以用户答错一堆词，打开错题本还是"错题本为空"。
+      现在统一走 `fetchWrongBook()`（本地为主 + 平台尽力合并）。
+
+   ② **视觉是全站唯一的浅色旧设计**
+      页面用的是 `bg-gradient-to-b from-thai-ivory` + `bg-thai-green`
+      那套早期浅色 token，与全站深色玻璃语言完全不同，还额外渲染了
+      自己的 `<Navbar />`，与 MainLayout 的侧边栏/底部栏叠成双层导航。
+      现在改为 PageShell + Section，与其余页面同一套语言。
+
+   功能一个都没少：搜索、难度/词书/排序筛选、批量选择、批量移除、
+   单条移除、朗读、进入错题复习、清空。
+========================================================= */
+
+const SORT_OPTIONS = [
+  { id: "date", label: "按最近错误" },
+  { id: "count", label: "按错误次数" },
+  { id: "alpha", label: "按字母序" },
 ];
 
 export default function WrongNotebook() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedIds, setSelectedIds] = useState(new Set());
-  const [selectMode, setSelectMode] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [difficulty, setDifficulty] = useState('all');
-  const [bookFilter, setBookFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('date');
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const load = async () => {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState("date");
+  const [bookFilter, setBookFilter] = useState("all");
+  const [keyword, setKeyword] = useState("");
+
+  /* ── 读取：统一走 wordBooks 的错题本（本地为主存储） ── */
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await base44.entities.WrongNotebook.filter(
-        { removed: false },
-        '-last_wrong_date',
-        500
-      );
-      setItems(data || []);
-    } catch (e) {
+      const book = await fetchWrongBook();
+      /* fetchWrongBook 返回的是"词书"结构：{ words: [{ thai, roman, chinese,
+         sentence, sentenceCn, wrongCount, lastWrongDate }] }，为空时返回 null */
+      setItems(book?.words || []);
+    } catch {
       setItems([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  // 提取所有词书来源
+  /* ── 词书来源筛选：错题条目没有 book 字段，用 part_of_speech 之外的
+        分类信息兜底（wordBooks 取词时会带上 pos），没有就不显示这一项 ── */
   const books = useMemo(() => {
     const set = new Set();
-    items.forEach(item => {
-      if (item.category) set.add(item.category);
-      else if (item.book) set.add(item.book);
+    items.forEach((item) => {
+      if (item.pos) set.add(item.pos);
     });
-    return ['all', ...Array.from(set).sort()];
+    return ["all", ...[...set].sort()];
   }, [items]);
 
-  // 筛选 + 排序
   const filtered = useMemo(() => {
     let result = items;
 
-    if (difficulty !== 'all') {
-      result = result.filter(i => i.difficulty === difficulty);
-    }
-    if (bookFilter !== 'all') {
-      result = result.filter(i =>
-        (i.category || i.book || '') === bookFilter
+    if (keyword.trim()) {
+      const kw = keyword.trim().toLowerCase();
+      result = result.filter(
+        (item) =>
+          (item.thai || "").toLowerCase().includes(kw) ||
+          (item.chinese || "").toLowerCase().includes(kw) ||
+          (item.roman || "").toLowerCase().includes(kw)
       );
     }
 
-    if (sortBy === 'count') {
-      result = [...result].sort((a, b) => (b.wrong_count || 1) - (a.wrong_count || 1));
-    } else if (sortBy === 'alpha') {
-      result = [...result].sort((a, b) => (a.thai_word || '').localeCompare(b.thai_word || ''));
+    if (bookFilter !== "all") {
+      result = result.filter((item) => item.pos === bookFilter);
     }
-    // default: date (already sorted by API)
+
+    if (sortBy === "count") {
+      result = [...result].sort((a, b) => (b.wrongCount || 1) - (a.wrongCount || 1));
+    } else if (sortBy === "alpha") {
+      result = [...result].sort((a, b) => (a.thai || "").localeCompare(b.thai || ""));
+    }
 
     return result;
-  }, [items, difficulty, bookFilter, sortBy]);
+  }, [items, keyword, bookFilter, sortBy]);
 
-  // 统计
-  const stats = useMemo(() => {
-    const total = items.length;
-    const byDiff = { beginner: 0, intermediate: 0, advanced: 0 };
-    items.forEach(i => {
-      if (i.difficulty && byDiff[i.difficulty] !== undefined) byDiff[i.difficulty]++;
-    });
-    return { total, ...byDiff };
-  }, [items]);
-
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => {
+  const toggleSelect = (thai) => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      next.has(thai) ? next.delete(thai) : next.add(thai);
       return next;
     });
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filtered.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filtered.map(i => i.id)));
-    }
+    setSelectedIds((prev) =>
+      prev.size === filtered.length
+        ? new Set()
+        : new Set(filtered.map((item) => item.thai))
+    );
   };
 
   const handleRemove = async (item) => {
-    try {
-      await base44.entities.WrongNotebook.update(item.id, { removed: true });
-      setItems(prev => prev.filter(i => i.id !== item.id));
-      setSelectedIds(prev => { const n = new Set(prev); n.delete(item.id); return n; });
-      toast({ title: '已移除', description: '该单词已从错题本移除' });
-    } catch (e) {
-      toast({ title: '操作失败', variant: 'destructive' });
-    }
+    await removeWrongWord(item.thai);
+    setItems((prev) => prev.filter((i) => i.thai !== item.thai));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(item.thai);
+      return next;
+    });
+    toast({ title: "已移除", description: `「${item.thai}」已从错题本移除` });
   };
 
   const handleBatchRemove = async () => {
     const count = selectedIds.size;
-    if (count === 0) return;
-    try {
-      for (const id of selectedIds) {
-        await base44.entities.WrongNotebook.update(id, { removed: true });
-      }
-      setItems(prev => prev.filter(i => !selectedIds.has(i.id)));
-      setSelectedIds(new Set());
-      setSelectMode(false);
-      toast({ title: '批量移除', description: `已移除 ${count} 个错题` });
-    } catch (e) {
-      toast({ title: '操作失败', variant: 'destructive' });
+    if (!count) return;
+    for (const thai of selectedIds) {
+      await removeWrongWord(thai);
     }
+    setItems((prev) => prev.filter((i) => !selectedIds.has(i.thai)));
+    setSelectedIds(new Set());
+    setSelectMode(false);
+    toast({ title: "批量移除", description: `已移除 ${count} 个错题` });
+  };
+
+  const handleClearAll = async () => {
+    await clearWrongBook();
+    setItems([]);
+    setSelectedIds(new Set());
+    toast({ title: "已清空错题本" });
+  };
+
+  /* ── 进入复习：交给词汇星球的测验模式（那里读 state.wrongWords） ──
+     注意要转成 VocabQuiz 认识的字段名（thai_word / chinese_meaning …），
+     否则它的 passFilter 会把词全部过滤掉，进去就是空白测验。 */
+  const startQuiz = (words) => {
+    if (!words.length) {
+      toast({ title: "无错题可练", description: "请选择要练习的错题" });
+      return;
+    }
+    navigate("/vocabulary", {
+      state: {
+        quizFromWrong: true,
+        wrongWords: words.map((w) => ({
+          id: `wrong-${w.thai}`,
+          thai_word: w.thai,
+          roman: w.roman || "",
+          pronunciation: w.roman || "",
+          chinese_meaning: w.chinese,
+          example_thai: w.sentence || "",
+          example_chinese: w.sentenceCn || "",
+        })),
+      },
+    });
   };
 
   const handleBatchPractice = () => {
-    const words = filtered.filter(i => selectedIds.size === 0 || selectedIds.has(i.id));
-    if (words.length === 0) {
-      toast({ title: '无错题可练', description: '请选择要练习的错题' });
-      return;
-    }
-    navigate('/vocabulary', {
-      state: { quizFromWrong: true, wrongWords: words },
-    });
+    const words = filtered.filter(
+      (item) => selectedIds.size === 0 || selectedIds.has(item.thai)
+    );
+    startQuiz(words);
   };
 
-  const handlePractice = (item) => {
-    navigate('/vocabulary', {
-      state: { quizFromWrong: true, wrongWords: [item] },
-    });
-  };
+  const hasFilters = bookFilter !== "all" || sortBy !== "date" || Boolean(keyword.trim());
 
   const clearFilters = () => {
-    setDifficulty('all');
-    setBookFilter('all');
-    setSortBy('date');
+    setBookFilter("all");
+    setSortBy("date");
+    setKeyword("");
   };
 
-  const hasFilters = difficulty !== 'all' || bookFilter !== 'all' || sortBy !== 'date';
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-thai-ivory via-white to-thai-cream/20">
-      <Navbar />
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 pb-24 md:pb-7 space-y-4">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="font-heading font-bold text-2xl text-thai-green">错题本</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {loading ? '加载中...' : `共 ${items.length} 个错题`}
-            </p>
-          </div>
-          {!loading && items.length > 0 && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { setSelectMode(!selectMode); setSelectedIds(new Set()); }}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                  selectMode
-                    ? 'bg-thai-green text-white'
-                    : 'bg-thai-ivory/60 text-thai-green hover:bg-thai-ivory'
-                }`}
-              >
-                {selectMode ? <X className="w-3.5 h-3.5" /> : <CheckSquare className="w-3.5 h-3.5" />}
-                {selectMode ? '取消' : '选择'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-24 rounded-2xl bg-thai-ivory/40 animate-pulse" />
-            ))}
-          </div>
-        ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 rounded-full bg-thai-ivory/60 flex items-center justify-center mb-4">
-              <AlertCircle className="w-8 h-8 text-thai-green/30" />
-            </div>
-            <p className="text-thai-green/60 font-medium">错题本为空</p>
-            <p className="text-sm text-muted-foreground mt-1">完成词汇测验后，答错的单词会出现在这里</p>
-            <button onClick={() => navigate('/vocabulary')} className="mt-4 px-4 py-2 rounded-lg bg-thai-green text-white text-sm">
-              去测验
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Stats bar */}
-            <div className="flex items-center gap-3 flex-wrap">
-              {stats.beginner > 0 && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">
-                  初级 {stats.beginner}
-                </span>
-              )}
-              {stats.intermediate > 0 && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-600">
-                  中级 {stats.intermediate}
-                </span>
-              )}
-              {stats.advanced > 0 && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-orange-50 text-orange-600">
-                  高级 {stats.advanced}
-                </span>
-              )}
-            </div>
-
-            {/* Filter toggle */}
+    <PageShell
+      width="reading"
+      title="错题本"
+      subtitle={
+        loading
+          ? "正在读取错题记录…"
+          : items.length
+            ? `共 ${items.length} 个错词，答对即从错题本毕业`
+            : "答错的单词会自动出现在这里"
+      }
+      icon={AlertCircle}
+      badge="Review"
+      actions={
+        items.length ? (
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-thai-green transition"
+              type="button"
+              onClick={() => {
+                setSelectMode((v) => !v);
+                setSelectedIds(new Set());
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-[12px] font-semibold text-white/70 transition hover:border-emerald-300/30 hover:text-white"
             >
-              <Filter className="w-3.5 h-3.5" />
-              筛选与排序
-              {showFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              {hasFilters && (
-                <span className="w-1.5 h-1.5 rounded-full bg-thai-green" />
-              )}
+              {selectMode ? <X className="h-3.5 w-3.5" /> : <CheckSquare className="h-3.5 w-3.5" />}
+              {selectMode ? "取消" : "选择"}
             </button>
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-transparent px-3 py-2 text-[12px] font-semibold text-white/35 transition hover:border-red-400/15 hover:bg-red-400/[0.06] hover:text-red-300/80"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              清空
+            </button>
+          </div>
+        ) : null
+      }
+    >
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-20 animate-pulse rounded-2xl bg-white/[0.03]" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <EmptyState onGo={() => navigate("/vocabulary?mode=quiz")} />
+      ) : (
+        <>
+          {/* ── 工具条：搜索 + 筛选 ── */}
+          <Section divider={false}>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="relative min-w-[180px] flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+                  <input
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    placeholder="搜泰语 / 中文 / 罗马音"
+                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] py-2 pl-9 pr-3 text-[12.5px] text-white/85 outline-none transition placeholder:text-white/25 focus:border-emerald-300/30"
+                  />
+                </label>
 
-            {/* Filter panel */}
-            <AnimatePresence>
-              {showFilters && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden"
+                <button
+                  type="button"
+                  onClick={() => setShowFilters((v) => !v)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12px] font-semibold text-white/60 transition hover:border-emerald-300/25 hover:text-white"
                 >
-                  <div className="rounded-2xl border border-thai-green/8 bg-white/80 p-4 space-y-3">
-                    {/* Difficulty */}
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">难度</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {DIFFICULTY_OPTIONS.map(opt => (
-                          <button
+                  <Filter className="h-3.5 w-3.5" />
+                  筛选与排序
+                  {hasFilters ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> : null}
+                  {showFilters ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleBatchPractice}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300/25 bg-emerald-400/[0.12] px-3.5 py-2 text-[12px] font-bold text-emerald-100 transition hover:bg-emerald-400/[0.2]"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {selectMode && selectedIds.size ? `复习选中的 ${selectedIds.size} 个` : "复习全部"}
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {showFilters ? (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="flex flex-wrap items-end gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
+                      {books.length > 1 ? (
+                        <FilterGroup label="词性">
+                          {books.map((b) => (
+                            <Chip
+                              key={b}
+                              active={bookFilter === b}
+                              onClick={() => setBookFilter(b)}
+                            >
+                              {b === "all" ? "全部" : b}
+                            </Chip>
+                          ))}
+                        </FilterGroup>
+                      ) : null}
+
+                      <FilterGroup label="排序">
+                        {SORT_OPTIONS.map((opt) => (
+                          <Chip
                             key={opt.id}
-                            onClick={() => setDifficulty(opt.id)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                              difficulty === opt.id
-                                ? 'bg-thai-green text-white'
-                                : 'bg-thai-ivory/40 text-muted-foreground hover:bg-thai-ivory'
-                            }`}
+                            active={sortBy === opt.id}
+                            onClick={() => setSortBy(opt.id)}
                           >
                             {opt.label}
-                          </button>
+                          </Chip>
                         ))}
-                      </div>
+                      </FilterGroup>
+
+                      {hasFilters ? (
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className="text-[11px] font-semibold text-white/40 underline-offset-4 transition hover:text-white/70 hover:underline"
+                        >
+                          清除筛选
+                        </button>
+                      ) : null}
                     </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
 
-                    {/* Book */}
-                    {books.length > 2 && (
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">词书</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {books.map(b => (
-                            <button
-                              key={b}
-                              onClick={() => setBookFilter(b)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                                bookFilter === b
-                                  ? 'bg-thai-blue text-white'
-                                  : 'bg-thai-ivory/40 text-muted-foreground hover:bg-thai-ivory'
-                              }`}
-                            >
-                              {b === 'all' ? '全部' : b}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+              {selectMode ? (
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className="self-start text-[11px] font-semibold text-emerald-300/70 transition hover:text-emerald-300"
+                >
+                  {selectedIds.size === filtered.length ? "取消全选" : `全选 ${filtered.length} 个`}
+                </button>
+              ) : null}
+            </div>
+          </Section>
 
-                    {/* Sort */}
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">排序</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {[
-                          { id: 'date', label: '最近答错' },
-                          { id: 'count', label: '错误最多' },
-                          { id: 'alpha', label: '泰文排序' },
-                        ].map(s => (
-                          <button
-                            key={s.id}
-                            onClick={() => setSortBy(s.id)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                              sortBy === s.id
-                                ? 'bg-thai-green text-white'
-                                : 'bg-thai-ivory/40 text-muted-foreground hover:bg-thai-ivory'
+          {/* ── 错题列表 ── */}
+          <Section
+            title={`错词列表`}
+            desc={filtered.length === items.length ? `${filtered.length} 个` : `筛选出 ${filtered.length} / ${items.length} 个`}
+          >
+            {filtered.length === 0 ? (
+              <p className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-6 text-center text-[12px] text-white/40">
+                没有符合筛选条件的错题
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {filtered.map((item) => {
+                  const selected = selectedIds.has(item.thai);
+                  return (
+                    <li key={item.thai}>
+                      <div
+                        onClick={selectMode ? () => toggleSelect(item.thai) : undefined}
+                        className={`flex items-start gap-3 rounded-2xl border px-3.5 py-3 transition ${
+                          selectMode ? "cursor-pointer" : ""
+                        } ${
+                          selected
+                            ? "border-emerald-300/40 bg-emerald-400/[0.08]"
+                            : "border-white/[0.07] bg-white/[0.02] hover:border-white/[0.14]"
+                        }`}
+                      >
+                        {selectMode ? (
+                          <span
+                            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                              selected
+                                ? "border-emerald-300 bg-emerald-400 text-[#04110f]"
+                                : "border-white/20"
                             }`}
                           >
-                            {s.label}
-                          </button>
-                        ))}
+                            {selected ? "✓" : ""}
+                          </span>
+                        ) : null}
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-viaoda text-[18px] font-bold text-white/95">
+                              {item.thai}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                speakThai(item.thai, { rate: 0.75 });
+                              }}
+                              aria-label={`朗读 ${item.thai}`}
+                              className="rounded-lg p-1 text-white/35 transition hover:bg-white/[0.06] hover:text-emerald-300"
+                            >
+                              <Volume2 className="h-3.5 w-3.5" />
+                            </button>
+                            {item.wrongCount > 1 ? (
+                              <span className="rounded-full border border-red-400/20 bg-red-400/[0.08] px-2 py-0.5 text-[10px] font-semibold text-red-300/85">
+                                错 {item.wrongCount} 次
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {item.roman ? (
+                            <p className="mt-0.5 text-[12px] font-medium text-emerald-300/70">
+                              [{item.roman}]
+                            </p>
+                          ) : null}
+
+                          <p className="mt-0.5 text-[12.5px] text-white/55">{item.chinese}</p>
+
+                          {item.sentence ? (
+                            <p className="mt-1.5 border-l-2 border-white/[0.08] pl-2.5 text-[11.5px] leading-5 text-white/35">
+                              {item.sentence}
+                              {item.sentenceCn ? <span className="ml-1.5 text-white/25">{item.sentenceCn}</span> : null}
+                            </p>
+                          ) : null}
+
+                          {item.lastWrongDate ? (
+                            <p className="mt-1 text-[10.5px] text-white/25">
+                              最近错误：{formatWrongDate(item.lastWrongDate) || item.lastWrongDate}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        {!selectMode ? (
+                          <div className="flex shrink-0 flex-col gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startQuiz([item]);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-300/20 bg-emerald-400/[0.08] px-2.5 py-1.5 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-400/[0.16]"
+                            >
+                              <RotateCcw className="h-3 w-3" /> 再学
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemove(item);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1.5 text-[11px] font-semibold text-white/35 transition hover:border-red-400/20 hover:bg-red-400/[0.08] hover:text-red-300/85"
+                            >
+                              <Trash2 className="h-3 w-3" /> 移除
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
-                    </div>
-
-                    {hasFilters && (
-                      <button
-                        onClick={clearFilters}
-                        className="text-xs text-red-400 hover:text-red-500 transition"
-                      >
-                        清除全部筛选
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Batch action bar */}
-            {selectMode && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-center justify-between rounded-2xl border border-thai-green/10 bg-thai-green/5 p-3"
-              >
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={toggleSelectAll}
-                    className="text-xs text-thai-green font-medium hover:underline"
-                  >
-                    {selectedIds.size === filtered.length ? '取消全选' : '全选'}
-                  </button>
-                  <span className="text-xs text-muted-foreground">
-                    已选 {selectedIds.size}/{filtered.length}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {selectedIds.size > 0 && (
-                    <button
-                      onClick={handleBatchPractice}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-thai-green text-white text-xs font-medium"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      练习选中 ({selectedIds.size})
-                    </button>
-                  )}
-                  {selectedIds.size > 0 && (
-                    <button
-                      onClick={handleBatchRemove}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-xs font-medium hover:bg-red-100"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      删除 ({selectedIds.size})
-                    </button>
-                  )}
-                </div>
-              </motion.div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
+          </Section>
 
-            {/* Word list */}
-            <div className="space-y-2.5">
-              <AnimatePresence>
-                {filtered.map(item => (
-                  <WrongNotebookItem
-                    key={item.id}
-                    item={item}
-                    selectMode={selectMode}
-                    selected={selectedIds.has(item.id)}
-                    onToggleSelect={() => toggleSelect(item.id)}
-                    onRemove={handleRemove}
-                    onPractice={handlePractice}
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
-
-            {/* Bottom action */}
-            {!selectMode && filtered.length > 0 && (
-              <div className="flex justify-center pt-2">
+          {selectMode && selectedIds.size ? (
+            <div className="sticky bottom-4 mt-4 flex items-center justify-between gap-3 rounded-2xl border border-emerald-300/25 bg-[#0b1512]/95 px-4 py-3 backdrop-blur-xl">
+              <span className="text-[12px] text-white/60">已选 {selectedIds.size} 个</span>
+              <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={handleBatchPractice}
-                  className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-thai-green to-emerald-500 text-white text-sm font-semibold shadow-lg"
+                  className="rounded-xl border border-emerald-300/25 bg-emerald-400/[0.14] px-3.5 py-2 text-[12px] font-bold text-emerald-100 transition hover:bg-emerald-400/[0.22]"
                 >
-                  <RotateCcw className="w-4 h-4" />
-                  开始复习全部错题 ({filtered.length})
+                  复习选中
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchRemove}
+                  className="rounded-xl border border-red-400/20 bg-red-400/[0.08] px-3.5 py-2 text-[12px] font-bold text-red-300/85 transition hover:bg-red-400/[0.16]"
+                >
+                  移除选中
                 </button>
               </div>
-            )}
+            </div>
+          ) : null}
+        </>
+      )}
+    </PageShell>
+  );
+}
 
-            {filtered.length === 0 && items.length > 0 && (
-              <div className="text-center py-10">
-                <p className="text-sm text-muted-foreground">当前筛选条件下没有错题</p>
-                <button onClick={clearFilters} className="mt-2 text-xs text-thai-green hover:underline">
-                  清除筛选
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </main>
+/* ── 小组件：筛选组与选项 ── */
+function FilterGroup({ label, children }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/35">
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+function Chip({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg px-2.5 py-1.5 text-[11.5px] font-semibold transition ${
+        active
+          ? "bg-emerald-400/[0.16] text-emerald-100"
+          : "bg-white/[0.04] text-white/45 hover:text-white/75"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function EmptyState({ onGo }) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-3xl border border-white/[0.07] bg-white/[0.02] py-16 text-center">
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03]">
+        <AlertCircle className="h-7 w-7 text-emerald-300/40" />
+      </div>
+      <p className="text-[13.5px] font-semibold text-white/70">错题本为空</p>
+      <p className="mt-1 max-w-xs text-[12px] leading-relaxed text-white/35">
+        在词汇配对、句子填空、分词练习或词汇测验里答错的词，都会自动收录到这里
+      </p>
+      <button
+        type="button"
+        onClick={onGo}
+        className="mt-5 rounded-xl border border-emerald-300/25 bg-emerald-400/[0.12] px-4 py-2.5 text-[12.5px] font-bold text-emerald-100 transition hover:bg-emerald-400/[0.2]"
+      >
+        去词汇星球练习
+      </button>
     </div>
   );
 }

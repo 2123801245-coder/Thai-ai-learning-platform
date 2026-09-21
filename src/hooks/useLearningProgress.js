@@ -1,6 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
+import { PROGRESS_EVENT_NAMES } from "@/lib/progressEvents";
+
 const STORAGE_KEY = "thai_ai_learning_progress";
+
+/**
+ * 学习进度变化事件。
+ *
+ * 这个 Hook 在 10 个组件里各自持有一份 state，同页其它组件写入时它们
+ * 并不会自动更新；首页的「今天发生了什么」还需要在词汇操练发生的那一刻
+ * 就让星球亮起来。所以每次落盘都广播一次（只广播，不改变任何现有行为）。
+ */
+export const LEARNING_PROGRESS_EVENT = PROGRESS_EVENT_NAMES.learning;
+
+const announceLearningProgress = () => {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(LEARNING_PROGRESS_EVENT));
+  }
+};
 const DAILY_GOAL = 20;
 const MAX_REVIEW_QUEUE = 100;
 const MAX_HISTORY_DAYS = 30;
@@ -356,6 +373,7 @@ export function useLearningProgress() {
 
       setProgress(data);
       progressRef.current = data;
+      announceLearningProgress();
     } catch (error) {
       console.error(
         "保存学习进度失败:",
@@ -943,6 +961,7 @@ export function useLearningProgress() {
 
     setProgress(initial);
     progressRef.current = initial;
+    announceLearningProgress();
   }, []);
 
   /*

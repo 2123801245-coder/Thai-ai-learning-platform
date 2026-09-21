@@ -4,9 +4,12 @@ import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
+  AudioLines,
+  Award,
   BookOpen,
   CheckCircle2,
   ChevronRight,
+  ClipboardList,
   Clock3,
   Crown,
   Lock,
@@ -17,11 +20,20 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { getCourseById } from "@/data/courses";
-import { getLessonsByCourseId } from "@/data/lessons";
+import {
+  BASIC_READER_COURSE_ID,
+  getCourseById,
+  getCourseLessons,
+  getLessonHref,
+} from "@/data/courses";
+import {
+  EXAM_PASS_PERCENT,
+  EXAM_QUESTION_COUNT,
+} from "@/data/basicReaderExam";
 import {
   useCourseProgress,
   isLessonCompleted,
+  getCourseCertificate,
 } from "@/lib/courseProgress";
 
 import { useAuth } from "@/lib/AuthContext";
@@ -61,9 +73,15 @@ export default function CourseDetail() {
   // =======================================================
 
   const lessons = useMemo(
-    () => (course ? getLessonsByCourseId(course.id) : []),
+    () => (course ? getCourseLessons(course.id) : []),
     [course]
   );
+
+  // 音频图文课（课时带 audio 字段）与视频课共用本页，仅文案/图标不同
+  const isAudioCourse = !!lessons[0]?.audio;
+
+  // 结业测试（目前仅「基础泰语精读」开放）
+  const isExamCourse = course?.id === BASIC_READER_COURSE_ID;
 
 
   // =======================================================
@@ -77,6 +95,9 @@ export default function CourseDetail() {
 
   const completedCount = stats.completedCount;
   const progress = stats.progressPercent;
+
+  // 结业证书（通过结业测试后写入；进度变化时本组件会重渲染）
+  const certificate = course ? getCourseCertificate(course.id) : null;
 
   // 当前学习节点：第一个未完成且可看的课时（呼吸金光标识）
   const currentLessonId = useMemo(() => {
@@ -146,9 +167,9 @@ export default function CourseDetail() {
     // VIP 用户可直接进入上次学习的课程
     if (isVipUser) {
       if (stats.lastLessonId) {
-        navigate(`/course/${course.id}/lesson/${stats.lastLessonId}`);
-      } else {
-        navigate(`/course/${course.id}/lesson/${lessons[0]?.id}`);
+        navigate(getLessonHref(course.id, { id: stats.lastLessonId }));
+      } else if (lessons[0]) {
+        navigate(getLessonHref(course.id, lessons[0]));
       }
       return;
     }
@@ -160,7 +181,7 @@ export default function CourseDetail() {
       );
 
       if (last && (last.free || !course.isVip)) {
-        navigate(`/course/${course.id}/lesson/${last.id}`);
+        navigate(getLessonHref(course.id, last));
         return;
       }
     }
@@ -171,7 +192,7 @@ export default function CourseDetail() {
     );
 
     if (firstAvailable) {
-      navigate(`/course/${course.id}/lesson/${firstAvailable.id}`);
+      navigate(getLessonHref(course.id, firstAvailable));
     }
   };
 
@@ -263,8 +284,12 @@ export default function CourseDetail() {
             <div className="mt-5 flex flex-wrap gap-4 text-xs text-white/30">
 
               <span className="flex items-center gap-1.5">
-                <Video className="h-4 w-4" />
-                {lessons.length} 节视频
+                {isAudioCourse ? (
+                  <AudioLines className="h-4 w-4" />
+                ) : (
+                  <Video className="h-4 w-4" />
+                )}
+                {lessons.length} 节{isAudioCourse ? "课时" : "视频"}
               </span>
 
               <span className="flex items-center gap-1.5">
@@ -338,7 +363,8 @@ export default function CourseDetail() {
             </div>
 
             <p className="mt-3 text-xs text-white/25">
-              已完成 {completedCount} / {lessons.length} 节视频
+              已完成 {completedCount} / {lessons.length} 节
+              {isAudioCourse ? "课时" : "视频"}
             </p>
 
             </div>
@@ -393,12 +419,17 @@ export default function CourseDetail() {
                       {chapterName}
                     </h3>
                     <p className="mt-1 text-[10px] text-white/25">
-                      {chapterLessons.length} 节视频
+                      {chapterLessons.length} 节
+                      {isAudioCourse ? "课时" : "视频"}
                     </p>
                   </div>
 
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-400/[0.06]">
-                    <Video className="h-4 w-4 text-emerald-300/60" />
+                    {isAudioCourse ? (
+                      <AudioLines className="h-4 w-4 text-emerald-300/60" />
+                    ) : (
+                      <Video className="h-4 w-4 text-emerald-300/60" />
+                    )}
                   </div>
 
                 </div>
@@ -418,9 +449,7 @@ export default function CourseDetail() {
                       completed={isLessonCompleted(course.id, lesson.id)}
                       isCurrent={lesson.id === currentLessonId}
                       isLast={lessonIndex === chapterLessons.length - 1}
-                      onOpen={() =>
-                        navigate(`/course/${course.id}/lesson/${lesson.id}`)
-                      }
+                      onOpen={() => navigate(getLessonHref(course.id, lesson))}
                     />
                   ))}
 
@@ -433,6 +462,116 @@ export default function CourseDetail() {
         </div>
 
       </section>
+
+
+      {/* =====================================================
+          结业测试（通过 → 点亮完成状态 + 颁发证书）
+      ===================================================== */}
+
+      {isExamCourse && (
+        <section>
+
+          <div className="mb-5">
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Award className="h-5 w-5 text-yellow-300/80" />
+              <h2 className="text-xl font-bold text-white">结业测试</h2>
+              <span className="rounded-full border border-yellow-300/15 bg-yellow-300/[0.06] px-2.5 py-0.5 text-[10px] font-medium text-yellow-200/70">
+                {lessons.length} 篇课文综合考核
+              </span>
+            </div>
+
+            <p className="mt-1 text-xs text-white/30">
+              随机抽取 {EXAM_QUESTION_COUNT} 题 · 正确率 ≥ {EXAM_PASS_PERCENT}% 通过
+              · 通过后点亮课程完成状态并颁发结业证书
+            </p>
+
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`relative overflow-hidden rounded-3xl border p-5 sm:p-6 ${
+              certificate
+                ? "border-emerald-300/15 bg-emerald-400/[0.05]"
+                : "border-yellow-300/12 bg-yellow-300/[0.03]"
+            }`}
+          >
+
+            <div className="flex flex-wrap items-center justify-between gap-4">
+
+              <div className="flex items-start gap-4">
+
+                <div
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${
+                    certificate
+                      ? "border-emerald-300/20 bg-emerald-400/[0.08]"
+                      : "border-yellow-300/15 bg-yellow-300/[0.06]"
+                  }`}
+                >
+                  {certificate ? (
+                    <Award className="h-6 w-6 text-emerald-300" />
+                  ) : (
+                    <ClipboardList className="h-6 w-6 text-yellow-200/70" />
+                  )}
+                </div>
+
+                <div>
+
+                  <h3 className="text-sm font-bold text-white">
+                    {certificate ? "已通过结业考核" : "尚未参加结业测试"}
+                  </h3>
+
+                  {certificate ? (
+                    <p className="mt-1.5 text-xs leading-5 text-white/35">
+                      成绩 {certificate.score}/{certificate.total}（{certificate.percent}%）
+                      · 全部 {lessons.length} 篇课文已完成，证书已颁发
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-xs leading-5 text-white/35">
+                      {progress >= 100
+                        ? "全部课时已学完，现在可以参加考核领取结业证书。"
+                        : `当前已完成 ${completedCount}/${lessons.length} 节，可随时参加考核；建议先学完全部课文再挑战。`}
+                    </p>
+                  )}
+
+                </div>
+
+              </div>
+
+              <button
+                onClick={() => navigate(`/course/${course.id}/exam`)}
+                className={`flex min-h-12 items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition hover:-translate-y-0.5 ${
+                  certificate
+                    ? "border border-emerald-300/20 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20"
+                    : "bg-gradient-to-r from-yellow-300/90 to-amber-300/90 text-[#0d1f1a]"
+                }`}
+              >
+                {certificate ? (
+                  <>
+                    <Award className="h-4 w-4" />
+                    查看结业证书
+                  </>
+                ) : isVipUser ? (
+                  <>
+                    <ClipboardList className="h-4 w-4" />
+                    参加结业测试
+                    <ChevronRight className="h-4 w-4" />
+                  </>
+                ) : (
+                  <>
+                    <Crown className="h-4 w-4" />
+                    VIP 专属 · 解锁
+                  </>
+                )}
+              </button>
+
+            </div>
+
+          </motion.div>
+
+        </section>
+      )}
 
 
       {/* =====================================================

@@ -14,9 +14,12 @@ import {
   Volume2,
   X,
 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { recordWrongWord } from "@/lib/wordBooks";
+import { usePracticeReward } from "@/hooks/usePracticeReward";
 import { recordVocabQuiz } from "@/api/vocabStats";
 import { speakThai } from "@/lib/thaiSpeech";
+import { useUserProfile } from "@/lib/userProfile";
+import { quizDifficultyFor } from "@/lib/aiQuizLevel";
 
 const QUIZ_TYPES = [
   { id: "memory", label: "记忆", description: "看词忆义 · 泰中双向" },
@@ -99,8 +102,24 @@ function pickTodayWords(pool, dailyCount) {
 }
 
 export default function VocabQuiz({ words, onExit, source = "book" }) {
+  /* 入学画像：等级决定默认难度档（用户仍可手动换档） */
+  const { profile } = useUserProfile();
+
   const [quizType, setQuizType] = useState("memory");
+  // 难度默认值：入学画像等级 → beginner/intermediate/advanced（用户可随时手动换档）
   const [quizDifficulty, setQuizDifficulty] = useState("all");
+
+  /* 画像加载完成后，若用户还没手动选过难度，按等级设一次默认值 */
+  const difficultyTouchedRef = useRef(false);
+  useEffect(() => {
+    const suggested = quizDifficultyFor(profile);
+    if (!suggested) return;
+
+    setQuizDifficulty((current) => {
+      if (difficultyTouchedRef.current) return current;
+      return suggested;
+    });
+  }, [profile?.thaiLevel]);
   const [dailyCount, setDailyCount] = useState(() => {
     try {
       const n = Number(localStorage.getItem(DAILY_KEY));
@@ -120,6 +139,9 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
   const [hintedQuestions, setHintedQuestions] = useState(() => new Set());
   const [hintCorrect, setHintCorrect] = useState(0);
   const [wrongWords, setWrongWords] = useState([]);
+
+  /* 练习结算层：答对计 XP/连续天数，答错进错题本 */
+  const reward = usePracticeReward();
   // “重练错题”：本轮答错的词单独成一轮（null = 常规/今日词汇轮）
   const [retryWords, setRetryWords] = useState(null);
 
@@ -140,6 +162,25 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showResult]);
 
+  /**
+   * 本轮题目。四种题型产出的对象形状不同（拼写只有 word+prompt，
+   * 选择题还有 question/options/correct，填空还有 sentence/translation…），
+   * 所以显式声明成宽松类型；否则 tsc 会把 useMemo 推断成第一个分支的窄类型，
+   * 后面所有分支的属性访问都会报一堆 TS2339。
+   *
+   * @type {Array<{
+   *   word: any,
+   *   prompt?: string,
+   *   question?: string,
+   *   options?: string[],
+   *   correct?: string,
+   *   sentence?: string,
+   *   translation?: string,
+   *   toChinese?: boolean,
+   *   fallback?: boolean,
+   *   [key: string]: any,
+   * }>}
+   */
   const questions = useMemo(() => {
     const passFilter = (word) =>
       word.thai_word &&
@@ -317,30 +358,19 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
     return bits.join("  ");
   }, [currentQuestion, quizType, isClozeFallback]);
 
+  /* 错题写入统一走 @/lib/wordBooks（本地为主存储 + 平台尽力同步）。
+     此前这里自己按 vocabulary_id 查重写 base44，与 wordBooks 按 thai_word
+     查重是**两个去重键**，同一个错词会写成两条记录；而且这里没有本地兜底，
+     未登录 / base44 不可用时错题直接丢失。 */
   const saveWrongWord = async (word) => {
     try {
-      const existing = await base44.entities.WrongNotebook.filter({
-        vocabulary_id: word.id,
-        removed: false,
+      await recordWrongWord({
+        thai: word.thai_word,
+        chinese: word.chinese_meaning,
+        roman: word.pronunciation,
+        sentence: word.example_thai,
+        sentenceCn: word.example_chinese,
       });
-
-      if (existing.length > 0) {
-        await base44.entities.WrongNotebook.update(existing[0].id, {
-          wrong_count: (existing[0].wrong_count || 1) + 1,
-          last_wrong_date: new Date().toISOString().split("T")[0],
-        });
-      } else {
-        await base44.entities.WrongNotebook.create({
-          vocabulary_id: word.id,
-          thai_word: word.thai_word,
-          chinese_meaning: word.chinese_meaning,
-          pronunciation: word.pronunciation,
-          example_thai: word.example_thai,
-          wrong_count: 1,
-          last_wrong_date: new Date().toISOString().split("T")[0],
-          removed: false,
-        });
-      }
     } catch (error) {
       console.error("保存错题失败:", error);
     }
@@ -365,6 +395,17 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
       } else {
         setScore((value) => value + 1);
       }
+
+      /* 测验答对同样计入 XP / 连续天数：
+         此前 6 个词汇模式没有一个写学习进度，用户在词汇星球练一整天，
+         等级与连续天数一动不动 —— 见 usePracticeReward 的说明。 */
+      reward.correct({
+        thai: currentQuestion.word.thai_word,
+        roman: currentQuestion.word.pronunciation,
+        chinese: currentQuestion.word.chinese_meaning,
+        sentence: currentQuestion.word.example_thai,
+        sentenceCn: currentQuestion.word.example_chinese,
+      });
     } else {
       await saveWrongWord(currentQuestion.word);
       if (!wrongWords.some((w) => getWordKey(w) === getWordKey(currentQuestion.word))) {
@@ -392,6 +433,7 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
     keepRetryPool = false
   ) => {
     reportedRef.current = false;
+    reward.resetRound();
     setQuizType(nextType);
     setQuizDifficulty(nextDifficulty);
     setCurrentIndex(0);
@@ -440,10 +482,10 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
 
   if (questions.length === 0) {
     return (
-      <div className="flex min-h-[420px] items-center justify-center px-6">
+      <div className="tv-quiz-root flex min-h-[420px] items-center justify-center px-6">
         <div className="text-center">
           <Trophy className="mx-auto mb-5 h-12 w-12 text-yellow-300/50" />
-          <h2 className="text-xl font-bold text-white">暂时无法开始测验</h2>
+          <h2 className="tv-quiz-stem text-xl font-bold text-white">暂时无法开始测验</h2>
           <p className="mt-2 text-sm text-white/40">
             {quizType === "cloze"
               ? "当前词书/筛选下没有可用于挖空的例句词条，请换一批词试试"
@@ -473,11 +515,11 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
           : "把错题再复习一遍，再来一次。";
 
     return (
-      <div className="relative mx-auto flex min-h-[560px] max-w-2xl items-center justify-center px-4 py-10 sm:px-6">
+      <div className="tv-quiz-root relative mx-auto flex min-h-[560px] max-w-2xl items-center justify-center px-4 py-10 sm:px-6">
         <motion.div
           initial={{ opacity: 0, scale: 0.94 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-md rounded-[30px] border border-white/10 bg-white/[0.045] p-6 text-center shadow-2xl backdrop-blur-2xl sm:p-8"
+          className="tv-quiz-result w-full max-w-md rounded-[30px] border border-white/10 bg-white/[0.045] p-6 text-center shadow-2xl backdrop-blur-2xl sm:p-8"
         >
           <Trophy className="mx-auto mb-5 h-14 w-14 text-yellow-300" />
           <div className="text-xs uppercase tracking-[0.2em] text-emerald-300/60">{currentType.label}</div>
@@ -562,7 +604,7 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
     normalizeAnswer(spellingAnswer) === normalizeAnswer(currentQuestion.word.thai_word);
 
   return (
-    <div className="relative mx-auto max-w-3xl px-3 py-5 sm:px-6 sm:py-6">
+    <div className="tv-quiz-root relative mx-auto max-w-3xl px-3 py-5 sm:px-6 sm:py-6">
       <div className="relative mb-4 flex items-center justify-between gap-3">
         <button
           onClick={onExit}
@@ -590,13 +632,13 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
       </div>
 
       {/* 题型：记忆 / 拼读 / 挖空 */}
-      <div className="mb-2 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5">
+      <div className="tv-quiz-typebar mb-2 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5">
         {QUIZ_TYPES.map((type) => (
           <button
             key={type.id}
             type="button"
             onClick={() => restart(type.id, quizDifficulty, !!retryWords)}
-            className={`rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition ${
+            className={`tv-quiz-type rounded-xl px-2 py-2.5 text-center text-xs font-semibold transition ${
               quizType === type.id
                 ? "bg-emerald-400/15 text-emerald-200"
                 : "text-white/35 hover:bg-white/[0.05] hover:text-white/70"
@@ -610,14 +652,14 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
 
       {/* 每日词数（今日词汇批次，仅词书练习；错题复习/错题重练不限制） */}
       {source !== "wrong" && !retryWords && (
-        <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+        <div className="tv-quiz-daily mb-2 flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-2">
           <span className="mr-1 text-[10px] tracking-wide text-emerald-200/50">今日词汇</span>
           {DAILY_COUNTS.map((d) => (
             <button
               key={d.id}
               type="button"
               onClick={() => changeDaily(d.id)}
-              className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+              className={`tv-quiz-chip rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
                 dailyCount === d.id
                   ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-200"
                   : "border-white/[0.07] bg-white/[0.03] text-white/40 hover:text-white/70"
@@ -630,7 +672,7 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
       )}
 
       {/* 难度 */}
-      <div className="mb-5 grid grid-cols-4 gap-1.5 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5">
+      <div className="tv-quiz-diffbar mb-5 grid grid-cols-4 gap-1.5 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5">
         {DIFFICULTY_OPTIONS.map((diff) => {
           const Icon = diff.icon;
           const isActive = quizDifficulty === diff.id;
@@ -641,8 +683,11 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
             <button
               key={diff.id}
               type="button"
-              onClick={() => restart(quizType, diff.id)}
-              className={`flex flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-center transition ${
+              onClick={() => {
+                difficultyTouchedRef.current = true; // 用户手动选过，不再被画像默认值覆盖
+                restart(quizType, diff.id);
+              }}
+              className={`tv-quiz-diff flex flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-center transition ${
                 isActive
                   ? `${DIFFICULTY_BADGES[diff.id]} border`
                   : "text-white/30 hover:bg-white/[0.05] hover:text-white/60"
@@ -662,11 +707,11 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -30 }}
-          className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.045] shadow-2xl backdrop-blur-2xl"
+          className="tv-quiz-card relative overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.045] shadow-2xl backdrop-blur-2xl"
         >
-          <div className="relative p-5 sm:p-9">
+          <div className="tv-quiz-pad relative p-5 sm:p-9">
             <div className="mb-7 text-center">
-              <div className="mb-3 flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-yellow-300/60">
+              <div className="tv-quiz-kicker mb-3 flex items-center justify-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-yellow-300/60">
                 <Sparkles className="h-3.5 w-3.5" />
                 {currentType.label}
                 {currentQuestion.toChinese === true && (
@@ -684,12 +729,12 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
               {/* memory：题干（双向） */}
               {quizType === "memory" && (
                 <>
-                  <p className="mb-4 text-sm text-white/35">
+                  <p className="tv-quiz-lead mb-4 text-sm text-white/35">
                     {currentQuestion.toChinese
                       ? "这个泰语单词是什么意思？"
                       : "这个中文对应的泰语是？"}
                   </p>
-                  <h2 className={`font-thai ${currentQuestion.toChinese ? "text-5xl sm:text-6xl" : "text-3xl sm:text-4xl"} font-black text-white`}>
+                  <h2 className={`tv-quiz-stem font-thai ${currentQuestion.toChinese ? "text-5xl sm:text-6xl" : "text-3xl sm:text-4xl"} font-black text-white`}>
                     {currentQuestion.question}
                   </h2>
                   {currentQuestion.toChinese && currentQuestion.word.pronunciation && (
@@ -731,8 +776,8 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
               {/* spell：听发音拼写 */}
               {quizType === "spell" && (
                 <>
-                  <p className="mb-4 text-sm text-white/35">根据中文释义与发音拼写泰文</p>
-                  <h2 className="text-2xl font-black leading-tight text-white sm:text-3xl">
+                  <p className="tv-quiz-lead mb-4 text-sm text-white/35">根据中文释义与发音拼写泰文</p>
+                  <h2 className="tv-quiz-stem text-2xl font-black leading-tight text-white sm:text-3xl">
                     {currentQuestion.prompt}
                   </h2>
                   <div className="mt-5 flex items-center justify-center gap-3">
@@ -763,11 +808,11 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
               {/* cloze：挖空 */}
               {quizType === "cloze" && (
                 <>
-                  <p className="mb-4 text-sm text-white/35">
+                  <p className="tv-quiz-lead mb-4 text-sm text-white/35">
                     {isClozeFallback ? "请选择对应泰语单词" : "选词填入例句空白处"}
                   </p>
                   {isClozeFallback ? (
-                    <h2 className="text-3xl font-black leading-tight text-white sm:text-4xl">
+                    <h2 className="tv-quiz-stem text-3xl font-black leading-tight text-white sm:text-4xl">
                       {currentQuestion.question}
                     </h2>
                   ) : (
@@ -825,7 +870,7 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="mb-5 rounded-2xl border border-amber-300/15 bg-amber-400/[0.06] px-4 py-3 text-center text-xs leading-5 text-amber-100/80">
+                  <div className="tv-quiz-hint mb-5 rounded-2xl border border-amber-300/15 bg-amber-400/[0.06] px-4 py-3 text-center text-xs leading-5 text-amber-100/80">
                     <span className="mr-1">💡</span>
                     {hintText}
                   </div>
@@ -849,7 +894,7 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
                   placeholder="输入泰文，例如 สวัสดี"
                   lang="th"
                   autoComplete="off"
-                  className={`w-full rounded-2xl border-2 bg-white/[0.035] px-4 py-4 text-center text-2xl font-semibold text-white outline-none placeholder:text-sm placeholder:text-white/20 focus:border-emerald-300/40 ${
+                  className={`tv-quiz-input w-full rounded-2xl border-2 bg-white/[0.035] px-4 py-4 text-center text-2xl font-semibold text-white outline-none placeholder:text-sm placeholder:text-white/20 focus:border-emerald-300/40 ${
                     answered
                       ? spellingCorrect
                         ? "border-emerald-400/50"
@@ -860,7 +905,7 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
                 <button
                   type="submit"
                   disabled={answered || !spellingAnswer.trim()}
-                  className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
+                  className="tv-quiz-submit flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
                 >
                   <Languages className="h-4 w-4" />提交答案
                 </button>
@@ -889,7 +934,7 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
                       type="button"
                       disabled={answered}
                       onClick={() => finishAnswer(option)}
-                      className={`relative min-h-[68px] rounded-2xl border-2 p-4 text-left text-sm font-medium leading-6 text-white/80 transition-all ${style}`}
+                      className={`tv-quiz-option relative min-h-[68px] rounded-2xl border-2 p-4 text-left text-sm font-medium leading-6 text-white/80 transition-all ${style}`}
                     >
                       <span className={quizType === "memory" && currentQuestion.toChinese ? "" : "font-thai"}>{option}</span>
                       {answered && isCorrect && <Check className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-300" />}
@@ -919,8 +964,8 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
         </motion.div>
       </AnimatePresence>
 
-      <div className="mt-5 flex justify-center">
-        <div className="rounded-full border border-white/[0.06] bg-white/[0.025] px-4 py-2 text-xs text-white/35">
+      <div className="tv-quiz-foot mt-5 flex justify-center">
+        <div className="tv-quiz-score rounded-full border border-white/[0.06] bg-white/[0.025] px-4 py-2 text-xs text-white/35">
           当前得分 <span className="font-bold text-yellow-300">{score}</span>
           {retryWords ? (
             <span className="ml-3 text-yellow-200/60">

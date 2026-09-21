@@ -2,8 +2,18 @@
 // 口语练习历史：localStorage 持久化四维评分记录
 // =========================================================
 
+import { PROGRESS_EVENT_NAMES } from "@/lib/progressEvents";
+
 const STORAGE_KEY = "thaiAI_speaking_history";
 const MAX_RECORDS = 200; // 最多保留 200 条记录
+
+/**
+ * 口语记录变化事件。
+ * 首页的「今天发生了什么」要当场反应（星球脉冲、汇入光丝），
+ * 所以每次写入都广播一次——与其他进度模块（courseProgress / mediaProgress）
+ * 保持同一套写法。
+ */
+export const SPEAKING_HISTORY_EVENT = PROGRESS_EVENT_NAMES.speaking;
 
 /**
  * 保存一次练习记录
@@ -27,6 +37,9 @@ export function saveSpeakingRecord(record) {
     // 只保留最近 MAX_RECORDS 条
     const trimmed = history.slice(-MAX_RECORDS);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(SPEAKING_HISTORY_EVENT));
+    }
   } catch (e) {
     console.warn("Failed to save speaking history:", e);
   }
@@ -97,4 +110,7 @@ export function getDailyAverages(days = 30) {
  */
 export function clearSpeakingHistory() {
   localStorage.removeItem(STORAGE_KEY);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(SPEAKING_HISTORY_EVENT));
+  }
 }

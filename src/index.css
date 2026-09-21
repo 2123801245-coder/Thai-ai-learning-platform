@@ -819,6 +819,121 @@
   100% { opacity: 0; }
 }
 
+/* =========================================================
+   星系画布的背景视频
+   ---------------------------------------------------------
+   真实星空素材铺在 WebGL 画布下层（WorldCanvas 的 gl.alpha = true，
+   且 GalaxyScene 里原来那个不透明背景球已移除）。
+   视频本身在动，所以不再叠加 CSS 位移动画。
+========================================================= */
+
+.galaxy-bg-video {
+  object-position: center;
+  /* 首帧解码前的底色，避免闪一下透明 */
+  background-color: #04090c;
+  /*
+   * 压暗 + 降饱和 + **大半径模糊**。
+   *
+   * 关键原因（用户三次反馈，最后一次原话："被星空挡住了"）：
+   * 这段素材本身就是一片**锐利、极密的银河星点**。只压亮度是没用的 ——
+   * 密密麻麻的小白点在近黑底上，哪怕只剩 15% 亮度也依然是一屏明显星点，
+   * 而星座星点（加光、尺寸小）永远抢不过它，主体立不出来。
+   * 实测：brightness 0.55 时整屏仍是密集星点；
+   *      blur 2px 仍能看清星点；blur 9px 才退成"一层银河薄雾"。
+   *
+   * 于是策略改为：**视频只管氛围（虚），锐利星点全部交给 3D 星场与星座。**
+   * 背景 = 一层柔和的银河薄雾，而不是第二片星空。
+   * 缩放 1.06 是为了盖住模糊后边缘的透明羽化。
+   */
+  filter: saturate(0.5) brightness(0.5) blur(9px);
+  transform: scale(1.06);
+}
+
+/* 窄屏直接不上视频：整屏 blur 是移动端最贵的一笔 GPU 开销，
+   而手机上画布本来就小，氛围靠底色 + 压暗层足够。 */
+@media (max-width: 640px) {
+  .galaxy-bg-video {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-bg-video {
+    display: none;
+  }
+}
+
+/* =========================================================
+   电影层：胶片颗粒 / 开场揭示 / 方向光雾
+   ---------------------------------------------------------
+   目标（用户原话）：不是"一个漂亮的学习星系"，而是
+   "一段可以被暂停的电影画面"。三件事都不能用 WebGL 做：
+     · 颗粒是**全屏均匀**的噪声，用后处理（Pass）成本高且要动渲染管线；
+     · 开场揭示是 CSS 一行动画就能完成的事；
+     · 方向光雾只是一层极淡的渐变，与 3D 灯光无关。
+   全部静态/一次性动画：不产生持续重绘，移动端同样安全。
+========================================================= */
+
+/* 胶片颗粒：SVG feTurbulence 噪声铺满画布，soft-light 叠加。
+   强度必须"看不见"——用户该感觉到的是"不像纯数字渲染"，不是"有颗粒特效"。 */
+.galaxy-grain {
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  opacity: 0.05;
+  mix-blend-mode: soft-light;
+}
+
+/*
+ * 底部详情面板的玻璃模糊。
+ * ---------------------------------------------------------
+ * 为什么不用 Tailwind 的 `backdrop-blur-xl` 而要单写一条：
+ * **backdrop-filter 会让元素成为 `position: fixed` 后代的包含块**。
+ * 手机上的全屏详情弹窗就挂在这个面板里，于是被锁进面板的盒子
+ * （实测 334px，而视口 390px —— 看起来像"弹窗比屏幕窄"）。
+ * 所以窄屏一律不做背景模糊：既让弹窗回到视口坐标系，
+ * 也省掉移动端最大的一块 GPU 开销。
+ */
+.galaxy-panel {
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+@media (max-width: 639px) {
+  .galaxy-panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* 纸上星图：颗粒要更轻（纸本身有纹理，再叠就脏了） */
+[data-galaxy-mode="paper"] .galaxy-grain {
+  opacity: 0.03;
+}
+
+/* 开场揭示：从更深更近的地方"浮"出来，约 1 秒。只播一次。 */
+@keyframes galaxyReveal {
+  from {
+    opacity: 0;
+    transform: scale(1.015);
+    filter: brightness(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+.galaxy-reveal {
+  animation: galaxyReveal 0.95s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-reveal {
+    animation: none;
+  }
+}
+
 .site-bg-a {
   animation: bgCrossA 72s ease-in-out infinite;
 }
@@ -1451,3 +1566,1667 @@ animation:gradientMove 6s ease infinite;
 }
 
 /* ===== 数字佛像沉浸主页 ===== */
+
+/* ===== ThaiAI World · 今日活动（静态星图里的今日脉冲） =====
+   与 WebGL 版同义：向外扩散的环 = 今天练过这颗星球。
+   没有 WebGL 的设备走这条路，不能被降级成「看不出今天做过什么」。 */
+@keyframes worldTodayPulse {
+  0% { transform: translate(-50%, -50%) scale(0.65); opacity: 0.75; }
+  70% { opacity: 0.28; }
+  100% { transform: translate(-50%, -50%) scale(1.55); opacity: 0; }
+}
+/* ⚠️ .world-today-ring 的语义是唯一的：「今天练过的那颗星球」。
+   静态星图的核对就靠数它，所以徽标上的小圆点必须用下面这个 -dot 类。 */
+.world-today-ring {
+  opacity: 0.7;
+  animation: worldTodayPulse 2.4s ease-out infinite;
+}
+.world-today-dot {
+  animation: worldTodayPulse 2.4s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .world-today-ring { animation: none; opacity: 0.5; }
+  .world-today-dot { animation: none; }
+}
+/* =========================================================
+   首页守护者场景（真实照片 + 真景深 + AI HUD）
+   ---------------------------------------------------------
+   佛像是一张真实照片（public/images/thai-guardian-hero.webp）。
+   页面里不再有几何体佛像；景深靠同一张图的第二层模糊 + 椭圆遮罩实现，
+   遮罩下露出的是清晰的那一层 —— 所以最坏情况也只是「模糊不够」，
+   不会把主体糊掉。
+========================================================= */
+
+.world-scene-subject {
+  will-change: transform;
+  /* 素材是「青黑陶瓷 + 傍晚」本来就暗，这里补回一点亮度，
+     否则叠上压暗层就什么都看不见了。 */
+  filter: brightness(1.28) contrast(1.05) saturate(1.04);
+}
+
+/* 宽幅版（桌面 ≥1100px）：
+   桌面不再用「竖幅主体 + 运行时模糊层 + 遮罩」，而是换成离线合成的
+   2560×1150 宽幅图（public/images/thai-guardian-hero-wide.*）——
+   主体按容器高度等比放大（头冠到莲座完整、莲座落在画面底缘），
+   两侧是同一张照片的中度模糊景色。所以这里只需一层 cover，无遮罩。 */
+@media (min-width: 1100px) {
+  .world-scene-subject {
+    object-fit: cover;
+    /* 宽幅图（2000×1120）里主体已经是垂直居中的全身像，上下各留 7% 余量，
+       所以 50% 50% 即可——任何比例的宽屏裁切都只是横向的，主体不会被切。 */
+    object-position: 50% 50%;
+    /* 宽幅图是电影调色，补一点亮度把佛像从暗部里提出来 */
+    filter: brightness(1.12) contrast(1.04) saturate(1.04);
+  }
+
+  /* 满屏英雄区：左侧文案给到 40px，并在上方空白里居中。
+     选择器带 .world-scene 是为了压过 Tailwind 的 `lg:mt-0` / `lg:px-6`
+     （同优先级时工具类在后面，会赢）。 */
+  .world-scene .world-scene-copy {
+    margin-top: auto;
+    margin-bottom: auto;
+    padding-left: 2.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  /* 星球行 + 小贴士压到画面底缘 */
+  .world-scene .world-scene-bottom {
+    margin-top: auto;
+  }
+
+  /*
+   * 压暗层：佛像身上不许蒙东西（用户明确要求）。
+   * 原来这里还有一套「桌面专用」的左→右数值，但同优先级的窄屏规则
+   * 排在文件更后面，那套从来没生效过；纵向层与暗角已经整层撤掉，
+   * 这里只保留文案底下这一条，具体数值见下面基础规则里的 .world-scene-shade-r。
+   */
+
+  /* 宽幅图（主体左移至画面中部）里脸部在约 47% / 高 26%，
+     莲座（脚下那层）在约 35% / 高 85%：锚点跟着走。 */
+  .world-face-halo,
+  .world-ripple {
+    left: 47%;
+    top: 26%;
+  }
+
+  .world-lotus-glow,
+  .world-lotus-motes {
+    left: 35%;
+  }
+
+  .world-guardian-hot {
+    left: 24%;
+    top: 4%;
+    width: 50%;
+    height: 52%;
+  }
+
+  /* 莲座光晕的竖直锚点：宽幅图里莲座中心在画面高 85.5%，
+     外圈高 22% → bottom 3.5%；内圈高 11% → bottom 9%。 */
+  .world-lotus-glow {
+    bottom: 3.5%;
+  }
+  .world-lotus-glow-inner {
+    bottom: 9%;
+  }
+}
+
+/* 模糊层：只在外圈可见（中心被遮罩挖空），用来做浅景深。
+   全身像版：桌面主体层改 contain 后，这一层仍 cover 填满两侧，
+   遮罩中心挖空处透出清晰的全身佛像。 */
+.world-scene-dof {
+  filter: blur(11px) saturate(1.05) brightness(0.9);
+  transform: scale(1.05);
+  -webkit-mask-image: radial-gradient(
+    ellipse 50% 72% at 50% 52%,
+    transparent 42%,
+    #000 86%
+  );
+  mask-image: radial-gradient(
+    ellipse 50% 72% at 50% 52%,
+    transparent 42%,
+    #000 86%
+  );
+}
+
+/*
+ * 压暗层：只有文案底下这一条，而且很窄。
+ *   0%（0.72）→ 12%（0.34）→ 30%（透明）
+ * 佛像在画面 25%～75%，走到 30% 时这一层已经结束 —— 它身上一像素都没被压到。
+ * 文字的可读性改由 .world-scene-copy 的 text-shadow 负责（照片上比整块黑纱
+ * 更干净，而且不会把主体吃掉）。
+ */
+.world-scene-shade-r {
+  background: linear-gradient(
+    to right,
+    rgba(5, 8, 7, 0.72) 0%,
+    rgba(5, 8, 7, 0.34) 12%,
+    rgba(5, 8, 7, 0) 30%
+  );
+}
+
+/* 文案在照片上：光晕式投影比压暗层精确 —— 只让字立起来，不动照片 */
+.world-scene-copy {
+  text-shadow:
+    0 2px 18px rgba(0, 0, 0, 0.72),
+    0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+/* =========================================================
+   World Hero Band —— 其余主要页面的首屏
+   （对话室 / 学习宇宙 / 文化宇宙）
+========================================================= */
+
+/* 取景：窄屏沿首页竖幅构图（42% 8%），桌面交给每页自己的 --hero-focus */
+.world-band-subject {
+  object-position: 42% 8%;
+}
+
+@media (min-width: 1100px) {
+  /* 特异性压过 .world-scene-subject 里的 50% 50%：
+     同一张世界，每页看不同角落。 */
+  .world-scene .world-band-subject {
+    object-position: var(--hero-focus, 50% 50%);
+  }
+}
+
+/*
+ * 压暗（带子版）：与首页同一条规则 —— 佛像身上不蒙任何东西。
+ * 纵向层与暗角已撤掉（带子矮，暗角会把头冠之外全吃掉），
+ * 只留文案底下这一条，30% 归零，佛像（25%～75%）等于没被压过。
+ */
+.world-band-shade-r {
+  background: linear-gradient(
+    to right,
+    rgba(5, 8, 7, 0.66) 0%,
+    rgba(5, 8, 7, 0.3) 12%,
+    rgba(5, 8, 7, 0) 30%
+  );
+}
+
+/* 每页自己的色相：右上角一层很淡的径向光（照到的地方像被这一页的主题点亮） */
+.world-band-accent {
+  background: radial-gradient(
+    70% 90% at 84% 10%,
+    var(--hero-accent-soft, rgba(110, 231, 168, 0.16)),
+    transparent 62%
+  );
+  mix-blend-mode: screen;
+}
+
+/* 底缘融回页面底色：带子下沿不要出现硬边 */
+.world-band-fade {
+  height: 26%;
+  background: linear-gradient(to bottom, transparent, rgba(5, 8, 7, 0.72));
+}
+
+/* 指针光晕：翡翠主光 + 暗金辅光，位置由 --gx/--gy 驱动 */
+.world-pointer-glow {
+  background:
+    radial-gradient(
+      200px circle at var(--gx, 64%) var(--gy, 30%),
+      rgba(110, 231, 168, 0.15),
+      transparent 68%
+    ),
+    radial-gradient(
+      420px circle at var(--gx, 64%) var(--gy, 30%),
+      rgba(232, 198, 132, 0.07),
+      transparent 74%
+    );
+}
+
+/* 佛像热区（点它进对话室）：
+   窄屏 cover 22% 8% 时佛像在画面中偏右，桌面宽幅图里主体左移到画面中部，
+   两套构图各用一个位置，别为了一边改另一边。 */
+.world-guardian-hot {
+  left: 38%;
+  top: 4%;
+  width: 52%;
+  height: 44%;
+}
+
+/* 靠近脸部：光环 + 能量涟漪（都不碰照片本体） */
+.world-face-halo {
+  position: absolute;
+  /* 脸部在源图上方约 18%（头冠下） */
+  left: 56%;
+  top: 18%;
+  width: 32%;
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(110, 231, 168, 0.2),
+    rgba(110, 231, 168, 0.05) 46%,
+    transparent 72%
+  );
+  animation: worldHalo 3.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.world-ripple {
+  position: absolute;
+  left: 56%;
+  top: 14%;
+  width: 22%;
+  aspect-ratio: 1 / 1;
+  border-radius: 9999px;
+  border: 1px solid rgba(110, 231, 168, 0.32);
+  animation: worldRipple 2.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes worldHalo {
+  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.06); }
+}
+
+@keyframes worldRipple {
+  0% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.72); }
+  70% { opacity: 0.18; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); }
+}
+
+/* =========================================================
+   莲座呼吸光（守护者设定）
+   ---------------------------------------------------------
+   佛像结跏趺坐的莲座周期性泛起翡翠光晕：两层椭圆光斑错相位呼吸 +
+   几粒从莲座缓慢升起的翡翠光尘。全部 pointer-events: none，
+   只是叠在照片底部的光，佛像本体（一张真实照片）不做任何变形。
+   桌面 contain + 底部对齐 → 莲座落在场景底缘居中；窄屏 cover 时
+   莲座略偏右，位置由下面的媒体查询微调。
+========================================================= */
+
+.world-lotus-layer {
+  overflow: hidden;
+  /* 只在画面下三分之一可见，避免光晕糊到佛像身体上 */
+  -webkit-mask-image: linear-gradient(
+    to top,
+    #000 0%,
+    #000 16%,
+    transparent 34%
+  );
+  mask-image: linear-gradient(to top, #000 0%, #000 16%, transparent 34%);
+}
+
+.world-lotus-glow {
+  position: absolute;
+  /* 窄屏 cover 时莲座略偏右（约 56%），桌面宽幅图里也是 57%，取值一致 */
+  left: 56%;
+  bottom: 1.5%;
+  width: min(44%, 520px);
+  height: min(22%, 180px);
+  border-radius: 9999px;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse at 50% 100%,
+    rgba(110, 231, 168, 0.34),
+    rgba(61, 220, 151, 0.13) 44%,
+    transparent 74%
+  );
+  filter: blur(3px);
+  mix-blend-mode: screen;
+  animation: worldLotusBreath 6.4s ease-in-out infinite;
+}
+
+/* 内圈更亮一点、相位错开半个周期：两层交叉呼吸，看起来是「活」的 */
+.world-lotus-glow-inner {
+  width: min(26%, 300px);
+  height: min(11%, 96px);
+  bottom: 0.5%;
+  filter: blur(2px);
+  background: radial-gradient(
+    ellipse at 50% 100%,
+    rgba(155, 243, 203, 0.4),
+    rgba(110, 231, 168, 0.1) 48%,
+    transparent 76%
+  );
+  animation-name: worldLotusBreathInner;
+  animation-duration: 6.4s;
+  animation-delay: -3.2s;
+}
+
+.world-lotus-motes {
+  position: absolute;
+  left: 50%;
+  bottom: 2%;
+  width: min(44%, 520px);
+  height: min(30%, 240px);
+  transform: translateX(-50%);
+}
+
+.world-lotus-mote {
+  position: absolute;
+  bottom: 0;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(196, 255, 226, 0.95),
+    rgba(110, 231, 168, 0.4) 52%,
+    transparent 76%
+  );
+  box-shadow: 0 0 10px rgba(110, 231, 168, 0.4);
+  opacity: 0;
+  animation-name: worldLotusMote;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
+}
+
+/* 呼吸：很慢、幅度很小，只变亮度与一点点尺度 */
+@keyframes worldLotusBreath {
+  0%,
+  100% {
+    opacity: 0.34;
+    transform: translateX(-50%) scale(0.97);
+  }
+  46% {
+    opacity: 0.82;
+    transform: translateX(-50%) scale(1.03);
+  }
+}
+
+@keyframes worldLotusBreathInner {
+  0%,
+  100% {
+    opacity: 0.16;
+    transform: translateX(-50%) scale(0.94);
+  }
+  52% {
+    opacity: 0.6;
+    transform: translateX(-50%) scale(1.05);
+  }
+}
+
+@keyframes worldLotusMote {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0) scale(0.7);
+  }
+  22% {
+    opacity: 0.7;
+  }
+  72% {
+    opacity: 0.28;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(4px, -58px, 0) scale(1);
+  }
+}
+
+/* 手机：光尘减半，更省电 */
+@media (max-width: 640px) {
+  .world-lotus-mote:nth-child(n + 3) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .world-lotus-glow {
+    animation: none;
+    opacity: 0.45;
+  }
+  .world-lotus-glow-inner {
+    opacity: 0.3;
+  }
+  .world-lotus-mote {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* 灯笼与光尘（默认 10 个，手机上减半，见下面的媒体查询） */
+.world-lantern {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 216, 152, 0.95),
+    rgba(255, 168, 88, 0.32) 55%,
+    transparent 74%
+  );
+  box-shadow: 0 0 12px rgba(255, 178, 92, 0.3);
+  animation-name: worldDrift;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@keyframes worldDrift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(6px, -14px, 0); }
+}
+
+/* 声波：每根条读同一个真实电平 --lvl，只靠不同系数拉开形状 */
+.world-wave-bar {
+  width: 2px;
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, #9bf3cb, #3ddc97);
+  transform-origin: bottom center;
+  transform: scaleY(calc(0.16 + var(--lvl, 0) * var(--k, 1) * 1.45));
+  transition: transform 90ms linear;
+}
+
+/* 右下角能量核心：呼吸的光环 */
+.world-core-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  border: 1px solid rgba(110, 231, 168, 0.32);
+  animation: worldCore 2.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes worldCore {
+  0% { opacity: 0.5; transform: scale(1); }
+  70% { opacity: 0.12; }
+  100% { opacity: 0; transform: scale(1.34); }
+}
+
+/* 手机：粒子减半（省电），文案压到佛像身前 */
+@media (max-width: 640px) {
+  .world-lantern:nth-child(n + 6) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .world-lantern,
+  .world-face-halo,
+  .world-ripple,
+  .world-core-ring {
+    animation: none;
+  }
+}
+/* =========================================================
+   学习宇宙：透明轨道 + 小型卫星
+   （星球本体是真实照片，见 components/home/UniverseRow.jsx）
+========================================================= */
+
+.world-orbit {
+  border-width: 1px;
+  border-style: solid;
+  pointer-events: none;
+}
+
+.world-satellite {
+  animation: worldSatellite 6.5s ease-in-out infinite;
+}
+
+@keyframes worldSatellite {
+  0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.85; }
+  50% { transform: translate3d(4px, -5px, 0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .world-satellite { animation: none; }
+}
+
+/* =========================================================
+   AI Teacher Avatar · 数字守护者（components/ai/AIAvatar.jsx）
+   纯 CSS 动画：transform/opacity 走 GPU；减弱动效时全部静止
+========================================================= */
+
+.ai-avatar-figure {
+  width: 100%;
+  height: 100%;
+  animation: aia-breathe 4.2s ease-in-out infinite;
+}
+
+/* 外圈光环：静息呼吸；listening 随电平微扩 */
+.ai-avatar-ring {
+  position: absolute;
+  inset: -6%;
+  border-radius: 9999px;
+  border: 1.5px solid;
+  opacity: 0.8;
+  animation: aia-ring 3.6s ease-in-out infinite;
+  transition: border-color 300ms ease;
+}
+.ai-avatar[data-state="listening"] .ai-avatar-ring {
+  animation: aia-ring-live 1.1s ease-in-out infinite;
+}
+
+/* 眉心翡翠核：greeting 时点亮脉冲 */
+.ai-avatar-core {
+  animation: aia-core 3s ease-in-out infinite;
+}
+.ai-avatar[data-state="greeting"] .ai-avatar-core {
+  animation: aia-core-hot 1.4s ease-in-out infinite;
+}
+
+/* 神经纹路：thinking 时流光加速 */
+.ai-avatar-nerves path {
+  stroke-dasharray: 14 22;
+  animation: aia-flow 5s linear infinite;
+}
+.ai-avatar[data-state="thinking"] .ai-avatar-nerves path {
+  animation-duration: 1.1s;
+}
+
+/* 头冠：greeting 点头 */
+.ai-avatar-crown {
+  transform-origin: 50px 22px;
+}
+.ai-avatar[data-state="greeting"] .ai-avatar-figure {
+  animation: aia-nod 1.6s ease-in-out;
+}
+
+/* 嘴部光带：speaking 随电平脉动 */
+.ai-avatar-mouth {
+  transform-origin: 50px 62px;
+  transform: scaleX(calc(0.6 + var(--lvl, 0) * 0.8));
+  transition: transform 90ms linear;
+}
+.ai-avatar[data-state="speaking"] .ai-avatar-mouth {
+  fill: #6ee7b7;
+  opacity: 0.85;
+}
+
+.ai-avatar-label {
+  position: absolute;
+  left: 50%;
+  bottom: -8%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+
+@keyframes aia-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-2.5%) scale(1.012); }
+}
+@keyframes aia-ring {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.04); opacity: 0.85; }
+}
+@keyframes aia-ring-live {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(calc(1.05 + var(--lvl, 0) * 0.12)); opacity: 1; }
+}
+@keyframes aia-core {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@keyframes aia-core-hot {
+  0%, 100% { opacity: 1; r: 2.4; }
+  50% { opacity: 0.9; r: 3.4; }
+}
+@keyframes aia-flow {
+  to { stroke-dashoffset: -36; }
+}
+@keyframes aia-nod {
+  0%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(3.5deg); }
+  65% { transform: rotate(-2deg); }
+}
+
+/* =========================================================
+   Mentor Room · 对话室
+========================================================= */
+
+/* 麦克风：录音时按电平放大光圈 */
+.mentor-mic {
+  position: relative;
+}
+.mentor-mic::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  opacity: 0;
+  transform: scale(1);
+  transition: opacity 200ms ease;
+}
+.mentor-mic:active::after,
+.mentor-mic[data-recording="true"]::after {
+  opacity: calc(0.4 + var(--lvl, 0) * 0.6);
+  transform: scale(calc(1 + var(--lvl, 0) * 0.28));
+}
+
+/* 正在听的呼吸点 */
+.mentor-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: #34d399;
+  animation: mentor-dot 1.2s ease-in-out infinite;
+}
+@keyframes mentor-dot {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* 减弱动效：全部静止，只留静态形象 */
+@media (prefers-reduced-motion: reduce) {
+  .ai-avatar-figure,
+  .ai-avatar-ring,
+  .ai-avatar-core,
+  .ai-avatar-nerves path,
+  .mentor-live-dot {
+    animation: none !important;
+  }
+}
+
+/* =========================================================
+   透明玻璃柱（首页佛像右缘的信息浮层）
+   ---------------------------------------------------------
+   卡片不再是实心面板：半透明黑 + 玻璃模糊，让佛像的灯光从卡片
+   后面透过来。柱体不拦截指针（Home.jsx 里 xl:pointer-events-none），
+   每张卡自己恢复交互。
+========================================================= */
+
+.glass-column {
+  --glass-bg: rgba(3, 8, 6, 0.38);
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
+
+.glass-column > div > section,
+.glass-column .glass-card {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(18px) saturate(130%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 14px 38px rgba(0, 0, 0, 0.28);
+  transition:
+    background-color 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms ease,
+    box-shadow 240ms ease;
+}
+
+/* 悬停时玻璃微微亮起（不是变实心） */
+
+.glass-column > div > section:hover {
+  background: rgba(3, 8, 6, 0.52);
+  border-color: rgba(255, 255, 255, 0.13);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-column > div > section,
+  .glass-column .glass-card {
+    transition: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   泰国探索者 · 地图板
+   ---------------------------------------------------------------
+   一张真实泰国地图艺术图 + 一层真实控件（罗盘 / 标题 / 探索路线栏 /
+   探索进度卡 / 左下提示条 / 缩放）。九块城市标签与地图**同一个坐标系**，
+   所以拖动、缩放时标签与地图上的金色地点针永远咬合。
+
+   尺寸全部以 --exp-u（板宽 px，由组件用 ResizeObserver 写入）为基准，
+   于是整块板随容器等比缩放，手机上不会挤成一团。
+   ═══════════════════════════════════════════════════════ */
+
+.exp-shell {
+  position: relative;
+  width: 100%;
+  --exp-u: 1100px;
+}
+
+.exp-board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border-radius: 30px;
+  border: 1px solid rgba(232, 198, 132, 0.14);
+  background: #040706;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.exp-shell[data-dragging] .exp-board { cursor: grabbing; }
+
+.exp-plane {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.exp-map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* 已探索城市的金色虚线航路（地图坐标系，跟着缩放） */
+.exp-route {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.exp-route-line {
+  fill: none;
+  stroke: rgba(246, 223, 174, 0.75);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 10 9;
+  filter: drop-shadow(0 0 6px rgba(246, 223, 174, 0.45));
+  animation: expRouteFlow 22s linear infinite;
+}
+
+@keyframes expRouteFlow {
+  to { stroke-dashoffset: -380; }
+}
+
+/* ── 地图标签（盖住参考稿里烘焙的那九块，并成为真控件） ── */
+.exp-chip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--exp-u) * 0.0065);
+  width: 17.2%;
+  height: calc(var(--exp-u) * 0.057);
+  padding: 0 calc(var(--exp-u) * 0.011) 0 calc(var(--exp-u) * 0.007);
+  border-radius: 999px;
+  border: 1px solid rgba(232, 198, 132, 0.26);
+  background: linear-gradient(180deg, rgba(11, 16, 14, 0.94), rgba(5, 9, 8, 0.965));
+  box-shadow:
+    0 calc(var(--exp-u) * 0.008) calc(var(--exp-u) * 0.03) rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  color: #f3f6f2;
+  font-size: calc(var(--exp-u) * 0.0172);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.exp-chip:hover {
+  transform: translate(-50%, -50%) scale(1.045);
+  border-color: rgba(232, 198, 132, 0.5);
+}
+
+.exp-chip[data-active] {
+  border-color: rgba(110, 231, 168, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(110, 231, 168, 0.22),
+    0 calc(var(--exp-u) * 0.01) calc(var(--exp-u) * 0.034) rgba(0, 0, 0, 0.62),
+    0 0 calc(var(--exp-u) * 0.03) rgba(52, 211, 153, 0.28);
+}
+
+.exp-chip-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--exp-u) * 0.029);
+  height: calc(var(--exp-u) * 0.029);
+  border-radius: 999px;
+  font-size: calc(var(--exp-u) * 0.0135);
+  border: 1px solid rgba(232, 198, 132, 0.42);
+  background: rgba(232, 198, 132, 0.1);
+  border-color: color-mix(in srgb, var(--exp-city, #e8c684) 55%, transparent);
+  background: color-mix(in srgb, var(--exp-city, #e8c684) 14%, rgba(0, 0, 0, 0.35));
+}
+
+.exp-chip-body { min-width: 0; }
+
+.exp-chip-title {
+  display: block;
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exp-chip-title em {
+  font-style: normal;
+  font-weight: 500;
+  margin-left: 0.5em;
+  font-size: calc(var(--exp-u) * 0.0094);
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.exp-chip-tags {
+  display: block;
+  margin-top: calc(var(--exp-u) * 0.0035);
+  font-size: calc(var(--exp-u) * 0.0092);
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: #e5c88f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exp-chip-done {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--exp-u) * 0.022);
+  height: calc(var(--exp-u) * 0.022);
+  margin-left: auto;
+  border-radius: 999px;
+  background: rgba(232, 198, 132, 0.16);
+  border: 1px solid rgba(232, 198, 132, 0.45);
+  color: #f6dfae;
+}
+
+.exp-chip-done svg { width: 62%; height: 62%; }
+
+/* ── 罗盘 ── */
+.exp-compass {
+  position: absolute;
+  left: 2%;
+  top: 2.5%;
+  width: 9.6%;
+  pointer-events: none;
+  opacity: 0.92;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.5));
+}
+
+.exp-compass-letter {
+  fill: #e8c684;
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+  letter-spacing: 0.06em;
+}
+
+/* ── 左上两个圆按钮 ── */
+.exp-actions {
+  position: absolute;
+  left: 2.2%;
+  top: 14.5%;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--exp-u) * 0.008);
+}
+
+.exp-round {
+  display: grid;
+  place-items: center;
+  width: calc(var(--exp-u) * 0.032);
+  height: calc(var(--exp-u) * 0.032);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(4, 8, 7, 0.62);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: rgba(255, 255, 255, 0.82);
+  transition: border-color 200ms ease, color 200ms ease, transform 200ms ease;
+}
+
+.exp-round svg { width: 46%; height: 46%; }
+.exp-round:hover { border-color: rgba(110, 231, 168, 0.5); color: #fff; transform: translateY(-1px); }
+.exp-round-sm { width: 30px; height: 30px; }
+
+/* ── 页面标题（参考稿右上角那块） ── */
+.exp-title {
+  position: absolute;
+  right: 3%;
+  top: 2.4%;
+  text-align: right;
+  pointer-events: none;
+}
+
+.exp-eyebrow {
+  font-size: calc(var(--exp-u) * 0.0095);
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(232, 198, 132, 0.82);
+}
+
+.exp-h1 {
+  margin-top: calc(var(--exp-u) * 0.005);
+  font-size: calc(var(--exp-u) * 0.032);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1.05;
+  background: linear-gradient(180deg, #f8ead0 6%, #e4c489 48%, #a9822f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 6px 20px rgba(0, 0, 0, 0.5));
+}
+
+.exp-sub {
+  margin-top: calc(var(--exp-u) * 0.005);
+  font-size: calc(var(--exp-u) * 0.0115);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.exp-orn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: calc(var(--exp-u) * 0.006);
+  margin-top: calc(var(--exp-u) * 0.008);
+}
+
+.exp-orn i {
+  width: calc(var(--exp-u) * 0.028);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(232, 198, 132, 0.7));
+}
+
+.exp-orn b {
+  font-size: calc(var(--exp-u) * 0.0075);
+  color: rgba(232, 198, 132, 0.9);
+}
+
+/* ── 探索路线栏 + 探索进度卡 ── */
+.exp-side {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--exp-u) * 0.012);
+}
+
+.exp-rail {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--exp-u) * 0.011) calc(var(--exp-u) * 0.01) calc(var(--exp-u) * 0.008);
+  border-radius: calc(var(--exp-u) * 0.014);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(180deg, rgba(6, 12, 10, 0.9), rgba(4, 8, 7, 0.94));
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  backdrop-filter: blur(18px) saturate(120%);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.exp-rail-head {
+  font-size: calc(var(--exp-u) * 0.0115);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #e8c684;
+  padding: 0 calc(var(--exp-u) * 0.006) calc(var(--exp-u) * 0.006);
+}
+
+.exp-rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--exp-u) * 0.0025);
+  scrollbar-width: thin;
+}
+
+.exp-rail-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--exp-u) * 0.008);
+  width: 100%;
+  padding: calc(var(--exp-u) * 0.0055) calc(var(--exp-u) * 0.008);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: calc(var(--exp-u) * 0.0115);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.exp-rail-row:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+
+.exp-rail-row[data-active] {
+  border-color: rgba(110, 231, 168, 0.45);
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.2), rgba(52, 211, 153, 0.04));
+  color: #fff;
+}
+
+.exp-rail-row[data-active]::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--exp-u) * -0.004);
+  top: 50%;
+  transform: translateY(-50%);
+  width: calc(var(--exp-u) * 0.0075);
+  height: calc(var(--exp-u) * 0.0075);
+  border-radius: 999px;
+  background: #6ee7a8;
+  box-shadow: 0 0 10px 3px rgba(110, 231, 168, 0.7);
+}
+
+.exp-rail-thumb {
+  flex: none;
+  width: calc(var(--exp-u) * 0.028);
+  height: calc(var(--exp-u) * 0.028);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(232, 198, 132, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.exp-rail-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.exp-rail-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exp-rail-name em {
+  font-style: normal;
+  font-weight: 400;
+  margin-left: 0.5em;
+  font-size: 0.86em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.exp-rail-arrow { flex: none; width: calc(var(--exp-u) * 0.012); color: rgba(255, 255, 255, 0.4); }
+.exp-rail-check { flex: none; width: calc(var(--exp-u) * 0.013); color: #f6dfae; }
+
+.exp-progress {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--exp-u) * 0.012);
+  padding: calc(var(--exp-u) * 0.012) calc(var(--exp-u) * 0.013);
+  border-radius: calc(var(--exp-u) * 0.014);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(180deg, rgba(6, 12, 10, 0.9), rgba(4, 8, 7, 0.94));
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  backdrop-filter: blur(18px) saturate(120%);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.exp-ring { position: relative; flex: none; width: calc(var(--exp-u) * 0.055); height: calc(var(--exp-u) * 0.055); }
+.exp-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+
+.exp-ring-track,
+.exp-ring-fill { fill: none; stroke-width: 2.6; }
+.exp-ring-track { stroke: rgba(255, 255, 255, 0.12); }
+
+.exp-ring-fill {
+  stroke: #6ee7a8;
+  stroke-linecap: round;
+  stroke-dasharray: 110;
+  filter: drop-shadow(0 0 6px rgba(110, 231, 168, 0.55));
+  transition: stroke-dashoffset 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.exp-ring-value {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--exp-u) * 0.0115);
+  font-weight: 800;
+  color: #f6dfae;
+}
+
+.exp-progress-label { font-size: calc(var(--exp-u) * 0.0105); color: #e8c684; font-weight: 700; }
+.exp-progress-count { font-size: calc(var(--exp-u) * 0.019); font-weight: 900; color: #fff; line-height: 1.1; }
+.exp-progress-sub { font-size: calc(var(--exp-u) * 0.0095); color: rgba(255, 255, 255, 0.5); }
+
+/* ── 左下提示条 ── */
+.exp-badge {
+  position: absolute;
+  left: 2%;
+  bottom: 3%;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--exp-u) * 0.009);
+  padding: calc(var(--exp-u) * 0.005) calc(var(--exp-u) * 0.013) calc(var(--exp-u) * 0.005) calc(var(--exp-u) * 0.005);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(4, 8, 7, 0.7);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: calc(var(--exp-u) * 0.0115);
+  cursor: pointer;
+  transition: border-color 200ms ease, transform 200ms ease;
+}
+
+.exp-badge:hover { border-color: rgba(110, 231, 168, 0.45); transform: translateY(-1px); }
+
+.exp-badge-thumb {
+  flex: none;
+  width: calc(var(--exp-u) * 0.035);
+  height: calc(var(--exp-u) * 0.035);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(232, 198, 132, 0.5);
+  box-shadow: 0 0 0 4px rgba(232, 198, 132, 0.08);
+}
+
+.exp-badge-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.exp-badge-text { display: inline-flex; align-items: center; gap: 0.5em; font-weight: 600; }
+.exp-badge-text svg { width: calc(var(--exp-u) * 0.011); }
+.exp-badge-go { display: grid; place-items: center; width: calc(var(--exp-u) * 0.018); color: #6ee7a8; }
+.exp-badge-go svg { width: 100%; }
+
+/* ── 缩放控件 ── */
+.exp-zoom {
+  position: absolute;
+  left: 50%;
+  bottom: 3%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--exp-u) * 0.003);
+  padding: calc(var(--exp-u) * 0.003);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(4, 8, 7, 0.66);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.exp-zoom button {
+  display: grid;
+  place-items: center;
+  width: calc(var(--exp-u) * 0.024);
+  height: calc(var(--exp-u) * 0.024);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.8);
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.exp-zoom button svg { width: 52%; height: 52%; }
+.exp-zoom button:hover { background: rgba(110, 231, 168, 0.16); color: #fff; }
+
+.exp-zoom-value {
+  min-width: calc(var(--exp-u) * 0.032);
+  text-align: center;
+  font-size: calc(var(--exp-u) * 0.0098);
+  color: rgba(255, 255, 255, 0.62);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 城市面板 ── */
+.exp-panel {
+  width: 100%;
+  /* 面板内容较长（城市志三卷）：桌面端同时受板宽与视口高度约束，
+     保证「关闭面板」按钮与底部进度文案都能滚到 */
+  max-height: min(calc(var(--exp-u) * 0.62), 74vh);
+  overflow-y: auto;
+  padding: calc(var(--exp-u) * 0.013);
+  border-radius: calc(var(--exp-u) * 0.014);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(180deg, rgba(5, 11, 9, 0.92), rgba(4, 8, 7, 0.95));
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  backdrop-filter: blur(20px) saturate(130%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  scrollbar-width: thin;
+}
+
+.exp-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.exp-panel-en { font-size: calc(var(--exp-u) * 0.0098); font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+
+.exp-panel-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  margin-top: calc(var(--exp-u) * 0.004);
+  font-size: calc(var(--exp-u) * 0.019);
+  font-weight: 900;
+  color: #fff;
+}
+
+.exp-panel-thai {
+  font-family: var(--font-viaoda, inherit);
+  font-size: 0.72em;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.exp-panel-roman { font-size: calc(var(--exp-u) * 0.0095); font-style: italic; color: rgba(255, 255, 255, 0.4); }
+.exp-panel-tagline { margin-top: calc(var(--exp-u) * 0.008); font-size: calc(var(--exp-u) * 0.0108); line-height: 1.65; color: rgba(255, 255, 255, 0.7); }
+
+.exp-panel-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: calc(var(--exp-u) * 0.008); }
+
+.exp-tag {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(232, 198, 132, 0.28);
+  background: rgba(232, 198, 132, 0.08);
+  font-size: calc(var(--exp-u) * 0.009);
+  color: #e5c88f;
+}
+
+.exp-panel-block { margin-top: calc(var(--exp-u) * 0.013); }
+.exp-panel-label { font-size: calc(var(--exp-u) * 0.0095); font-weight: 800; letter-spacing: 0.14em; color: rgba(255, 255, 255, 0.45); }
+
+.exp-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-top: calc(var(--exp-u) * 0.005);
+  padding: calc(var(--exp-u) * 0.006) calc(var(--exp-u) * 0.008);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.exp-line:hover { border-color: rgba(110, 231, 168, 0.4); background: rgba(52, 211, 153, 0.08); }
+.exp-line-text { min-width: 0; }
+.exp-line-thai { display: block; font-family: var(--font-viaoda, inherit); font-size: calc(var(--exp-u) * 0.0115); color: rgba(255, 255, 255, 0.92); }
+
+.exp-line-cn { display: block; margin-top: 2px; font-size: calc(var(--exp-u) * 0.0092); line-height: 1.6; color: rgba(255, 255, 255, 0.55); }
+.exp-line-cn em { display: block; font-style: normal; margin-left: 0; margin-top: 1px; color: rgba(110, 231, 168, 0.75); }
+.exp-line-icon { flex: none; width: calc(var(--exp-u) * 0.011); color: rgba(255, 255, 255, 0.35); }
+
+.exp-culture { display: flex; flex-direction: column; gap: calc(var(--exp-u) * 0.007); margin-top: calc(var(--exp-u) * 0.006); }
+.exp-culture-title { font-size: calc(var(--exp-u) * 0.0105); font-weight: 700; color: rgba(255, 255, 255, 0.86); }
+.exp-culture-text { margin-top: 2px; font-size: calc(var(--exp-u) * 0.0092); line-height: 1.6; color: rgba(255, 255, 255, 0.5); }
+
+.exp-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: calc(var(--exp-u) * 0.006); }
+
+.exp-scene {
+  padding: calc(var(--exp-u) * 0.004) calc(var(--exp-u) * 0.009);
+  border-radius: 999px;
+  border: 1px solid rgba(110, 231, 168, 0.3);
+  background: rgba(52, 211, 153, 0.1);
+  font-size: calc(var(--exp-u) * 0.0095);
+  font-weight: 700;
+  color: #b8f4d3;
+  cursor: pointer;
+  transition: background-color 180ms ease;
+}
+
+.exp-scene:hover { background: rgba(52, 211, 153, 0.22); }
+
+.exp-panel-foot {
+  margin-top: calc(var(--exp-u) * 0.013);
+  padding-top: calc(var(--exp-u) * 0.008);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: calc(var(--exp-u) * 0.009);
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+/* ── 城市志（历史底蕴 / 文化 / 风味） ── */
+.exp-chronicle { margin-top: calc(var(--exp-u) * 0.011); }
+
+.exp-seal {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--exp-u) * 0.007);
+  padding: calc(var(--exp-u) * 0.006) calc(var(--exp-u) * 0.008);
+  border-radius: 10px;
+  border: 1px solid rgba(232, 198, 132, 0.22);
+  background: linear-gradient(90deg, rgba(232, 198, 132, 0.1), transparent 78%);
+}
+
+.exp-seal-th {
+  font-family: var(--font-viaoda, inherit);
+  font-size: calc(var(--exp-u) * 0.0125);
+  color: #e5c88f;
+  white-space: nowrap;
+}
+
+.exp-seal-meta {
+  min-width: 0;
+  font-size: calc(var(--exp-u) * 0.0088);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.exp-seal-meta em {
+  display: block;
+  margin-top: 1px;
+  font-style: normal;
+  font-size: 0.92em;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.exp-intro {
+  margin-top: calc(var(--exp-u) * 0.009);
+  font-size: calc(var(--exp-u) * 0.0098);
+  line-height: 1.72;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.exp-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: calc(var(--exp-u) * 0.008);
+}
+
+.exp-fact {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7em;
+  font-size: calc(var(--exp-u) * 0.0088);
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.exp-fact b {
+  flex: none;
+  min-width: 3.6em;
+  font-weight: 700;
+  color: rgba(110, 231, 168, 0.8);
+}
+
+.exp-volumes {
+  display: flex;
+  gap: 5px;
+  margin-top: calc(var(--exp-u) * 0.011);
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.exp-volume {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  min-width: 0;
+  padding: calc(var(--exp-u) * 0.005) calc(var(--exp-u) * 0.004);
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font-size: calc(var(--exp-u) * 0.0092);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.exp-volume span { font-size: 1.05em; }
+.exp-volume:hover { color: rgba(255, 255, 255, 0.82); }
+
+.exp-volume[data-active="1"] {
+  background: rgba(232, 198, 132, 0.16);
+  color: #e5c88f;
+  box-shadow: inset 0 0 0 1px rgba(232, 198, 132, 0.3);
+}
+
+.exp-volume-body {
+  margin-top: calc(var(--exp-u) * 0.009);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--exp-u) * 0.008);
+}
+
+.exp-era-head {
+  font-size: calc(var(--exp-u) * 0.0105);
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.exp-era-head::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 0.95em;
+  margin-right: 0.55em;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #f6dfae, #8a6a2e);
+  vertical-align: -1px;
+}
+
+.exp-era-text {
+  margin-top: 3px;
+  font-size: calc(var(--exp-u) * 0.0092);
+  line-height: 1.74;
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.exp-culture-p {
+  position: relative;
+  padding-left: calc(var(--exp-u) * 0.011);
+  font-size: calc(var(--exp-u) * 0.0092);
+  line-height: 1.74;
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.exp-culture-p::before {
+  content: "◆";
+  position: absolute;
+  left: 0;
+  top: 0.1em;
+  font-size: 0.72em;
+  color: rgba(232, 198, 132, 0.55);
+}
+
+.exp-dishes {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--exp-u) * 0.007);
+}
+
+.exp-dish {
+  padding: calc(var(--exp-u) * 0.006) calc(var(--exp-u) * 0.008);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.exp-dish-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5em;
+}
+
+.exp-dish-name {
+  font-size: calc(var(--exp-u) * 0.0102);
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.exp-dish-th {
+  font-family: var(--font-viaoda, inherit);
+  font-size: calc(var(--exp-u) * 0.0102);
+  color: #e5c88f;
+}
+
+.exp-dish-roman {
+  font-style: normal;
+  font-size: calc(var(--exp-u) * 0.0086);
+  color: rgba(110, 231, 168, 0.68);
+}
+
+.exp-dish-note {
+  margin-top: 3px;
+  font-size: calc(var(--exp-u) * 0.009);
+  line-height: 1.66;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ── 桌面：控件浮在地图上，与参考稿同一套位置 ── */
+@media (min-width: 1024px) {
+  .exp-board { min-height: 0; }
+
+  .exp-side {
+    position: absolute;
+    right: 2%;
+    top: 19%;
+    bottom: 6.5%;
+    width: 19.6%;
+    z-index: 3;
+  }
+
+  .exp-panel {
+    position: absolute;
+    left: 2%;
+    top: 22%;
+    width: 23.5%;
+    z-index: 4;
+  }
+}
+
+/* ── 手机 / 平板：标题与控件落到地图外，横向不挤 ── */
+@media (max-width: 1023px) {
+  .exp-shell { display: flex; flex-direction: column; gap: 14px; }
+
+  /* 顺序：标题 → 地图 → 城市面板 → 探索进度与路线栏 */
+  .exp-title {
+    position: static;
+    order: 0;
+    text-align: left;
+  }
+
+  .exp-title .exp-orn { justify-content: flex-start; }
+
+  .exp-board { border-radius: 22px; aspect-ratio: 3 / 2; order: 1; }
+
+  .exp-side { position: static; order: 3; }
+
+  .exp-rail-list { max-height: none; }
+
+  .exp-compass { width: 15%; top: 3%; left: 3%; }
+
+  .exp-actions { top: 22%; }
+
+  .exp-badge {
+    left: 3%;
+    bottom: 4%;
+    font-size: 11px;
+    padding: 4px 12px 4px 4px;
+  }
+
+  .exp-badge-thumb { width: 30px; height: 30px; }
+  .exp-badge-text svg { width: 12px; }
+
+  /* 缩放控件靠右，避开左下角的提示条（窄屏两者会叠在一起） */
+  .exp-zoom {
+    left: auto;
+    right: 3%;
+    bottom: 4%;
+    transform: none;
+  }
+  .exp-zoom button { width: 30px; height: 30px; }
+  .exp-zoom-value { min-width: 42px; font-size: 11px; }
+
+  .exp-panel { order: 2; max-height: none; }
+
+  .exp-title .exp-h1 { font-size: 26px; }
+  .exp-title .exp-eyebrow { font-size: 10px; letter-spacing: 0.32em; }
+  .exp-title .exp-sub { font-size: 12px; }
+  .exp-title .exp-orn i { width: 34px; }
+
+  .exp-panel-name { font-size: 20px; }
+  .exp-panel-tagline,
+  .exp-line-thai,
+  .exp-culture-title { font-size: 13px; }
+  .exp-line-cn,
+  .exp-culture-text,
+  .exp-panel-foot { font-size: 12px; }
+  .exp-tag,
+  .exp-scene,
+  .exp-panel-label,
+  .exp-panel-en { font-size: 11px; }
+
+  /* 城市志：窄屏用固定字号（面板已脱离地图，--exp-u 基准不再适用） */
+  .exp-seal-th { font-size: 15px; }
+  .exp-seal-meta,
+  .exp-fact { font-size: 11px; }
+  .exp-seal-meta em { font-size: 10px; }
+  .exp-intro { font-size: 12.5px; }
+  .exp-volume { font-size: 11.5px; padding: 5px 4px; }
+  .exp-era-head { font-size: 13px; }
+  .exp-era-text,
+  .exp-culture-p { font-size: 12px; }
+  .exp-dish-name,
+  .exp-dish-th { font-size: 13px; }
+  .exp-dish-roman { font-size: 11px; }
+  .exp-dish-note { font-size: 12px; }
+  .exp-rail-head { font-size: 13px; }
+  .exp-rail-row { font-size: 13px; padding: 7px 10px; }
+  .exp-rail-thumb { width: 32px; height: 32px; }
+  .exp-rail-arrow { width: 14px; }
+  .exp-rail-check { width: 15px; }
+  .exp-progress-label { font-size: 11px; }
+  .exp-progress-count { font-size: 20px; }
+  .exp-progress-sub { font-size: 11px; }
+  .exp-ring { width: 54px; height: 54px; }
+  .exp-ring-value { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exp-route-line { animation: none; }
+  .exp-chip,
+  .exp-badge,
+  .exp-round { transition: none !important; }
+}
+
+/* =========================================================
+   学习星系 · 世界化的画布皮
+   ---------------------------------------------------------
+   只加规则、不改上面任何一条。所有选择器都带
+   `[data-galaxy-mode="..."]`（这个属性写在 LearningGalaxy 的 <section> 上），
+   默认世界（midnight）不写任何规则 —— 基准世界的观感由组件内联样式保证。
+
+   为什么这些必须在 CSS 而不是内联：
+     · 纸世界的视频必须**不上**（display:none）—— 内联只能改透明度，
+       视频解码与首帧仍然白跑一路，还可能在切换瞬间闪一下；
+     · 古典网格的印刷质感（细线、mix-blend-mode）内联写不进
+       currentColor 的继承链，也不好维护；
+     · 世界切换是 <html data-visual-mode> 级别的变化，用 CSS 跟它对齐，
+       组件不必为"哪些世界要网格"再长出一堆分支。
+========================================================= */
+
+/* ---------- 纸上星图：视频关掉，深色底换成纸面 ---------- */
+[data-galaxy-mode="paper"] .galaxy-bg-video {
+  display: none;
+}
+/* 视频没上时（纸上 / 减弱动效），露出的必须是纸色，而不是原来那层深蓝黑 */
+[data-galaxy-mode="paper"] .galaxy-frame {
+  background-color: #f6f1e6;
+}
+
+/* ---------- 纸上星图：古典天文图的网格皮 ---------- */
+/* currentColor 决定线的颜色：给一层古铜金，透明度已经在 SVG 的 opacity 里，
+   这里再整体压一档，避免细线在纸面上"跳"出来。 */
+.galaxy-paper-grid {
+  color: #8a6b28;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+}
+
+/* ---------- 现代世界：理性坐标系（画布层，在 3D 之下） ---------- */
+.galaxy-tech-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+  background-size: 28px 28px;
+  /* 中心留空：网格不该压住星系中心（那里是数据的主体） */
+  mask-image: radial-gradient(62% 70% at 50% 46%, transparent 24%, #000 78%);
+  -webkit-mask-image: radial-gradient(62% 70% at 50% 46%, transparent 24%, #000 78%);
+}
+
+/* ---------- 林间世界：一层很轻的雾（画布层，在 3D 之下） ---------- */
+.galaxy-mist-layer {
+  background:
+    radial-gradient(72% 66% at 32% 74%, rgba(150, 196, 160, 0.11), transparent 68%),
+    radial-gradient(58% 52% at 78% 24%, rgba(190, 214, 196, 0.08), transparent 70%);
+  mix-blend-mode: screen;
+}
+
+/* ---------- 减弱动效：纸上网格不再依赖混合（部分浏览器下 multiply 会拖慢合成） ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-paper-grid { mix-blend-mode: normal; opacity: 0.4; }
+}

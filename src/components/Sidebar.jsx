@@ -1,30 +1,17 @@
 
 import React from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import {
-  Home,
-  BookOpen,
-  BookOpenText,
-  Mic,
-  Languages,
-  MessageCircle,
-  CalendarDays,
-  Trophy,
-  Settings,
   User,
   LogOut,
   ChevronRight,
-  SpellCheck,
-  Shuffle,
-  FileText,
-  Puzzle,
-  Landmark,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/AuthContext";
 import { prefetchRoute } from "@/lib/routePrefetch";
-import { useFeatureFlag } from "@/lib/features";
+import { useFeatureFlags } from "@/lib/features";
+import { desktopNav, findNavItem } from "@/lib/navigation";
 import { useLearningProgress } from "@/hooks/useLearningProgress";
 import { getLevelInfo } from "@/lib/level";
 import {
@@ -37,7 +24,11 @@ import { SERVER_BASE_URL } from "@/lib/api";
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const aiTeacher = useFeatureFlag("aiTeacher");
+  const location = useLocation();
+
+  /* 老锚点 /#universe 的高亮兼容（菜单已改指独立页 /universe） */
+  const hashActive = location.hash === "#universe";
+  const flags = useFeatureFlags(["aiTeacher"]);
 
   // ============================================================
   // 使用 AuthContext
@@ -62,7 +53,7 @@ export default function Sidebar() {
 
   const getAvatarUrl = (avatar) => {
     if (!avatar) {
-      return "/default-avatar.png";
+      return "/default-avatar.svg";
     }
 
     if (
@@ -86,87 +77,26 @@ export default function Sidebar() {
   // 菜单
   // ============================================================
 
-  const menus = [
-    {
-      name: "首页",
-      path: "/",
-      icon: Home,
-    },
-    ...(aiTeacher
-      ? [
-          {
-            name: "对话练习",
-            path: "/conversation",
-            icon: MessageCircle,
-          },
-        ]
-      : []),
-    {
-      name: "课程学习",
-      path: "/course",
-      icon: BookOpen,
-    },
-    {
-      name: "口语练习",
-      path: "/speaking",
-      icon: Mic,
-    },
-    {
-      name: "课文教学",
-      path: "/lessons",
-      icon: BookOpenText,
-    },
-    {
-      name: "词汇学习",
-      path: "/vocabulary",
-      icon: Languages,
-    },
-    {
-      name: "字母表",
-      path: "/alphabet",
-      icon: SpellCheck,
-    },
-    {
-      name: "词汇配对",
-      path: "/vocab-match",
-      icon: Shuffle,
-    },
-    {
-      name: "句子填空",
-      path: "/sentence-fill",
-      icon: FileText,
-    },
-    {
-      name: "分词练习",
-      path: "/word-segment",
-      icon: Puzzle,
-    },
-    {
-      name: "本地语料库",
-      path: "/corpus",
-      icon: BookOpenText,
-    },
-    {
-      name: "泰国文化",
-      path: "/culture",
-      icon: Landmark,
-    },
-    {
-      name: "学习计划",
-      path: "/plan",
-      icon: CalendarDays,
-    },
-    {
-      name: "学习排行榜",
-      path: "/ranking",
-      icon: Trophy,
-    },
-    {
-      name: "设置中心",
-      path: "/settings",
-      icon: Settings,
-    },
-  ];
+  /*
+   * 导航分两组：
+   *
+   *   第一组 = 设计稿里的七项（首页 / 学习宇宙 / AI 对话室 / 口语练习 /
+   *            文化探索 / 词汇星球 / 我的旅程），一屏能看完，日常只用这几个。
+   *   第二组 = 其余功能入口。**没有删掉任何一个**：少了他们就变成“功能还在
+   *            但找不到入口”，那是真的退化。它们收在「更多」分组下，视觉上
+   *            退到后面，但没有藏进需要学习的折叠交互。
+   */
+
+  /* ============================================================
+     菜单：来自 src/lib/navigation.js（与移动端底部栏同一份数据）
+     ------------------------------------------------------------
+     重构前这里写死了 16 项，底部栏写死另外 5 项，Navbar 又写死 8 项，
+     三端互相矛盾（同一功能三个路径）。现在只在这里**渲染**，不再定义。
+     分组（今天 / 内容 / 更多）也由数据决定，不再靠 group 字符串判断。
+  ============================================================ */
+
+  const groups = desktopNav((name) => Boolean(flags[name]));
+  const currentNav = findNavItem(location.pathname, location.search);
 
   // ============================================================
   // 头像加载失败
@@ -180,7 +110,10 @@ export default function Sidebar() {
     }
 
     event.currentTarget.dataset.fallback = "true";
-    event.currentTarget.src = "/default-avatar.png";
+    event.currentTarget.src = "/default-avatar.svg";
+    /* 已经在用兜底图就不再兜底：原来回退目标与失败地址是同一个文件，
+       一旦该文件缺失就会反复触发 error（实测页面上显示为残缺字形）。 */
+    event.currentTarget.onerror = null;
   };
 
   // ============================================================
@@ -210,7 +143,7 @@ export default function Sidebar() {
         top-0
         bottom-0
 
-        w-[220px]
+        w-[240px]
 
         z-50
 
@@ -414,23 +347,40 @@ export default function Sidebar() {
         "
       >
 
-        {menus.map((item) => {
+        {groups.map((group) => (
+          <React.Fragment key={group.id}>
+            {/* 分组标题：由数据决定，不再靠「是不是 more」硬判 */}
+            {group.id === "today" ? null : (
+              <div className="flex items-center gap-2 px-3.5 pb-0.5 pt-3.5">
+                <span className="text-[9px] font-bold tracking-[0.18em] text-white/25">
+                  {group.label}
+                </span>
+                <span className="h-px flex-1 bg-white/[0.07]" />
+              </div>
+            )}
+
+            {group.items.map((item) => {
           const Icon = item.icon;
+          /* 高亮判定收敛到 findNavItem：父子路由、旧路径、query 模式统一处理 */
+          const isActive = currentNav?.id === item.id && !hashActive;
 
           return (
             <NavLink
-              key={item.path}
+              key={item.id}
               to={item.path}
               onMouseEnter={() => prefetchRoute(item.path)}
-              className={({ isActive }) => `
+              aria-current={isActive ? "page" : undefined}
+              className={() => {
+                return `
                 group
                 relative
 
                 flex
+                min-w-0
                 items-center
-                gap-3.5
+                gap-2
 
-                px-3.5
+                px-2.5
                 py-3
 
                 rounded-2xl
@@ -465,7 +415,8 @@ export default function Sidebar() {
                       hover:translate-x-[2px]
                     `
                 }
-              `}
+              `;
+              }}
             >
 
               {/* 当前页面指示条 */}
@@ -490,11 +441,7 @@ export default function Sidebar() {
                   transition-opacity
                   duration-200
 
-                  ${
-                    item.path
-                      ? "group-[.active]:opacity-100"
-                      : "opacity-0"
-                  }
+                  ${isActive ? "opacity-100" : "opacity-0"}
                 `}
               />
 
@@ -531,9 +478,15 @@ export default function Sidebar() {
 
               </div>
 
+              {/* min-w-0 + truncate：条目里还可能塞 badge 与箭头，
+                  窄栏下「课程学习」会被压成逐字换行（竖排两行），
+                  宁可截断也不要竖排。 */}
               <span
                 className="
+                  min-w-0
                   flex-1
+                  truncate
+                  whitespace-nowrap
 
                   text-[13px]
                   font-medium
@@ -542,9 +495,13 @@ export default function Sidebar() {
                 {item.name}
               </span>
 
-              {item.name === "口语练习" && (
+              {/* 小标签由 navigation.js 的 badge 字段决定，不再按中文名硬判 */}
+              {item.badge ? (
                 <span
                   className="
+                    hidden
+                    shrink-0
+                    xl:inline-flex
                     rounded-full
                     border
                     border-yellow-300/25
@@ -560,31 +517,15 @@ export default function Sidebar() {
                     text-yellow-200/80
                   "
                 >
-                  部分免费
+                  {item.badge === "vip"
+                    ? "VIP"
+                    : item.badge === "partial"
+                      ? "部分免费"
+                      : item.badge === "new"
+                        ? "新"
+                        : null}
                 </span>
-              )}
-
-              {item.name === "课文教学" && (
-                <span
-                  className="
-                    rounded-full
-                    border
-                    border-yellow-300/25
-
-                    bg-yellow-300/[0.08]
-
-                    px-1.5
-                    py-0.5
-
-                    text-[9px]
-                    font-semibold
-
-                    text-yellow-200/80
-                  "
-                >
-                  VIP
-                </span>
-              )}
+              ) : null}
 
               <ChevronRight
                 className="
@@ -604,8 +545,10 @@ export default function Sidebar() {
               />
 
             </NavLink>
-          );
-        })}
+              );
+            })}
+          </React.Fragment>
+        ))}
 
       </nav>
 
@@ -728,12 +671,15 @@ export default function Sidebar() {
 
           </div>
 
-          {/* Name */}
-
-          <div className="min-w-0">
+          {/* Name
+              flex-1 + min-w-0 两个都要：min-w-0 允许收缩，flex-1 才真正把
+              剩余宽度交给这一列。少了 flex-1，truncate 拿不到可用宽度，
+              长昵称与等级名会被压成逐字换行（实测昵称 4 个字就会发生）。 */}
+          <div className="min-w-0 flex-1">
 
             <div
               className="
+                w-full
                 truncate
 
                 text-sm
@@ -750,6 +696,7 @@ export default function Sidebar() {
                 mt-1
 
                 flex
+                min-w-0
                 items-center
                 gap-1.5
 
@@ -760,6 +707,7 @@ export default function Sidebar() {
             >
               <span
                 className="
+                  shrink-0
                   rounded-md
 
                   bg-yellow-300/10
@@ -773,7 +721,8 @@ export default function Sidebar() {
                 Lv.{levelInfo.level}
               </span>
 
-              <span>
+              {/* 等级名可截断：窄栏 + 长昵称时，这里是最先被挤爆的地方 */}
+              <span className="min-w-0 truncate whitespace-nowrap">
                 {levelInfo.name}
               </span>
             </div>
@@ -800,11 +749,9 @@ export default function Sidebar() {
             "
           >
 
-            <span className="text-white/35">
-              学习经验值
-            </span>
+            <span className="whitespace-nowrap text-white/35">学习经验值</span>
 
-            <span className="font-semibold text-emerald-300/80">
+            <span className="shrink-0 font-semibold tabular-nums text-emerald-300/80">
               {levelInfo.percent}%
             </span>
 

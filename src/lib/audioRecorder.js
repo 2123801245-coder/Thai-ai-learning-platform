@@ -66,6 +66,8 @@ export function createAudioRecorder() {
   let audioCtx = null;
   let source = null;
   let processor = null;
+  let analyser = null;
+  let levelBuf = null;
   let chunks = [];
   let recording = false;
 
@@ -102,8 +104,36 @@ export function createAudioRecorder() {
     source.connect(processor);
     processor.connect(audioCtx.destination);
 
+    /*
+     * 实时电平（给首页那圈「老师正在听」的声波用）。
+     * 只做可视化，不参与录音与评估：录音走上面的 ScriptProcessor。
+     */
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.72;
+    levelBuf = new Uint8Array(analyser.frequencyBinCount);
+    source.connect(analyser);
+
     recording = true;
     return true;
+  }
+
+  /* 当前音量 0~1（RMS）。未录音时返回 0。 */
+  function getLevel() {
+    if (!analyser || !levelBuf) return 0;
+
+    analyser.getByteTimeDomainData(levelBuf);
+
+    let sum = 0;
+    for (let i = 0; i < levelBuf.length; i += 1) {
+      const v = (levelBuf[i] - 128) / 128;
+      sum += v * v;
+    }
+
+    const rms = Math.sqrt(sum / levelBuf.length);
+
+    /* 人声 RMS 常常在 0.02~0.25，乘 4 后再夹紧，读数才看得见 */
+    return Math.min(1, rms * 4);
   }
 
   function stop() {
@@ -115,9 +145,13 @@ export function createAudioRecorder() {
       processor?.disconnect();
       source?.disconnect();
       source?.disconnect(processor);
+      analyser?.disconnect();
     } catch (e) {
       // ignore
     }
+
+    analyser = null;
+    levelBuf = null;
 
     try {
       audioCtx?.close();
@@ -159,5 +193,5 @@ export function createAudioRecorder() {
     return recording;
   }
 
-  return { start, stop, isRecording };
+  return { start, stop, isRecording, getLevel };
 }

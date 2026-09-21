@@ -42,6 +42,12 @@ import {
   getFreeVideos,
 } from "@/data/videoLibrary";
 
+// PAPER 世界的课程页版式层（“高级泰语教材”）。
+// 在这里 import 而不是塞进 index.css：这一层只服务课程页，跟着本页的
+// CSS chunk 一起加载/失效；文件内每条规则都带 html[data-visual-mode="paper"]
+// 前缀，另外三个世界匹配不到，等于不存在。
+import "@/themes/course-paper.css";
+
 
 // =========================================================
 // localStorage 进度 Key
@@ -235,7 +241,7 @@ function YouTubePlayer({ videoId, onProgress, onEnded }) {
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="relative rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
+    <div className="tp-paper-player relative rounded-2xl overflow-hidden bg-black border border-white/[0.06]">
       {/* YouTube iframe 容器 */}
       <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
         <div ref={containerRef} className="absolute inset-0" />
@@ -349,17 +355,17 @@ function StatCard({ icon: Icon, label, value, suffix, color = "emerald" }) {
 
   return (
     <div
-      className={`rounded-2xl border p-4 backdrop-blur-xl ${colorMap[color]}`}
+      className={`tp-paper-statcard rounded-2xl border p-4 backdrop-blur-xl ${colorMap[color]}`}
     >
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/[0.04]">
+        <div className="tp-paper-statcard-icon w-10 h-10 rounded-xl flex items-center justify-center bg-white/[0.04]">
           <Icon className="h-5 w-5 opacity-70" />
         </div>
         <div>
-          <div className="text-[10px] uppercase tracking-widest opacity-40">
+          <div className="tp-paper-statcard-label text-[10px] uppercase tracking-widest opacity-40">
             {label}
           </div>
-          <div className="text-xl font-black mt-0.5">
+          <div className="tp-paper-statcard-value text-xl font-black mt-0.5">
             {value}
             {suffix && (
               <span className="text-xs font-normal opacity-50 ml-1">
@@ -404,7 +410,7 @@ function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
       tabIndex={locked ? -1 : 0}
       aria-disabled={locked}
       aria-label={`${video.title}${locked ? "（VIP 专属）" : "，播放课程"}`}
-      className={`apple-course-card group relative cursor-pointer overflow-hidden rounded-2xl border transition-all duration-300 apple-surface ${
+      className={`tp-paper-card apple-course-card group relative cursor-pointer overflow-hidden rounded-2xl border transition-all duration-300 apple-surface ${
         isActive
           ? "border-emerald-400/30 bg-emerald-400/[0.08] shadow-lg shadow-emerald-500/10"
           : locked
@@ -413,7 +419,7 @@ function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
       }`}
     >
       {/* 缩略图 */}
-      <div className="relative aspect-video bg-black/40 overflow-hidden">
+      <div className="tp-paper-plate-frame relative aspect-video bg-black/40 overflow-hidden">
         {video.youtubeId ? (
           <img
             src={`https://img.youtube.com/vi/${video.youtubeId}/mqdefault.jpg`}
@@ -466,9 +472,9 @@ function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
 
         {/* 进度条 */}
         {localProgress > 0 && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10">
+          <div className="tp-paper-track absolute bottom-0 left-0 right-0 h-1 bg-white/10">
             <div
-              className="h-full bg-emerald-400"
+              className="tp-paper-track-fill h-full bg-emerald-400"
               style={{ width: `${localProgress}%` }}
             />
           </div>
@@ -476,17 +482,21 @@ function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
       </div>
 
       {/* 信息 */}
-      <div className="p-3.5">
+      <div className="tp-paper-card-body p-3.5">
+        {/* PAPER 的“图版号”：序号来自列表下标，不新增数据；其他世界被 hidden 关掉 */}
+        <span className="tp-paper-plate hidden">
+          图版 {String(index + 1).padStart(2, "0")}
+        </span>
         <div className="flex items-start justify-between gap-2">
-          <h3 className="text-sm font-bold text-white/90 line-clamp-2 leading-snug group-hover:text-emerald-200 transition">
+          <h3 className="tp-paper-card-title text-sm font-bold text-white/90 line-clamp-2 leading-snug group-hover:text-emerald-200 transition">
             {video.title}
           </h3>
         </div>
-        <p className="mt-1.5 text-xs text-white/35 line-clamp-2 leading-relaxed">
+        <p className="tp-paper-card-desc mt-1.5 text-xs text-white/35 line-clamp-2 leading-relaxed">
           {video.description}
         </p>
-        <div className="mt-2.5 flex items-center gap-2">
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/40">
+        <div className="tp-paper-card-meta mt-2.5 flex items-center gap-2">
+          <span className="tp-paper-chip text-[10px] px-2 py-0.5 rounded-full bg-white/[0.06] text-white/40">
             {video.level}
           </span>
           <span className="text-[10px] text-white/25">
@@ -530,56 +540,77 @@ export default function Course() {
   // 分类标签
   const categoryObj = videoCategories.find((c) => c.id === category);
 
+  // PAPER 版式的“章节号”：沿用 videoCategories 的既有顺序（“全部”排第 0 项），
+  // 纯展示用，不参与筛选 / 进度 / 解锁任何逻辑。
+  const chapterNo =
+    category === "all"
+      ? "总目"
+      : String(videoCategories.findIndex((c) => c.id === category)).padStart(2, "0");
+
   return (
-    <div className="apple-course-shell relative space-y-6 pb-10">
+    <div className="tp-paper-page apple-course-shell relative space-y-6 pb-10">
 
       {/* =====================================================
-          HERO
+          PAPER 页眉（running head）：只在 paper 世界出现
+          -----------------------------------------------------
+          注意用的是 hidden **属性**，不是 `hidden` 类：
+          根容器是 space-y-6，它的选择器是 `> :not([hidden]) ~ :not([hidden])`，
+          只有 HTML 属性才会被它排除。若用类，hero 会凭空多出 1.5rem 上边距，
+          另外三个世界的版式就跟着变了。间距改由 .tp-paper-runhead 的
+          margin-bottom 交出（见 course-paper.css）。
+      ===================================================== */}
+      <div hidden className="tp-paper-runhead" aria-hidden="true">
+        <span>泰语视频学习</span>
+        <span>THAI VIDEO LIBRARY</span>
+      </div>
+
+      {/* =====================================================
+          HERO（PAPER 下即“书名页”）
       ===================================================== */}
       <motion.div
         initial={{ opacity: 0, y: -15 }}
         animate={{ opacity: 1, y: 0 }}
-        className="apple-surface apple-course-hero relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-gradient-to-br from-emerald-400/[0.10] via-white/[0.035] to-yellow-300/[0.06] p-6 backdrop-blur-xl sm:p-7"
+        className="tp-paper-hero apple-surface apple-course-hero relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-gradient-to-br from-emerald-400/[0.10] via-white/[0.035] to-yellow-300/[0.06] p-6 backdrop-blur-xl sm:p-7"
       >
-        {/* 光晕 */}
-        <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-400/[0.08] blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 left-[40%] h-48 w-48 rounded-full bg-yellow-300/[0.05] blur-3xl" />
+        {/* 光晕 / 角饰 / 天际线：PAPER 版式要克制，由 .tp-paper-ornament 关掉 */}
+        <div className="tp-paper-ornament pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-400/[0.08] blur-3xl" />
+        <div className="tp-paper-ornament pointer-events-none absolute -bottom-24 left-[40%] h-48 w-48 rounded-full bg-yellow-300/[0.05] blur-3xl" />
 
-        <ThaiCorner corners={["tl", "tr", "bl", "br"]} size={28} className="z-10" />
-        <BangkokSkyline className="pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full opacity-[0.12]" opacity={0.6} />
+        <ThaiCorner corners={["tl", "tr", "bl", "br"]} size={28} className="tp-paper-ornament z-10" />
+        <BangkokSkyline className="tp-paper-ornament pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full opacity-[0.12]" opacity={0.6} />
 
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="tp-paper-hero-row relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.2em] text-emerald-300/70">
+            <div className="tp-paper-eyebrow flex items-center gap-2 text-xs font-semibold tracking-[0.2em] text-emerald-300/70">
               <Sparkles className="h-4 w-4" />
               THAI VIDEO LIBRARY
             </div>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
+            <h1 className="tp-paper-title mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
               泰语视频学习
             </h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-white/40 sm:text-base">
+            <p className="tp-paper-lede mt-2 max-w-xl text-sm leading-6 text-white/40 sm:text-base">
               精选泰语教学视频，从发音入门到日常会话。
               沉浸式观看，轻松提升泰语能力。
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <span className="flex items-center gap-1.5 rounded-full border border-emerald-300/10 bg-emerald-400/[0.07] px-3 py-1.5 text-xs text-emerald-200/70">
+              <span className="tp-paper-chip tp-paper-chip-accent flex items-center gap-1.5 rounded-full border border-emerald-300/10 bg-emerald-400/[0.07] px-3 py-1.5 text-xs text-emerald-200/70">
                 <GraduationCap className="h-3.5 w-3.5" />
                 分类学习
               </span>
-              <span className="flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-3 py-1.5 text-xs text-white/40">
+              <span className="tp-paper-chip flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-3 py-1.5 text-xs text-white/40">
                 <Video className="h-3.5 w-3.5" />
                 {totalVideos} 个视频
               </span>
-              <span className="flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-3 py-1.5 text-xs text-white/40">
+              <span className="tp-paper-chip flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.04] px-3 py-1.5 text-xs text-white/40">
                 <BookOpen className="h-3.5 w-3.5" />
                 {freeVideos} 个免费
               </span>
             </div>
           </div>
 
-          {/* 总进度 */}
-          <div className="apple-course-stat min-w-[220px] rounded-2xl border border-white/[0.08] bg-black/10 p-4">
+          {/* 总进度（PAPER 下即“藏书信息栏”） */}
+          <div className="tp-paper-bookstat apple-course-stat min-w-[220px] rounded-2xl border border-white/[0.08] bg-black/10 p-4">
             <div className="flex items-center justify-between">
               <span className="text-[10px] uppercase tracking-widest text-white/30">
                 学习进度
@@ -588,12 +619,12 @@ export default function Course() {
                 {totalVideos > 0 ? Math.round((watchedCount / totalVideos) * 100) : 0}%
               </span>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+            <div className="tp-paper-track mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${totalVideos > 0 ? (watchedCount / totalVideos) * 100 : 0}%` }}
                 transition={{ duration: 1, ease: "easeOut" }}
-                className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-300 to-yellow-300"
+                className="tp-paper-track-fill h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-300 to-yellow-300"
               />
             </div>
             <div className="mt-2 text-[10px] text-white/25">
@@ -605,9 +636,9 @@ export default function Course() {
 
 
       {/* =====================================================
-          统计
+          统计（PAPER 下即“数据台账行”）
       ===================================================== */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="tp-paper-stats grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard icon={Video} label="视频总数" value={totalVideos} suffix="个" color="emerald" />
         <StatCard icon={BookOpen} label="免费视频" value={freeVideos} suffix="个" color="cyan" />
         <StatCard icon={Target} label="已观看" value={watchedCount} suffix="个" color="purple" />
@@ -625,10 +656,10 @@ export default function Course() {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
           >
-            <div className="mb-4 flex items-center justify-between">
+            <div className="tp-paper-section-head mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,.7)]" />
-                <h2 className="text-lg font-bold text-white">正在播放</h2>
+                <span className="tp-paper-ornament h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,.7)]" />
+                <h2 className="tp-paper-h2 text-lg font-bold text-white">正在播放</h2>
               </div>
               <button
                 onClick={() => setActiveVideo(null)}
@@ -647,10 +678,10 @@ export default function Course() {
 
             <div className="mt-3 flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-white">{activeVideo.title}</h3>
-                <p className="text-xs text-white/40 mt-1">{activeVideo.description}</p>
+                <h3 className="tp-paper-card-title text-sm font-bold text-white">{activeVideo.title}</h3>
+                <p className="tp-paper-card-desc text-xs text-white/40 mt-1">{activeVideo.description}</p>
               </div>
-              <span className="text-[10px] px-2 py-1 rounded-full bg-white/[0.06] text-white/40">
+              <span className="tp-paper-chip text-[10px] px-2 py-1 rounded-full bg-white/[0.06] text-white/40">
                 {activeVideo.level}
               </span>
             </div>
@@ -660,16 +691,16 @@ export default function Course() {
 
 
       {/* =====================================================
-          分类标签
+          分类标签（PAPER 下即“章目录条”）
       ===================================================== */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div className="tp-paper-tabs flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         {videoCategories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => setCategory(cat.id)}
-            className={`apple-button flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition-all ${
+            className={`tp-paper-tab apple-button flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-xs font-medium transition-all ${
               category === cat.id
-                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-400/20 shadow-sm shadow-emerald-500/10"
+                ? "tp-paper-tab-active bg-emerald-500/20 text-emerald-300 border border-emerald-400/20 shadow-sm shadow-emerald-500/10"
                 : "bg-white/[0.04] text-white/40 border border-white/[0.06] hover:bg-white/[0.07] hover:text-white/60"
             }`}
           >
@@ -684,18 +715,22 @@ export default function Course() {
           视频网格
       ===================================================== */}
       <section>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="tp-paper-section-head mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-white">
+            <h2 className="tp-paper-h2 text-lg font-bold text-white">
+              {/* 章节号：PAPER 专用版式信号，其他世界被 hidden 关掉 */}
+              <span className="tp-paper-ordinal hidden" aria-hidden="true">
+                {chapterNo}
+              </span>
               {categoryObj?.icon} {categoryObj?.label || "全部视频"}
             </h2>
-            <p className="mt-1 text-xs text-white/30">
+            <p className="tp-paper-sub mt-1 text-xs text-white/30">
               共 {filteredVideos.length} 个视频
             </p>
           </div>
 
           {/* 排序 */}
-          <div className="flex items-center gap-1 bg-white/[0.04] rounded-xl p-1">
+          <div className="tp-paper-sortgroup flex items-center gap-1 bg-white/[0.04] rounded-xl p-1">
             {[
               { key: "default", label: "默认" },
               { key: "free", label: "仅免费" },
@@ -703,9 +738,9 @@ export default function Course() {
               <button
                 key={opt.key}
                 onClick={() => setSortBy(opt.key)}
-                className={`apple-button text-[11px] px-3 py-1.5 rounded-lg transition ${
+                className={`tp-paper-sort apple-button text-[11px] px-3 py-1.5 rounded-lg transition ${
                   sortBy === opt.key
-                    ? "bg-emerald-500/20 text-emerald-300"
+                    ? "tp-paper-sort-on bg-emerald-500/20 text-emerald-300"
                     : "text-white/40 hover:text-white/60"
                 }`}
               >
@@ -715,7 +750,7 @@ export default function Course() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="tp-paper-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filteredVideos.map((video, index) => (
             <VideoCard
               key={video.id}
@@ -741,23 +776,23 @@ export default function Course() {
 
 
       {/* =====================================================
-          VIP 提示
+          VIP 提示（PAPER 下即“页边注”）
       ===================================================== */}
       {!isVipUser && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="rounded-2xl border border-yellow-300/10 bg-yellow-300/[0.04] p-5 backdrop-blur-xl"
+          className="tp-paper-note rounded-2xl border border-yellow-300/10 bg-yellow-300/[0.04] p-5 backdrop-blur-xl"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-yellow-400/[0.1]">
+            <div className="tp-paper-iconbox w-10 h-10 rounded-xl flex items-center justify-center bg-yellow-400/[0.1]">
               <Crown className="h-5 w-5 text-yellow-300" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-bold text-yellow-200/80">
+              <h3 className="tp-paper-note-title text-sm font-bold text-yellow-200/80">
                 解锁全部视频
               </h3>
-              <p className="text-xs text-yellow-200/40 mt-0.5">
+              <p className="tp-paper-note-body text-xs text-yellow-200/40 mt-0.5">
                 升级 VIP 即可观看所有 {videos.length} 个泰语教学视频，包含进阶课程。
               </p>
             </div>
@@ -772,6 +807,21 @@ export default function Course() {
       )}
 
       <VipPanel open={vipOpen} onClose={() => setVipOpen(false)} />
+
+      {/* =====================================================
+          PAPER 页脚（colophon）
+          -----------------------------------------------------
+          与页眉同理：用 hidden 属性，才不会被 space-y-6 算进兄弟间距。
+          数字全部来自既有统计（totalVideos / freeVideos / watchedCount），
+          没有新增数据来源。
+      ===================================================== */}
+      <div hidden className="tp-paper-colophon" aria-hidden="true">
+        <span>ThaiAI · 泰语视频学习</span>
+        <span>
+          共 {totalVideos} 讲 · 免费 {freeVideos} 讲
+        </span>
+        <span>已阅 {watchedCount} 讲</span>
+      </div>
     </div>
   );
 }

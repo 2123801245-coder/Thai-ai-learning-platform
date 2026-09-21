@@ -1,9 +1,10 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, CheckCircle2, RotateCcw, ArrowRight } from "lucide-react";
 import WordBookPicker from "@/components/practice/WordBookPicker";
 import { speakThai } from "@/lib/thaiSpeech";
-import { mergeBooks, generateSegmentQuestions, getSavedBookId, saveBookId, fetchWrongBook, formatWrongDate, getVocabBooks } from "@/lib/wordBooks";
+import { mergeBooks, generateSegmentQuestions, getSavedBookId, saveBookId, fetchWrongBook, formatWrongDate } from "@/lib/wordBooks";
+import { usePracticeReward } from "@/hooks/usePracticeReward";
 
 /* 词书来源统一使用 getVocabBooks()（与词汇学习板块一致）
    generateSegmentQuestions 从词书例句中自动生成分词题目 */
@@ -93,7 +94,7 @@ function speak(text) {
   speakThai(text, { rate: 0.7 });
 }
 
-export default function WordSegment() {
+export default function WordSegment({ embedded = false }) {
   const [wrongBook, setWrongBook] = useState(null);
 
   const refreshWrongBook = useCallback(() => {
@@ -132,6 +133,11 @@ export default function WordSegment() {
   const [currentChunk, setCurrentChunk] = useState("");
   const [showResult, setShowResult] = useState(null);
   const [score, setScore] = useState(0);
+  /* 练习结算：答对计 XP/连续天数，答错进错题本（见 usePracticeReward）
+     —— 分词练习此前**完全不计错题**，错词永久丢失，这里补上。 */
+  const reward = usePracticeReward();
+  const rewardRef = useRef(reward);
+  rewardRef.current = reward;
   const [completed, setCompleted] = useState(false);
 
   const initSet = useCallback((book) => {
@@ -146,6 +152,8 @@ export default function WordSegment() {
     setShowResult(null);
     setScore(0);
     setCompleted(false);
+    /* 新一轮：清空结算去重，重练要重新计分 */
+    rewardRef.current.resetRound();
   }, []);
 
   useEffect(() => {
@@ -194,7 +202,24 @@ export default function WordSegment() {
       user.every((w, i) => w === correct[i]);
 
     setShowResult(isCorrect ? "correct" : "wrong");
-    if (isCorrect) setScore((s) => s + 15);
+
+    /* 分词题的"词"是整句，用整句作为错题条目：
+       thai 用原句，chinese 用译文，便于错题本里直接复习整句 */
+    const entry = {
+      thai: q.sentence || "",
+      chinese: q.translation || q.hint || "",
+      roman: q.roman || "",
+      sentence: q.sentence || "",
+      sentenceCn: q.translation || "",
+    };
+
+    if (isCorrect) {
+      setScore((s) => s + 15);
+      reward.correct(entry);
+    } else {
+      reward.wrong(entry);
+      refreshWrongBook?.();
+    }
   };
 
   const handleNext = () => {
@@ -215,11 +240,18 @@ export default function WordSegment() {
   ];
 
   return (
-    <div className="flex flex-col h-full p-4 sm:p-6 space-y-4 overflow-y-auto">
+    /* embedded：作为「词汇星球」里的一种练习模式渲染（外层负责留白与滚动） */
+    <div
+      className={
+        embedded
+          ? "flex flex-col space-y-4"
+          : "flex flex-col h-full p-4 sm:p-6 space-y-4 overflow-y-auto"
+      }
+    >
       {/* 顶部 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-white">分词练习</h1>
+          {!embedded && <h1 className="text-xl font-bold text-white">分词练习</h1>}
           <p className="text-white/40 text-sm">将泰语句子拆分为正确的词汇单位</p>
         </div>
         <div className="flex items-center gap-3">

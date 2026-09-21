@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigate, useLocation } from "react-router-dom";
 
@@ -144,7 +144,7 @@ export default function MainLayout({ children }) {
 
       {/* 内容区 */}
 
-      <main className="relative z-10 min-h-screen w-full md:ml-[220px] md:w-[calc(100%-220px)]">
+      <main className="relative z-10 min-h-screen w-full md:ml-[240px] md:w-[calc(100%-240px)]">
         {/* 顶部泰式纹样带 */}
         <ThaiPatternBand
           className="absolute left-0 top-0"
@@ -153,14 +153,23 @@ export default function MainLayout({ children }) {
         /        >
 
         <div className="min-h-screen w-full px-3.5 py-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-[calc(4.5rem+env(safe-area-inset-top))] sm:px-6 md:pb-6 md:pt-9 lg:px-8 page-shell page-flow">
-          {/* 页面入场动画（fade + slide，路由级过渡） */}
+          {/*
+           * 页面入场动画（fade + slide，路由级过渡）
+           * ---------------------------------------------------------
+           * 这里**不能**用 filter blur 做过渡。
+           * 只要元素身上存在非 none 的 filter（包括静止时的 blur(0px)），
+           * 它就会成为 `position: fixed` 后代的**包含块** ——
+           * 页面里所有全屏浮层都会被锁在这个容器里。
+           * 实测：学习星系在手机上的"全屏"详情弹窗被压成 334px（视口 390px），
+           * 看起来像"弹窗比屏幕窄"。fade + slide 已经足够，去掉 blur。
+           */}
 
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
             >
               {children}

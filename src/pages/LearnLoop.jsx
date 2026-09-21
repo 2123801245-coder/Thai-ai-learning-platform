@@ -29,6 +29,8 @@ import {
   generateFillQuestions,
   fetchWrongBook,
 } from "@/lib/wordBooks";
+import { applyProfileDefaults } from "@/lib/profileDriven";
+import { useUserProfile } from "@/lib/userProfile";
 import { speakThaiWithLocal } from "@/lib/thaiSpeech";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -76,7 +78,23 @@ export default function LearnLoop() {
     const b = books.find((x) => x.id === bookId) || books[0];
     return b ? b.words : [];
   }, [books, bookId]);
-  const pairTargets = ["/vocab-match", "/sentence-fill", "/word-segment"];
+
+  /* 画像 → 默认词书：等级变化（或首次做完入学测试）时自动切换，
+     用户自己选过且等级没变则保持不动，避免覆盖手选 */
+  const { profile } = useUserProfile();
+  const [bookNote, setBookNote] = useState("");
+
+  useEffect(() => {
+    const applied = applyProfileDefaults(profile, { books });
+    if (!applied?.changed) return;
+
+    setBookId(applied.id);
+    setBookNote(
+      applied.replaced
+        ? `已按 ${profile.thaiLevel} 等级把默认词书换成「${applied.emoji} ${applied.name}」`
+        : `已按 ${profile.thaiLevel} 等级设置默认词书「${applied.emoji} ${applied.name}」`
+    );
+  }, [profile, books]);
 
   // AI 推荐（学）
   const [rec, setRec] = useState(null);
@@ -370,11 +388,21 @@ export default function LearnLoop() {
           ))}
         </select>
 
+        {bookNote && (
+          <div className="mb-4 -mt-2 flex items-start gap-2 rounded-xl border border-emerald-300/15 bg-emerald-400/[0.06] px-3 py-2 text-[11px] leading-5 text-emerald-200/80">
+            <span className="mt-0.5">🎯</span>
+            <span className="min-w-0 flex-1">
+              {bookNote}
+              <span className="ml-1 text-emerald-200/40">（可在上方自行换回）</span>
+            </span>
+          </div>
+        )}
+
         <div className="grid gap-2 sm:grid-cols-3">
           {[
-            { to: "/vocab-match", label: "词汇配对", icon: Grid3X3, desc: "泰 ↔ 中速配" },
-            { to: "/sentence-fill", label: "句子填空", icon: Type, desc: "选词填空" },
-            { to: "/word-segment", label: "分词练习", icon: Braces, desc: "句子里拆词" },
+            { to: "/vocabulary?mode=match", label: "词汇配对", icon: Grid3X3, desc: "泰 ↔ 中速配" },
+            { to: "/vocabulary?mode=fill", label: "句子填空", icon: Type, desc: "选词填空" },
+            { to: "/vocabulary?mode=segment", label: "分词练习", icon: Braces, desc: "句子里拆词" },
           ].map((m) => {
             const Icon = m.icon;
             return (

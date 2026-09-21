@@ -23,6 +23,12 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 
 import { lessons } from "@/data/courseTexts";
+import { BASIC_READER_COURSE_ID } from "@/data/courses";
+import { getLessonAudioById } from "@/data/lessonAudio";
+import {
+  isLessonCompleted,
+  markLessonComplete,
+} from "@/lib/courseProgress";
 import { localVocabulary } from "@/data/vocabulary";
 import { wordNotes } from "@/data/wordNotes";
 import Dictation from "@/components/lessons/Dictation";
@@ -468,6 +474,23 @@ function LessonDetail({ lessonId }) {
   const [showTranslation, setShowTranslation] = useState(false);
   const [expandedWord, setExpandedWord] = useState(null);
 
+  /* ==================== 课程进度打通 ====================
+     本页作为「基础泰语精读」课程的课时页：练习全对
+     或手动点「标记完成」都写入 courseProgress（localStorage
+     即时写入 + 登录时自动同步后端），课程详情页的
+     学习路径 / 进度条 / Home「继续学习」随之点亮。 */
+  const [exerciseAllCorrect, setExerciseAllCorrect] = useState(false);
+  const [manualDone, setManualDone] = useState(() =>
+    isLessonCompleted(BASIC_READER_COURSE_ID, lesson.id)
+  );
+  const isCompleted = manualDone || exerciseAllCorrect;
+
+  useEffect(() => {
+    if (isCompleted && !isLessonCompleted(BASIC_READER_COURSE_ID, lesson.id)) {
+      markLessonComplete(BASIC_READER_COURSE_ID, lesson.id);
+    }
+  }, [isCompleted, lesson.id]);
+
   /* ==================== 逐段朗读器 ====================
      整篇课文逐段合成播放：支持暂停/继续、当前段高亮、
      段内当前词高亮（按播放进度估算字符位置）。 */
@@ -734,7 +757,10 @@ function LessonDetail({ lessonId }) {
   /* ==========================================================
      非 VIP 用户：显示锁定卡 + VipPanel
   ========================================================== */
-  if (!isVip) {
+  // 免费试读课：与课程目录（lessonAudioCourses.free）门控一致，第一课免费
+  const isFreePreview = getLessonAudioById(lessonId)?.free === true;
+
+  if (!isVip && !isFreePreview) {
     return (
       <div className="relative min-h-screen text-white">
         <main className="relative z-10 mx-auto max-w-[1100px] px-4 py-6 pb-28 sm:px-6 lg:px-8">
@@ -1186,7 +1212,10 @@ function LessonDetail({ lessonId }) {
             </span>
           </div>
 
-          <ExerciseList exercises={lesson.exercises} />
+          <ExerciseList
+            exercises={lesson.exercises}
+            onAllCorrect={() => setExerciseAllCorrect(true)}
+          />
         </section>
 
         {/* ==================== 互译练习 ==================== */}
@@ -1248,6 +1277,22 @@ function LessonDetail({ lessonId }) {
 
         {/* 底部导航 */}
 
+        {/* 标记完成（练习全对时自动置为已完成状态） */}
+        <div className="mt-8 flex justify-center">
+          <button
+            onClick={() => setManualDone(true)}
+            disabled={isCompleted}
+            className={`flex items-center gap-2 rounded-xl border px-5 py-3 text-sm font-semibold transition ${
+              isCompleted
+                ? "cursor-default border-emerald-300/25 bg-emerald-400/[0.08] text-emerald-200"
+                : "border-emerald-300/20 bg-emerald-400/[0.05] text-emerald-200/70 hover:bg-emerald-400/[0.10] hover:text-emerald-100"
+            }`}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {isCompleted ? "已完成本课" : "学完本课，标记完成"}
+          </button>
+        </div>
+
         <div className="mt-8 flex items-center justify-between">
           {prev ? (
             <button
@@ -1280,7 +1325,21 @@ function LessonDetail({ lessonId }) {
               <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </button>
           ) : (
-            <span />
+            <button
+              onClick={() =>
+                navigate(`/course/${BASIC_READER_COURSE_ID}/exam`)
+              }
+              className="group flex items-center gap-2 rounded-xl border border-yellow-300/20 bg-yellow-300/[0.06] px-4 py-3 text-sm font-semibold text-yellow-200/80 transition hover:bg-yellow-300/[0.12] hover:text-yellow-100"
+            >
+              <GraduationCap className="h-4 w-4" />
+              <span>
+                <span className="block text-[10px] text-yellow-200/40">
+                  全部课文学完
+                </span>
+                参加结业测试
+              </span>
+              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </button>
           )}
         </div>
       </main>
@@ -1292,7 +1351,7 @@ function LessonDetail({ lessonId }) {
    练习（选择题 + 即时反馈）
 ========================================================= */
 
-function ExerciseList({ exercises }) {
+function ExerciseList({ exercises, onAllCorrect }) {
   const [answers, setAnswers] = useState({});
   const [resetKey, setResetKey] = useState(0);
 
@@ -1309,6 +1368,18 @@ function ExerciseList({ exercises }) {
   };
 
   const answeredCount = Object.keys(answers).length;
+
+  // 全部答对时通知父组件（自动标记本课完成）
+  const allCorrect =
+    exercises.length > 0 &&
+    answeredCount === exercises.length &&
+    exercises.every(
+      (exercise, qIndex) => answers[qIndex] === exercise.answer
+    );
+
+  useEffect(() => {
+    if (allCorrect && onAllCorrect) onAllCorrect();
+  }, [allCorrect, onAllCorrect]);
 
   return (
     <div key={resetKey} className="divide-y divide-white/[0.05]">

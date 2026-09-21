@@ -3,12 +3,11 @@
 
 import { localVocabulary } from "@/data/vocabulary";
 import { vocabAllBooks } from "@/data/vocabAllBooks";
-import { base44 } from "@/api/base44Client";
 
 /* ════════════════════════════════════════
    错题本：练习答错的词自动收录，可生成练习题目
    - 本地 localStorage 为主存储（任何环境都可用）
-   - base44 平台登录态存在时尽力同步（失败静默忽略）
+   - 本地 localStorage 为唯一事实来源（base44 通道已于 2026-09 废弃）
    ════════════════════════════════════════ */
 const WRONG_BOOK_LOCAL_KEY = "thaiai-wrong-notebook";
 
@@ -63,22 +62,8 @@ export async function fetchWrongBook() {
     if (norm.thai && norm.chinese) words.push(norm);
   }
 
-  // ② base44 错题（平台登录态存在时合并，失败静默忽略）
-  try {
-    const data = await base44.entities.WrongNotebook.filter(
-      { removed: false },
-      "-last_wrong_date",
-      500
-    );
-    for (const w of data || []) {
-      if (!w?.thai_word || seen.has(w.thai_word)) continue;
-      seen.add(w.thai_word);
-      const norm = fillWrongFromLocal(w);
-      if (norm.thai && norm.chinese) words.push(norm);
-    }
-  } catch (e) {
-    // base44 未登录等：跳过，仅用本地错题
-  }
+  /* ② base44 平台错题通道已废弃（本项目后端没有对应表，调用必然 401），
+     不再发这个请求：本地错题本就是唯一事实来源。 */
 
   if (!words.length) return null;
   return {
@@ -122,69 +107,23 @@ export async function recordWrongWord(word) {
   }
   saveLocalWrong(local);
 
-  // ② base44 尽力同步（平台登录态存在时生效，失败静默忽略）
-  try {
-    const existing = await base44.entities.WrongNotebook.filter(
-      { thai_word: thai, removed: false },
-      null,
-      50
-    );
-    if (existing?.length) {
-      await base44.entities.WrongNotebook.update(existing[0].id, {
-        wrong_count: (existing[0].wrong_count || 1) + 1,
-        last_wrong_date: today,
-      });
-    } else {
-      await base44.entities.WrongNotebook.create({
-        thai_word: thai,
-        chinese_meaning: entry.chinese,
-        pronunciation: entry.roman,
-        example_thai: entry.sentence,
-        wrong_count: 1,
-        last_wrong_date: today,
-        removed: false,
-      });
-    }
-  } catch (e) {
-    // base44 未登录/无权限：仅本地记录即可
-  }
+  /* ② base44 同步通道已废弃：它没有对应的后端表，每次都会 401，
+     而写错题是高频动作 —— 那等于每答错一题都发一次注定失败的请求。
+     本地存储就是唯一事实来源（fetchWrongBook 读的就是它）。 */
 }
 
-// 从错题本移除单个错词（本地 + base44 尽力同步）
+// 从错题本移除单个错词（仅本地主存储）
 export async function removeWrongWord(thai) {
   if (!thai) return;
   const local = loadLocalWrong();
   const next = local.filter((w) => w.thai !== thai);
   if (next.length !== local.length) saveLocalWrong(next);
-  try {
-    const existing = await base44.entities.WrongNotebook.filter(
-      { thai_word: thai, removed: false },
-      null,
-      50
-    );
-    for (const w of existing || []) {
-      await base44.entities.WrongNotebook.update(w.id, { removed: true });
-    }
-  } catch (e) {
-    // base44 未登录/无权限：仅本地移除即可
-  }
+  /* base44 同步已废弃（同 recordWrongWord 的原因） */
 }
 
-// 清空错题本（本地 + base44 尽力同步）
+// 清空错题本（仅本地主存储）
 export async function clearWrongBook() {
   saveLocalWrong([]);
-  try {
-    const existing = await base44.entities.WrongNotebook.filter(
-      { removed: false },
-      null,
-      500
-    );
-    for (const w of existing || []) {
-      await base44.entities.WrongNotebook.update(w.id, { removed: true });
-    }
-  } catch (e) {
-    // base44 未登录/无权限：仅本地清空即可
-  }
 }
 
 /* ════════════════════════════════════════

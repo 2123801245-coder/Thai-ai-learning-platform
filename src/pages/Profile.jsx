@@ -61,12 +61,18 @@ import {
 import { API_BASE_URL, SERVER_BASE_URL } from "@/lib/api";
 import { getNewsListeningStats } from "@/api/newsListening";
 import { getVocabQuizStats } from "@/api/vocabStats";
-import { getAiTeacherMemory, updateAiTeacherMemory } from "@/api/aiTeacher";
+import {
+  addAiTeacherMemoryItem,
+  deleteAiTeacherMemoryItem,
+  getAiTeacherMemory,
+  updateAiTeacherMemory,
+} from "@/api/aiTeacher";
 import { getPlanOverview } from "@/api/plan";
 import { ImagePlus, Trash2, Link2 } from "lucide-react";
+import { StatSection } from "@/components/profile/StatSection";
 
 const getAvatarUrl = (avatar) => {
-  if (!avatar) return "/default-avatar.png";
+  if (!avatar) return "/default-avatar.svg";
 
   if (
     avatar.startsWith("http://") ||
@@ -98,6 +104,17 @@ const formatRecentTime = (iso) => {
   return `${days} 天前`;
 };
 
+/* 分类记忆的类型（与后端 backend/aiMemory.js 的 MEMORY_TYPES 保持一致） */
+const AI_MEMORY_TYPES = [
+  { value: "goal", label: "🎯 学习目标" },
+  { value: "interest", label: "🎬 兴趣内容" },
+  { value: "weakness", label: "⚠️ 薄弱点" },
+  { value: "error", label: "❌ 错误记录" },
+  { value: "habit", label: "🕘 学习习惯" },
+  { value: "preference", label: "💬 表达偏好" },
+  { value: "profile", label: "🪪 身份档案" },
+];
+
 const AI_LEVEL_LABEL = {
   beginner: "初级初学者",
   elementary: "初级",
@@ -117,6 +134,15 @@ const AI_GENDER_OPTIONS = [
   { value: "男性（用ครับ）", label: "男生（ใช้ ครับ）" },
   { value: "女性（用ค่ะ）", label: "女生（ใช้ ค่ะ）" },
 ];
+
+/** 判断某个 YYYY-MM-DD（或 ISO 串）是否落在最近 N 天内 */
+function isDateWithinDays(dateStr, days) {
+  if (!dateStr) return false;
+  const d = new Date(String(dateStr).length <= 10 ? `${dateStr}T00:00:00` : dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  const diff = Date.now() - d.getTime();
+  return diff >= 0 && diff <= days * 24 * 3600 * 1000;
+}
 
 export default function Profile() {
   const {
@@ -186,11 +212,18 @@ export default function Profile() {
   // AI 老师记住的学生画像（名字 / 水平 / 兴趣 / 常见错误…）
   // ============================================================
 
-  const [aiMem, setAiMem] = useState(null); // { hasMemory, memory, summary }
+  // { hasMemory, memory(旧结构), items(分类条目), groups, summary }
+  const [aiMem, setAiMem] = useState(null);
   const [aiMemLoading, setAiMemLoading] = useState(false);
   const [aiMemEdit, setAiMemEdit] = useState(false);
   const [aiMemSaving, setAiMemSaving] = useState(false);
   const [aiMemError, setAiMemError] = useState("");
+
+  // 分类记忆：手动新增 / 删除单条
+  const [memItemType, setMemItemType] = useState("goal");
+  const [memItemContent, setMemItemContent] = useState("");
+  const [memItemBusy, setMemItemBusy] = useState(false);
+  const [memItemError, setMemItemError] = useState("");
   const [aiMemForm, setAiMemForm] = useState({
     studentName: "",
     genderHint: "",
@@ -314,8 +347,49 @@ export default function Profile() {
       100
   );
 
+
   /* 口语练习统计 */
   const speakingHistory = useMemo(() => getSpeakingHistory(), []);
+
+  /* ── 本周学习目标：全部由真实记录推导 ──
+     此前这里是写死的 "72% / 72 / 100 / 6 / 10 / 5 / 7"，
+     与同页其它由 learning 算出来的数字并存，等于在真实数据里塞假数据。 */
+  const WEEK_GOALS = { words: 100, speaking: 10, days: 7 };
+
+  const weekWordCount = (learning?.daily_history || [])
+    .filter((item) => isDateWithinDays(item.date, 7))
+    .reduce((sum, item) => sum + (item.words || 0), 0);
+
+  const weekSpeakingCount = speakingHistory.filter((r) =>
+    isDateWithinDays(r.date || r.createdAt, 7)
+  ).length;
+
+  const weekActiveDays = (() => {
+    if (Array.isArray(planOverview?.week) && planOverview.week.length) {
+      return planOverview.week.filter((d) => d.completed).length;
+    }
+    const dates = new Set(
+      (learning?.daily_history || [])
+        .filter((item) => isDateWithinDays(item.date, 7))
+        .map((item) => item.date)
+    );
+    return dates.size;
+  })();
+
+  const weekGoals = [
+    { key: "words", label: `学习 ${WEEK_GOALS.words} 个词汇`, current: weekWordCount, target: WEEK_GOALS.words, icon: BookOpen },
+    { key: "speaking", label: `完成 ${WEEK_GOALS.speaking} 次口语`, current: weekSpeakingCount, target: WEEK_GOALS.speaking, icon: Mic },
+    { key: "days", label: `学习 ${WEEK_GOALS.days} 天`, current: weekActiveDays, target: WEEK_GOALS.days, icon: CalendarDays },
+  ];
+
+  const weekPct = Math.min(
+    100,
+    Math.round(
+      (weekGoals.reduce((sum, g) => sum + Math.min(1, g.current / g.target), 0) /
+        weekGoals.length) *
+        100
+    )
+  );
   const speakingStats = useMemo(() => {
     if (speakingHistory.length === 0) return null;
     const recent = speakingHistory.slice(-20);
@@ -747,7 +821,7 @@ export default function Profile() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const avatarPath = response.data?.user?.avatar || null;
-      setAvatar("/default-avatar.png");
+      setAvatar("/default-avatar.svg");
       const updatedUser = { ...user, avatar: avatarPath };
       setUser(updatedUser);
       localStorage.setItem("user", JSON.stringify(updatedUser));
@@ -765,7 +839,7 @@ export default function Profile() {
   // ============================================================
 
   const handleAvatarError = () => {
-    setAvatar("/default-avatar.png");
+    setAvatar("/default-avatar.svg");
   };
 
   // ============================================================
@@ -787,6 +861,42 @@ export default function Profile() {
     });
     setAiMemError("");
     setAiMemEdit(true);
+  };
+
+  // 新增一条分类记忆（直接告诉老师要记住的事，下次对话就生效）
+  const addMemItem = async () => {
+    const content = memItemContent.trim();
+    if (!content || memItemBusy) return;
+    setMemItemBusy(true);
+    setMemItemError("");
+    try {
+      const res = await addAiTeacherMemoryItem({ type: memItemType, content });
+      setAiMem(res.data || null);
+      setMemItemContent("");
+    } catch (err) {
+      setMemItemError(
+        err?.response?.data?.message || "保存失败，请稍后重试"
+      );
+    } finally {
+      setMemItemBusy(false);
+    }
+  };
+
+  // 删除一条记忆（记错了 / 不想让它记）
+  const removeMemItem = async (id) => {
+    if (memItemBusy) return;
+    setMemItemBusy(true);
+    setMemItemError("");
+    try {
+      const res = await deleteAiTeacherMemoryItem(id);
+      setAiMem(res.data || null);
+    } catch (err) {
+      setMemItemError(
+        err?.response?.data?.message || "删除失败，请稍后重试"
+      );
+    } finally {
+      setMemItemBusy(false);
+    }
   };
 
   const saveAiMem = async () => {
@@ -1181,7 +1291,9 @@ export default function Profile() {
           学习数据
       ====================================================== */}
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      {/* 5 个统计块：原来在 xl 下是 4 列 → 第 5 个"学习时长"孤零零占一行。
+          改成 2/3/5 列，宽屏正好一行排满。 */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
 
         <ProfileStat
           icon={Flame}
@@ -1224,30 +1336,24 @@ export default function Profile() {
           新闻听力
       ====================================================== */}
 
-      <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 backdrop-blur-xl"
+      <StatSection
+        icon={Newspaper}
+        eyebrow="NEWS LISTENING"
+        title="新闻听力"
+        desc="每日 ThaiPBS 时事 · 听音填空 · 跟读评分"
+        summary={
+          newsStats
+            ? `已练 ${newsStats.total || 0} 篇 · 平均 ${
+                Math.round(
+                  ((newsStats.avgCloze || 0) + (newsStats.avgRepeat || 0)) / 2
+                ) || "—"
+              } 分`
+            : "登录后同步练习记录"
+        }
+        loading={newsStatsLoading}
+        tone="#6ee7a8"
+        delay={0.08}
       >
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] text-emerald-300/70">
-              <Newspaper className="h-3.5 w-3.5" />
-              NEWS LISTENING
-            </div>
-            <h2 className="mt-1 font-bold text-white">
-              新闻听力
-            </h2>
-            <p className="mt-0.5 text-xs text-white/30">
-              每日 ThaiPBS 时事 · 听音填空 · 跟读评分
-            </p>
-          </div>
-          {newsStatsLoading && (
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-300/30 border-t-emerald-300" />
-          )}
-        </div>
-
         {newsStats ? (
           <>
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
@@ -1319,36 +1425,28 @@ export default function Profile() {
             </p>
           </div>
         )}
-      </motion.div>
+      </StatSection>
 
       {/* ======================================================
           词汇测验
       ====================================================== */}
 
-      <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 backdrop-blur-xl"
+      <StatSection
+        icon={ListChecks}
+        eyebrow="VOCAB QUIZ"
+        title="词汇测验"
+        desc="错题本 · 生词本 · 词书测验"
+        summary={
+          vocabStats
+            ? `正确率 ${Math.round(vocabStats.accuracy || 0)}% · 测验 ${
+                vocabStats.totalQuizzes || 0
+              } 轮`
+            : "登录后同步测验统计"
+        }
+        loading={vocabStatsLoading}
+        tone="#e8c88a"
+        delay={0.1}
       >
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] text-yellow-300/70">
-              <ListChecks className="h-3.5 w-3.5" />
-              VOCAB QUIZ
-            </div>
-            <h2 className="mt-1 font-bold text-white">
-              词汇测验
-            </h2>
-            <p className="mt-0.5 text-xs text-white/30">
-              错题本 · 生词本 · 词书测验
-            </p>
-          </div>
-          {vocabStatsLoading && (
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-yellow-300/30 border-t-yellow-300" />
-          )}
-        </div>
-
         {vocabStats ? (
           <>
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
@@ -1423,7 +1521,7 @@ export default function Profile() {
             </p>
           </div>
         )}
-      </motion.div>
+      </StatSection>
 
       {/* ======================================================
           AI 老师记住的学生画像（可查看 / 手动修正）
@@ -1655,6 +1753,118 @@ export default function Profile() {
                 </div>
               </div>
             )}
+
+            {/* ==============================================
+                分类记忆：目标 / 习惯 / 薄弱点 / 错误 / 兴趣
+                （AI 老师真正拿去影响回复、纠错与出题难度的那份档案）
+            ============================================== */}
+
+            <div className="rounded-2xl border border-violet-300/15 bg-violet-300/[0.04] px-3.5 py-3.5">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <p className="text-[11px] font-semibold text-violet-100/90">
+                  分类记忆 · 共 {aiMem.items?.length || 0} 条
+                </p>
+                <span className="text-[10px] text-white/30">
+                  重要度越高，越优先影响老师的讲解与纠错
+                </span>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                {(aiMem.groups || []).map((group) => (
+                  <div key={group.type}>
+                    <p className="flex items-center gap-1.5 text-[10px] text-white/40">
+                      <span>{group.meta?.emoji}</span>
+                      {group.meta?.label || group.type}
+                      <span className="text-white/25">· {group.items.length}</span>
+                    </p>
+                    <div className="mt-1.5 space-y-1.5">
+                      {group.items.map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-start gap-2 rounded-xl border border-white/[0.06] bg-black/20 px-2.5 py-2"
+                        >
+                          <span className="min-w-0 flex-1 text-[12px] leading-5 text-white/80">
+                            {item.content}
+                            {item.hits > 1 && (
+                              <span className="ml-1.5 text-[10px] text-violet-200/60">
+                                提过 {item.hits} 次
+                              </span>
+                            )}
+                          </span>
+                          <span
+                            className="mt-1.5 flex shrink-0 items-center gap-0.5"
+                            title={`重要度 ${item.importance}/5`}
+                          >
+                            {[1, 2, 3, 4, 5].map((n) => (
+                              <span
+                                key={n}
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  n <= item.importance ? "bg-violet-300" : "bg-white/15"
+                                }`}
+                              />
+                            ))}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeMemItem(item.id)}
+                            disabled={memItemBusy}
+                            title="让老师忘掉这条"
+                            className="shrink-0 rounded-lg px-1.5 py-0.5 text-[10px] text-white/30 transition hover:bg-white/5 hover:text-red-200 disabled:opacity-40"
+                          >
+                            删除
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 直接告诉老师要记住的事 */}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <select
+                  value={memItemType}
+                  onChange={(e) => setMemItemType(e.target.value)}
+                  className="rounded-xl border border-white/10 bg-black/20 px-2.5 py-2 text-[11px] text-white outline-none focus:border-violet-300/40"
+                >
+                  {AI_MEMORY_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={memItemContent}
+                  onChange={(e) => setMemItemContent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addMemItem();
+                    }
+                  }}
+                  maxLength={120}
+                  placeholder="比如：我容易混淆声调"
+                  className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[12px] text-white outline-none placeholder:text-white/25 focus:border-violet-300/40"
+                />
+                <button
+                  type="button"
+                  onClick={addMemItem}
+                  disabled={memItemBusy || !memItemContent.trim()}
+                  className="rounded-xl bg-violet-400/15 px-3.5 py-2 text-[11px] font-semibold text-violet-100 transition hover:bg-violet-400/25 disabled:opacity-40"
+                >
+                  {memItemBusy ? "保存中…" : "让老师记住"}
+                </button>
+              </div>
+
+              {memItemError && (
+                <p className="mt-2 text-[11px] text-red-200/80">{memItemError}</p>
+              )}
+
+              <p className="mt-2 text-[10px] leading-5 text-white/25">
+                在这里添加会立刻生效：下一次对话老师就按它来讲解与纠错；
+                带「提过 N 次」的条目是对话里反复出现、自动加重权重的。
+              </p>
+            </div>
           </div>
         ) : (
           <div className="rounded-2xl border border-white/[0.04] bg-white/[0.02] px-4 py-6 text-center">
@@ -1681,35 +1891,17 @@ export default function Profile() {
 
       <div className="grid gap-5 lg:grid-cols-2">
 
-        <motion.div
-          initial={{
-            opacity: 0,
-            y: 15,
-          }}
-          animate={{
-            opacity: 1,
-            y: 0,
-          }}
-          transition={{
-            delay: 0.08,
-          }}
-          className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 backdrop-blur-xl"
+        <StatSection
+          icon={Brain}
+          eyebrow="ABILITY"
+          title="学习能力"
+          desc="词汇掌握 · 课程学习 · 今日目标 · 连续学习"
+          summary={`词汇掌握 ${Math.round(accuracy)}% · 课程 ${Math.round(
+            courseSummary.progressPercent
+          )}% · 今日 ${Math.min(100, dailyPct)}% · 连续 ${displayStreak} 天`}
+          tone="#6ee7a8"
+          delay={0.08}
         >
-          <div className="mb-5 flex items-center justify-between">
-
-            <div>
-              <h2 className="font-bold text-white">
-                学习能力
-              </h2>
-
-              <p className="mt-1 text-xs text-white/30">
-                当前学习进度
-              </p>
-            </div>
-
-            <Brain className="h-5 w-5 text-emerald-300/50" />
-          </div>
-
           <div className="space-y-5">
 
             <ProgressRow
@@ -1731,124 +1923,86 @@ export default function Profile() {
               label="连续学习"
               value={Math.min(
                 100,
-                Math.round((streak / 30) * 100)
+                Math.round((displayStreak / 30) * 100)
               )}
             />
           </div>
-        </motion.div>
+        </StatSection>
 
-        <motion.div
-          initial={{
-            opacity: 0,
-            y: 15,
-          }}
-          animate={{
-            opacity: 1,
-            y: 0,
-          }}
-          transition={{
-            delay: 0.12,
-          }}
-          className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 backdrop-blur-xl"
+        <StatSection
+          icon={Target}
+          eyebrow="WEEKLY GOALS"
+          title="本周学习目标"
+          desc="词汇 · 口语 · 学习天数"
+          summary={`本周完成 ${weekPct}% · ${
+            weekGoals.filter((g) => g.current >= g.target).length
+          }/${weekGoals.length} 项达标`}
+          tone="#e8c88a"
+          delay={0.12}
         >
-          <div className="mb-5 flex items-center justify-between">
-
-            <div>
-              <h2 className="font-bold text-white">
-                本周学习目标
-              </h2>
-
-              <p className="mt-1 text-xs text-white/30">
-                保持你的学习节奏
-              </p>
-            </div>
-
-            <Target className="h-5 w-5 text-yellow-300/60" />
-          </div>
-
           <div className="flex items-center gap-5">
 
             <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-full border-4 border-emerald-400/20 bg-emerald-400/[0.04]">
 
               <div className="text-center">
                 <div className="text-2xl font-black text-white">
-                  72%
+                  {weekPct}%
                 </div>
 
                 <div className="text-[10px] text-white/30">
-                  已完成
+                  本周完成
                 </div>
               </div>
             </div>
 
             <div className="space-y-3">
 
-              <GoalItem
-                icon={BookOpen}
-                text="学习 100 个词汇"
-                done="72 / 100"
-              />
-
-              <GoalItem
-                icon={Mic}
-                text="完成 10 次口语"
-                done="6 / 10"
-              />
-
-              <GoalItem
-                icon={CalendarDays}
-                text="学习 7 天"
-                done="5 / 7"
-              />
+              {weekGoals.map((goal) => (
+                <GoalItem
+                  key={goal.key}
+                  icon={goal.icon}
+                  text={goal.label}
+                  done={`${goal.current} / ${goal.target}`}
+                />
+              ))}
             </div>
           </div>
-        </motion.div>
+        </StatSection>
       </div>
 
       {/* ======================================================
           学习成就
       ====================================================== */}
 
-      <motion.div
-        initial={{
-          opacity: 0,
-          y: 15,
-        }}
-        animate={{
-          opacity: 1,
-          y: 0,
-        }}
-        transition={{
-          delay: 0.15,
-        }}
-        className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 backdrop-blur-xl"
+      <StatSection
+        icon={Award}
+        eyebrow="ACHIEVEMENTS"
+        title="学习成就"
+        desc="记录你的学习里程碑"
+        summary={`已解锁 ${
+          [
+            streak >= 7,
+            totalVocab >= 100,
+            courseSummary.completedCount >= 5,
+            streak >= 30,
+            totalVocab >= 500,
+            accuracy >= 90,
+            courseSummary.completedCount >= 15,
+            !!authUser?.isVip,
+          ].filter(Boolean).length
+        } / 8 枚徽章`}
+        tone="#e8c88a"
+        delay={0.15}
       >
-        <div className="mb-5 flex items-center justify-between">
-
-          <div>
-            <h2 className="font-bold text-white">
-              学习成就
-            </h2>
-
-            <p className="mt-1 text-xs text-white/30">
-              记录你的学习里程碑
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-
-            <button
-              type="button"
-              onClick={() => setShareOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-yellow-300/20 bg-yellow-300/[0.07] px-3 py-1.5 text-xs font-semibold text-yellow-200/90 transition hover:bg-yellow-300/[0.12]"
-            >
-              <Share2 className="h-3.5 w-3.5" />
-              分享成就
-            </button>
-
-            <Award className="h-5 w-5 text-yellow-300/60" />
-
-          </div>
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            className="flex items-center gap-1.5 rounded-xl border border-yellow-300/20 bg-yellow-300/[0.07] px-3 py-1.5 text-xs font-semibold text-yellow-200/90 transition hover:bg-yellow-300/[0.12]"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            分享成就
+          </button>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1915,7 +2069,7 @@ export default function Profile() {
             unlocked={!!authUser?.isVip}
           />
         </div>
-      </motion.div>
+      </StatSection>
 
       {/* ======================================================
           泰语能力评估（六维雷达 + 成长曲线）
@@ -1928,19 +2082,15 @@ export default function Profile() {
       ====================================================== */}
 
       {speakingStats && (
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 backdrop-blur-xl"
+        <StatSection
+          icon={Mic}
+          eyebrow="SPEAKING"
+          title="口语练习记录"
+          desc="四维评分趋势与最近表现"
+          summary={`共 ${speakingStats.total} 次 · 近 20 次平均 ${speakingStats.avg} 分`}
+          tone="#67e8f9"
+          delay={0.15}
         >
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-white">口语练习记录</h2>
-              <p className="mt-1 text-xs text-white/30">共 {speakingStats.total} 次练习</p>
-            </div>
-            <Mic className="h-5 w-5 text-cyan-300/50" />
-          </div>
 
           {/* 四维均值 */}
           <div className="mb-4 grid grid-cols-5 gap-2">
@@ -1984,42 +2134,22 @@ export default function Profile() {
               })}
             </div>
           </div>
-        </motion.div>
+        </StatSection>
       )}
 
       {/* ======================================================
           最近学习
       ====================================================== */}
 
-      <motion.div
-        initial={{
-          opacity: 0,
-          y: 15,
-        }}
-        animate={{
-          opacity: 1,
-          y: 0,
-        }}
-        transition={{
-          delay: 0.18,
-        }}
-        className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 backdrop-blur-xl"
+      <StatSection
+        icon={Clock3}
+        eyebrow="RECENT"
+        title="最近学习"
+        desc="最近看过的课程视频"
+        summary={`共 ${courseSummary.recentList.length} 条记录`}
+        tone="#c4b5fd"
+        delay={0.18}
       >
-        <div className="mb-5 flex items-center justify-between">
-
-          <div>
-            <h2 className="font-bold text-white">
-              最近学习
-            </h2>
-
-            <p className="mt-1 text-xs text-white/30">
-              最近的学习记录
-            </p>
-          </div>
-
-          <Clock3 className="h-5 w-5 text-emerald-300/50" />
-        </div>
-
         <div className="space-y-2">
           {courseSummary.recentList.length > 0 ? (
             courseSummary.recentList
@@ -2043,7 +2173,7 @@ export default function Profile() {
             </div>
           )}
         </div>
-      </motion.div>
+      </StatSection>
 
       {/* 管理员入口（仅管理员可见） */}
 

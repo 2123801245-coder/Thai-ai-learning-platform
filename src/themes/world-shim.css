@@ -1,0 +1,772 @@
+
+/* ============================================================
+   Visual World 兼容垫片（Compatibility Shim）
+   ------------------------------------------------------------
+   为什么需要它
+   ------------
+   全站有约 2800 处 `text-white/40`、`bg-white/[0.04]`、
+   `border-white/10` 这类**只有深色背景才成立**的硬编码工具类。
+   浅色的 PAPER 世界里，白字落在米白纸上直接看不见 —— 这是
+   "第四个世界没法用"的根因，也是逐个改 22 个页面不现实的原因。
+
+   这一层按世界重映射这些类：
+     · PAPER：白 → 墨褐，面板改成"比纸更亮的书页"
+     · FOREST / MODERN：轻微暖化/冷化，保留自身的材质语气
+   MIDNIGHT 不需要覆盖（就是为它写的）。
+
+   这是**过渡垫片**：组件逐个换成 `var(--tp-*)` token 之后，
+   这一层可以整段删掉。选择器带 `html[data-visual-mode=...]`
+   前缀（特异性 0,2,1），高于 Tailwind 原来的 (0,1,0)，无需 !important。
+   ============================================================ */
+
+
+/* ---------- PAPER ---------- */
+html[data-visual-mode="paper"] .bg-white\/10 { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/15 { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/20 { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/30 { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/40 { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/5 { background-color: rgb(255 252 245 / 0.350); }
+html[data-visual-mode="paper"] .bg-white\/80 { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/90 { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.015\] { background-color: rgb(255 252 245 / 0.105); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.018\] { background-color: rgb(255 252 245 / 0.126); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.025\] { background-color: rgb(255 252 245 / 0.175); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.02\] { background-color: rgb(255 252 245 / 0.140); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.035\] { background-color: rgb(255 252 245 / 0.245); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.03\] { background-color: rgb(255 252 245 / 0.210); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.045\] { background-color: rgb(255 252 245 / 0.315); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.04\] { background-color: rgb(255 252 245 / 0.280); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.055\] { background-color: rgb(255 252 245 / 0.385); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.05\] { background-color: rgb(255 252 245 / 0.350); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.06\] { background-color: rgb(255 252 245 / 0.420); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.07\] { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.08\] { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.09\] { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.10\] { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.12\] { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.14\] { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .bg-white\/\[0\.1\] { background-color: rgb(255 252 245 / 0.460); }
+html[data-visual-mode="paper"] .border-white\/10 { border-color: rgb(108 92 62 / 0.170); }
+html[data-visual-mode="paper"] .border-white\/12 { border-color: rgb(108 92 62 / 0.204); }
+html[data-visual-mode="paper"] .border-white\/15 { border-color: rgb(108 92 62 / 0.255); }
+html[data-visual-mode="paper"] .border-white\/16 { border-color: rgb(108 92 62 / 0.272); }
+html[data-visual-mode="paper"] .border-white\/20 { border-color: rgb(108 92 62 / 0.340); }
+html[data-visual-mode="paper"] .border-white\/25 { border-color: rgb(108 92 62 / 0.425); }
+html[data-visual-mode="paper"] .border-white\/30 { border-color: rgb(108 92 62 / 0.500); }
+html[data-visual-mode="paper"] .border-white\/5 { border-color: rgb(108 92 62 / 0.085); }
+html[data-visual-mode="paper"] .border-white\/\[0\.04\] { border-color: rgb(108 92 62 / 0.068); }
+html[data-visual-mode="paper"] .border-white\/\[0\.05\] { border-color: rgb(108 92 62 / 0.085); }
+html[data-visual-mode="paper"] .border-white\/\[0\.06\] { border-color: rgb(108 92 62 / 0.102); }
+html[data-visual-mode="paper"] .border-white\/\[0\.07\] { border-color: rgb(108 92 62 / 0.119); }
+html[data-visual-mode="paper"] .border-white\/\[0\.08\] { border-color: rgb(108 92 62 / 0.136); }
+html[data-visual-mode="paper"] .border-white\/\[0\.09\] { border-color: rgb(108 92 62 / 0.153); }
+html[data-visual-mode="paper"] .border-white\/\[0\.12\] { border-color: rgb(108 92 62 / 0.204); }
+html[data-visual-mode="paper"] .border-white\/\[0\.14\] { border-color: rgb(108 92 62 / 0.238); }
+html[data-visual-mode="paper"] .border-white\/\[0\.15\] { border-color: rgb(108 92 62 / 0.255); }
+html[data-visual-mode="paper"] .border-white\/\[0\.16\] { border-color: rgb(108 92 62 / 0.272); }
+html[data-visual-mode="paper"] .border-white\/\[0\.1\] { border-color: rgb(108 92 62 / 0.170); }
+html[data-visual-mode="paper"] .text-white\/10 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/15 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/20 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/25 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/30 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/35 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/38 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/40 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/45 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/50 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .text-white\/55 { color: rgb(36 31 23 / 0.797); }
+html[data-visual-mode="paper"] .text-white\/60 { color: rgb(36 31 23 / 0.870); }
+html[data-visual-mode="paper"] .text-white\/65 { color: rgb(36 31 23 / 0.943); }
+html[data-visual-mode="paper"] .text-white\/70 { color: rgb(36 31 23 / 1.000); }
+html[data-visual-mode="paper"] .text-white\/75 { color: rgb(36 31 23 / 1.000); }
+html[data-visual-mode="paper"] .text-white\/80 { color: rgb(36 31 23 / 1.000); }
+html[data-visual-mode="paper"] .text-white\/85 { color: rgb(36 31 23 / 1.000); }
+html[data-visual-mode="paper"] .text-white\/90 { color: rgb(36 31 23 / 1.000); }
+html[data-visual-mode="paper"] .text-white\/92 { color: rgb(36 31 23 / 1.000); }
+html[data-visual-mode="paper"] .text-white\/95 { color: rgb(36 31 23 / 1.000); }
+html[data-visual-mode="paper"] .text-white\/\[0\.04\] { color: rgb(36 31 23 / 0.75); }
+
+/* ---------- FOREST ---------- */
+html[data-visual-mode="forest"] .bg-white\/10 { background-color: rgb(233 240 232 / 0.090); }
+html[data-visual-mode="forest"] .bg-white\/15 { background-color: rgb(233 240 232 / 0.135); }
+html[data-visual-mode="forest"] .bg-white\/20 { background-color: rgb(233 240 232 / 0.180); }
+html[data-visual-mode="forest"] .bg-white\/30 { background-color: rgb(233 240 232 / 0.200); }
+html[data-visual-mode="forest"] .bg-white\/40 { background-color: rgb(233 240 232 / 0.200); }
+html[data-visual-mode="forest"] .bg-white\/5 { background-color: rgb(233 240 232 / 0.045); }
+html[data-visual-mode="forest"] .bg-white\/80 { background-color: rgb(233 240 232 / 0.200); }
+html[data-visual-mode="forest"] .bg-white\/90 { background-color: rgb(233 240 232 / 0.200); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.015\] { background-color: rgb(233 240 232 / 0.013); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.018\] { background-color: rgb(233 240 232 / 0.016); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.025\] { background-color: rgb(233 240 232 / 0.023); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.02\] { background-color: rgb(233 240 232 / 0.018); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.035\] { background-color: rgb(233 240 232 / 0.032); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.03\] { background-color: rgb(233 240 232 / 0.027); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.045\] { background-color: rgb(233 240 232 / 0.041); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.04\] { background-color: rgb(233 240 232 / 0.036); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.055\] { background-color: rgb(233 240 232 / 0.050); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.05\] { background-color: rgb(233 240 232 / 0.045); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.06\] { background-color: rgb(233 240 232 / 0.054); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.07\] { background-color: rgb(233 240 232 / 0.063); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.08\] { background-color: rgb(233 240 232 / 0.072); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.09\] { background-color: rgb(233 240 232 / 0.081); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.10\] { background-color: rgb(233 240 232 / 0.090); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.12\] { background-color: rgb(233 240 232 / 0.108); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.14\] { background-color: rgb(233 240 232 / 0.126); }
+html[data-visual-mode="forest"] .bg-white\/\[0\.1\] { background-color: rgb(233 240 232 / 0.090); }
+html[data-visual-mode="forest"] .border-white\/10 { border-color: rgb(199 180 138 / 0.100); }
+html[data-visual-mode="forest"] .border-white\/12 { border-color: rgb(199 180 138 / 0.120); }
+html[data-visual-mode="forest"] .border-white\/15 { border-color: rgb(199 180 138 / 0.150); }
+html[data-visual-mode="forest"] .border-white\/16 { border-color: rgb(199 180 138 / 0.160); }
+html[data-visual-mode="forest"] .border-white\/20 { border-color: rgb(199 180 138 / 0.200); }
+html[data-visual-mode="forest"] .border-white\/25 { border-color: rgb(199 180 138 / 0.250); }
+html[data-visual-mode="forest"] .border-white\/30 { border-color: rgb(199 180 138 / 0.300); }
+html[data-visual-mode="forest"] .border-white\/5 { border-color: rgb(199 180 138 / 0.050); }
+html[data-visual-mode="forest"] .border-white\/\[0\.04\] { border-color: rgb(199 180 138 / 0.040); }
+html[data-visual-mode="forest"] .border-white\/\[0\.05\] { border-color: rgb(199 180 138 / 0.050); }
+html[data-visual-mode="forest"] .border-white\/\[0\.06\] { border-color: rgb(199 180 138 / 0.060); }
+html[data-visual-mode="forest"] .border-white\/\[0\.07\] { border-color: rgb(199 180 138 / 0.070); }
+html[data-visual-mode="forest"] .border-white\/\[0\.08\] { border-color: rgb(199 180 138 / 0.080); }
+html[data-visual-mode="forest"] .border-white\/\[0\.09\] { border-color: rgb(199 180 138 / 0.090); }
+html[data-visual-mode="forest"] .border-white\/\[0\.12\] { border-color: rgb(199 180 138 / 0.120); }
+html[data-visual-mode="forest"] .border-white\/\[0\.14\] { border-color: rgb(199 180 138 / 0.140); }
+html[data-visual-mode="forest"] .border-white\/\[0\.15\] { border-color: rgb(199 180 138 / 0.150); }
+html[data-visual-mode="forest"] .border-white\/\[0\.16\] { border-color: rgb(199 180 138 / 0.160); }
+html[data-visual-mode="forest"] .border-white\/\[0\.1\] { border-color: rgb(199 180 138 / 0.100); }
+html[data-visual-mode="forest"] .text-white\/10 { color: rgb(232 239 231 / 0.094); }
+html[data-visual-mode="forest"] .text-white\/15 { color: rgb(232 239 231 / 0.141); }
+html[data-visual-mode="forest"] .text-white\/20 { color: rgb(232 239 231 / 0.188); }
+html[data-visual-mode="forest"] .text-white\/25 { color: rgb(232 239 231 / 0.235); }
+html[data-visual-mode="forest"] .text-white\/30 { color: rgb(232 239 231 / 0.282); }
+html[data-visual-mode="forest"] .text-white\/35 { color: rgb(232 239 231 / 0.329); }
+html[data-visual-mode="forest"] .text-white\/38 { color: rgb(232 239 231 / 0.357); }
+html[data-visual-mode="forest"] .text-white\/40 { color: rgb(232 239 231 / 0.376); }
+html[data-visual-mode="forest"] .text-white\/45 { color: rgb(232 239 231 / 0.423); }
+html[data-visual-mode="forest"] .text-white\/50 { color: rgb(232 239 231 / 0.470); }
+html[data-visual-mode="forest"] .text-white\/55 { color: rgb(232 239 231 / 0.517); }
+html[data-visual-mode="forest"] .text-white\/60 { color: rgb(232 239 231 / 0.564); }
+html[data-visual-mode="forest"] .text-white\/65 { color: rgb(232 239 231 / 0.611); }
+html[data-visual-mode="forest"] .text-white\/70 { color: rgb(232 239 231 / 0.658); }
+html[data-visual-mode="forest"] .text-white\/75 { color: rgb(232 239 231 / 0.705); }
+html[data-visual-mode="forest"] .text-white\/80 { color: rgb(232 239 231 / 0.752); }
+html[data-visual-mode="forest"] .text-white\/85 { color: rgb(232 239 231 / 0.799); }
+html[data-visual-mode="forest"] .text-white\/90 { color: rgb(232 239 231 / 0.846); }
+html[data-visual-mode="forest"] .text-white\/92 { color: rgb(232 239 231 / 0.865); }
+html[data-visual-mode="forest"] .text-white\/95 { color: rgb(232 239 231 / 0.893); }
+html[data-visual-mode="forest"] .text-white\/\[0\.04\] { color: rgb(232 239 231 / 0.038); }
+
+/* ---------- MODERN ---------- */
+html[data-visual-mode="modern"] .bg-white\/10 { background-color: rgb(255 255 255 / 0.080); }
+html[data-visual-mode="modern"] .bg-white\/15 { background-color: rgb(255 255 255 / 0.120); }
+html[data-visual-mode="modern"] .bg-white\/20 { background-color: rgb(255 255 255 / 0.160); }
+html[data-visual-mode="modern"] .bg-white\/30 { background-color: rgb(255 255 255 / 0.160); }
+html[data-visual-mode="modern"] .bg-white\/40 { background-color: rgb(255 255 255 / 0.160); }
+html[data-visual-mode="modern"] .bg-white\/5 { background-color: rgb(255 255 255 / 0.040); }
+html[data-visual-mode="modern"] .bg-white\/80 { background-color: rgb(255 255 255 / 0.160); }
+html[data-visual-mode="modern"] .bg-white\/90 { background-color: rgb(255 255 255 / 0.160); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.015\] { background-color: rgb(255 255 255 / 0.012); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.018\] { background-color: rgb(255 255 255 / 0.014); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.025\] { background-color: rgb(255 255 255 / 0.020); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.02\] { background-color: rgb(255 255 255 / 0.016); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.035\] { background-color: rgb(255 255 255 / 0.028); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.03\] { background-color: rgb(255 255 255 / 0.024); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.045\] { background-color: rgb(255 255 255 / 0.036); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.04\] { background-color: rgb(255 255 255 / 0.032); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.055\] { background-color: rgb(255 255 255 / 0.044); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.05\] { background-color: rgb(255 255 255 / 0.040); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.06\] { background-color: rgb(255 255 255 / 0.048); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.07\] { background-color: rgb(255 255 255 / 0.056); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.08\] { background-color: rgb(255 255 255 / 0.064); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.09\] { background-color: rgb(255 255 255 / 0.072); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.10\] { background-color: rgb(255 255 255 / 0.080); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.12\] { background-color: rgb(255 255 255 / 0.096); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.14\] { background-color: rgb(255 255 255 / 0.112); }
+html[data-visual-mode="modern"] .bg-white\/\[0\.1\] { background-color: rgb(255 255 255 / 0.080); }
+html[data-visual-mode="modern"] .border-white\/10 { border-color: rgb(255 255 255 / 0.130); }
+html[data-visual-mode="modern"] .border-white\/12 { border-color: rgb(255 255 255 / 0.156); }
+html[data-visual-mode="modern"] .border-white\/15 { border-color: rgb(255 255 255 / 0.195); }
+html[data-visual-mode="modern"] .border-white\/16 { border-color: rgb(255 255 255 / 0.208); }
+html[data-visual-mode="modern"] .border-white\/20 { border-color: rgb(255 255 255 / 0.260); }
+html[data-visual-mode="modern"] .border-white\/25 { border-color: rgb(255 255 255 / 0.325); }
+html[data-visual-mode="modern"] .border-white\/30 { border-color: rgb(255 255 255 / 0.390); }
+html[data-visual-mode="modern"] .border-white\/5 { border-color: rgb(255 255 255 / 0.065); }
+html[data-visual-mode="modern"] .border-white\/\[0\.04\] { border-color: rgb(255 255 255 / 0.052); }
+html[data-visual-mode="modern"] .border-white\/\[0\.05\] { border-color: rgb(255 255 255 / 0.065); }
+html[data-visual-mode="modern"] .border-white\/\[0\.06\] { border-color: rgb(255 255 255 / 0.078); }
+html[data-visual-mode="modern"] .border-white\/\[0\.07\] { border-color: rgb(255 255 255 / 0.091); }
+html[data-visual-mode="modern"] .border-white\/\[0\.08\] { border-color: rgb(255 255 255 / 0.104); }
+html[data-visual-mode="modern"] .border-white\/\[0\.09\] { border-color: rgb(255 255 255 / 0.117); }
+html[data-visual-mode="modern"] .border-white\/\[0\.12\] { border-color: rgb(255 255 255 / 0.156); }
+html[data-visual-mode="modern"] .border-white\/\[0\.14\] { border-color: rgb(255 255 255 / 0.182); }
+html[data-visual-mode="modern"] .border-white\/\[0\.15\] { border-color: rgb(255 255 255 / 0.195); }
+html[data-visual-mode="modern"] .border-white\/\[0\.16\] { border-color: rgb(255 255 255 / 0.208); }
+html[data-visual-mode="modern"] .border-white\/\[0\.1\] { border-color: rgb(255 255 255 / 0.130); }
+html[data-visual-mode="modern"] .text-white\/10 { color: rgb(237 241 242 / 0.105); }
+html[data-visual-mode="modern"] .text-white\/15 { color: rgb(237 241 242 / 0.158); }
+html[data-visual-mode="modern"] .text-white\/20 { color: rgb(237 241 242 / 0.210); }
+html[data-visual-mode="modern"] .text-white\/25 { color: rgb(237 241 242 / 0.263); }
+html[data-visual-mode="modern"] .text-white\/30 { color: rgb(237 241 242 / 0.315); }
+html[data-visual-mode="modern"] .text-white\/35 { color: rgb(237 241 242 / 0.367); }
+html[data-visual-mode="modern"] .text-white\/38 { color: rgb(237 241 242 / 0.399); }
+html[data-visual-mode="modern"] .text-white\/40 { color: rgb(237 241 242 / 0.420); }
+html[data-visual-mode="modern"] .text-white\/45 { color: rgb(237 241 242 / 0.473); }
+html[data-visual-mode="modern"] .text-white\/50 { color: rgb(237 241 242 / 0.525); }
+html[data-visual-mode="modern"] .text-white\/55 { color: rgb(237 241 242 / 0.578); }
+html[data-visual-mode="modern"] .text-white\/60 { color: rgb(237 241 242 / 0.630); }
+html[data-visual-mode="modern"] .text-white\/65 { color: rgb(237 241 242 / 0.683); }
+html[data-visual-mode="modern"] .text-white\/70 { color: rgb(237 241 242 / 0.735); }
+html[data-visual-mode="modern"] .text-white\/75 { color: rgb(237 241 242 / 0.788); }
+html[data-visual-mode="modern"] .text-white\/80 { color: rgb(237 241 242 / 0.840); }
+html[data-visual-mode="modern"] .text-white\/85 { color: rgb(237 241 242 / 0.892); }
+html[data-visual-mode="modern"] .text-white\/90 { color: rgb(237 241 242 / 0.945); }
+html[data-visual-mode="modern"] .text-white\/92 { color: rgb(237 241 242 / 0.966); }
+html[data-visual-mode="modern"] .text-white\/95 { color: rgb(237 241 242 / 0.997); }
+html[data-visual-mode="modern"] .text-white\/\[0\.04\] { color: rgb(237 241 242 / 0.042); }
+
+/* ============================================================
+   页面底色与前景色交给视觉世界
+   ------------------------------------------------------------
+   body 原本用 Tailwind 的 `bg-background`（shadcn 的 --background），
+   完全绕过了主题系统 —— 实测 PAPER 下 body 是纯白 #FFF，
+   而世界定义的是米白 #F6F1E6；MIDNIGHT 也是 #121e18 而非 #050807。
+   这里把 body 的底色/前景接回 --tp-bg / --tp-text。
+   特异性 (0,1,1) > Tailwind 内联到 body 的 (0,0,1)。
+   ============================================================ */
+html[data-visual-mode] body {
+  background-color: var(--tp-bg);
+  color: var(--tp-text);
+}
+
+/*
+ * 同时把底色落在 <html> 上。
+ * 实测 PAPER 下 body 的 background-color 会被解析成 rgba(0,0,0,0)
+ * （`bg-background` 依赖的 --background 在该模式下没有值 → 整条声明失效）。
+ * 落在 html 上是兜底：即使 body 透明，露出的也是世界底色。
+ */
+html[data-visual-mode] {
+  background-color: var(--tp-bg);
+}
+
+/* ============================================================
+   图片滤镜豁免清单（真 bug 修复）
+   ------------------------------------------------------------
+   theme.css 里 `html[data-visual-mode] img { filter: var(--tp-img-filter) }`
+   会命中**全站所有图片**。这对课程封面、文化摄影是对的（PAPER 需要有
+   印刷品般的褪色感），但对下面这些是错的：
+
+     · 头像 —— 被 sepia 染黄，人物肤色失真
+     · SVG 图标 / 品牌标识 —— 本来就该是纯净的品牌色，不该跟着主题偏色
+     · 用户上传的证件照 / 二维码一类
+
+   用属性选择器豁免，避免逐个组件加 class（这个仓库有并发写入者，
+   少改文件就少冲突）。分组注释说明每一类的理由。
+   ============================================================ */
+
+/* ① SVG 一律不调色：图标与品牌标识必须保持原始色 */
+html[data-visual-mode] img[src$=".svg"],
+html[data-visual-mode] img[src*=".svg?"] {
+  filter: none;
+}
+
+/* ② 头像：任何路径里带 avatar 的图片 */
+html[data-visual-mode] img[src*="avatar"],
+html[data-visual-mode] img[src*="/avatars/"],
+html[data-visual-mode] img[src*="Avatar"] {
+  filter: none;
+}
+
+/* ③ 品牌与图标命名约定 */
+html[data-visual-mode] img[src*="/logo"],
+html[data-visual-mode] img[src*="logo."],
+html[data-visual-mode] img[src*="/icon"],
+html[data-visual-mode] img[src*="favicon"] {
+  filter: none;
+}
+
+/* ④ 显式退出：组件想自己控制就加这个 class / 包一层 */
+html[data-visual-mode] img.no-theme-filter,
+html[data-visual-mode] .no-theme-filter img,
+html[data-visual-mode] [data-no-theme-filter] img,
+html[data-visual-mode] img[data-no-theme-filter] {
+  filter: none;
+}
+
+/* ⑤ 装饰性图片（alt 为空）通常没有语义，不调色 */
+html[data-visual-mode] img[alt=""] {
+  filter: none;
+}
+
+/* ============================================================
+   黑色遮罩在 PAPER 上的重映射
+   ------------------------------------------------------------
+   `bg-black/40` 这类压暗层在深色世界是对的（图上的文字需要对比），
+   但落在米白纸上就是一块**脏灰**，而且把纸张的暖调压掉了。
+   这里换成暖褐罩并整体减淡 —— 纸上只需要"轻微压一下"，
+   不需要像深色世界那样压 40%~70%。
+   ============================================================ */
+
+html[data-visual-mode="paper"] .bg-black\/10 { background-color: rgb(74 60 38 / 0.052); }
+html[data-visual-mode="paper"] .bg-black\/15 { background-color: rgb(74 60 38 / 0.078); }
+html[data-visual-mode="paper"] .bg-black\/20 { background-color: rgb(74 60 38 / 0.104); }
+html[data-visual-mode="paper"] .bg-black\/25 { background-color: rgb(74 60 38 / 0.130); }
+html[data-visual-mode="paper"] .bg-black\/30 { background-color: rgb(74 60 38 / 0.156); }
+html[data-visual-mode="paper"] .bg-black\/35 { background-color: rgb(74 60 38 / 0.182); }
+html[data-visual-mode="paper"] .bg-black\/40 { background-color: rgb(74 60 38 / 0.208); }
+html[data-visual-mode="paper"] .bg-black\/45 { background-color: rgb(74 60 38 / 0.234); }
+html[data-visual-mode="paper"] .bg-black\/50 { background-color: rgb(74 60 38 / 0.260); }
+html[data-visual-mode="paper"] .bg-black\/55 { background-color: rgb(74 60 38 / 0.286); }
+html[data-visual-mode="paper"] .bg-black\/60 { background-color: rgb(74 60 38 / 0.312); }
+html[data-visual-mode="paper"] .bg-black\/70 { background-color: rgb(74 60 38 / 0.364); }
+html[data-visual-mode="paper"] .bg-black\/75 { background-color: rgb(74 60 38 / 0.390); }
+html[data-visual-mode="paper"] .bg-black\/80 { background-color: rgb(74 60 38 / 0.416); }
+html[data-visual-mode="paper"] .bg-black\/\[0\.04\] { background-color: rgb(74 60 38 / 0.021); }
+html[data-visual-mode="paper"] .bg-black\/\[0\.12\] { background-color: rgb(74 60 38 / 0.062); }
+html[data-visual-mode="paper"] .bg-black\/\[0\.14\] { background-color: rgb(74 60 38 / 0.073); }
+html[data-visual-mode="paper"] .bg-black\/\[0\.15\] { background-color: rgb(74 60 38 / 0.078); }
+html[data-visual-mode="paper"] .bg-black\/\[0\.16\] { background-color: rgb(74 60 38 / 0.083); }
+html[data-visual-mode="paper"] .bg-black\/\[0\.18\] { background-color: rgb(74 60 38 / 0.094); }
+
+/* ============================================================
+   shadcn 语义 token 跟随视觉世界
+   ------------------------------------------------------------
+   问题：ThemeContext 里 `forceLight` 依赖 `THEMES[themeId].base`，但
+   paper/forest/modern 是**世界 id**，不在 THEMES 里 → preset 为 undefined
+   → forceLight=false → data-mode 回落成 "dark"、<html> 恒带 .dark 类。
+   实测确认（三个页面一致）：PAPER 下 `class="dark theme-custom" data-mode="dark"`。
+
+   后果：全站约 30 处 `bg-background` / `text-foreground` / `bg-card` /
+   `text-muted-foreground` / `border-border` 这类 shadcn 工具类，在浅色的
+   PAPER 世界里会解析成**深色值** —— 纸面上冒出深色面板。
+
+   修法：把这一层 token 也按世界写死。
+   `html[data-visual-mode="x"]`（(0,1,1)）高于 `.dark`（(0,1,0)），且
+   本文件在 index.css/theme.css 之后加载 → 稳定胜出，无需 !important。
+   HSL 数值由脚本从 worlds.js 的调色板精确换算，不是手写估值。
+   ============================================================ */
+
+
+/* ---------- midnight ---------- */
+html[data-visual-mode="midnight"] {
+  --background: 160 23% 3%;
+  --foreground: 45 32% 93%;
+  --card: 162 31% 6%;
+  --card-foreground: 45 32% 93%;
+  --popover: 162 31% 6%;
+  --popover-foreground: 45 32% 93%;
+  --muted: 160 25% 9%;
+  --muted-foreground: 156 10% 60%;
+  --border: 155 20% 17%;
+  --input: 155 20% 17%;
+  --primary: 152 47% 46%;
+  --secondary: 160 55% 27%;
+  --accent: 39 62% 56%;
+  --ring: 39 62% 56%;
+}
+
+/* ---------- paper ---------- */
+html[data-visual-mode="paper"] {
+  --background: 41 47% 93%;
+  --foreground: 37 22% 12%;
+  --card: 42 100% 98%;
+  --card-foreground: 37 22% 12%;
+  --popover: 42 100% 98%;
+  --popover-foreground: 37 22% 12%;
+  --muted: 42 42% 89%;
+  --muted-foreground: 40 14% 37%;
+  --border: 43 26% 71%;
+  --input: 43 26% 71%;
+  --primary: 128 12% 26%;
+  --secondary: 99 12% 37%;
+  --accent: 43 54% 39%;
+  --ring: 43 54% 39%;
+}
+
+/* ---------- forest ---------- */
+html[data-visual-mode="forest"] {
+  --background: 162 29% 7%;
+  --foreground: 113 20% 92%;
+  --card: 155 24% 10%;
+  --card-foreground: 113 20% 92%;
+  --popover: 155 24% 10%;
+  --popover-foreground: 113 20% 92%;
+  --muted: 150 24% 13%;
+  --muted-foreground: 137 11% 63%;
+  --border: 147 21% 21%;
+  --input: 147 21% 21%;
+  --primary: 138 22% 54%;
+  --secondary: 160 27% 33%;
+  --accent: 41 35% 66%;
+  --ring: 41 35% 66%;
+}
+
+/* ---------- modern ---------- */
+html[data-visual-mode="modern"] {
+  --background: 210 18% 7%;
+  --foreground: 192 16% 94%;
+  --card: 206 14% 10%;
+  --card-foreground: 192 16% 94%;
+  --popover: 206 14% 10%;
+  --popover-foreground: 192 16% 94%;
+  --muted: 207 13% 13%;
+  --muted-foreground: 199 10% 61%;
+  --border: 205 12% 19%;
+  --input: 205 12% 19%;
+  --primary: 162 58% 44%;
+  --secondary: 191 50% 33%;
+  --accent: 42 61% 61%;
+  --ring: 42 61% 61%;
+}
+
+/* ============================================================
+   PAPER · 浅色强调文字在纸面上的可读性
+   ------------------------------------------------------------
+   问题：全站有 **789 处** `text-emerald-300`(319) / `text-emerald-200`(193)
+   / `text-yellow-200`(117) / `text-yellow-300`(95) … 这类**浅色强调文字**。
+   它们在深色底上是对的，但落在米白纸（#F6F1E6，相对亮度 ≈0.94）上
+   对比度极低 —— `emerald-200` 亮度约 0.9，基本看不见。
+
+   world-shim.css 上面那一段只重映射了 white/black 系，漏了这一大片。
+   这里按"同色系深色"重映射：保留色相（仍然读得出这是强调色），
+   只把明度压到纸上可读。档位越浅压得越狠。
+
+   同样只作用于 paper；forest / modern / midnight 是深色底，浅色文字本来就对。
+   ============================================================ */
+
+html[data-visual-mode="paper"] .text-cyan-200 { color: rgb(19 98 111); }
+html[data-visual-mode="paper"] .text-purple-100 { color: rgb(98 54 138); }
+
+/* ------------------------------------------------------------
+   PAPER · 赭金系强调文字的加深（需要 !important）
+   ------------------------------------------------------------
+   上面那批重映射没有 !important 就够了，唯独**黄色/琥珀族**不行：
+   theme.css 里有 `.theme-custom .text-amber-300 { color: var(--tp-accent) !important }`
+   一类规则会抢先，而 PAPER 的 --tp-accent(#9A7B2E) 落在米白纸上只有 **3.55**
+   （WCAG AA 正文要求 4.5）。实测确认过这个数。
+   所以这里用更深的赭金 + !important 定点覆盖，只作用于 paper。
+   选 #7A5A10：对比度约 5.7，仍读得出是"金"，但不再是浅黄。
+   ------------------------------------------------------------ */
+html[data-visual-mode="paper"] .text-amber-300 { color: rgb(122 90 16) !important; }
+
+/* ============================================================
+   PAPER · 硬编码深色底的翻转
+   ------------------------------------------------------------
+   问题：全站有一批**硬编码深色背景**，最要命的是常驻元素：
+     · Sidebar.jsx:157   bg-[#121e24]/92   ← 侧边栏
+     · MobileTabBar.jsx:41 bg-[#121e24]/92  ← 手机底栏
+     · VipPanel.jsx      bg-[#0A1F1B]
+   在 PAPER 世界里它们仍是深绿，而上面那批文字重映射会把里面的字
+   变成**墨色** → 墨字压深绿，实测对比度 1.16，完全看不见
+   （DOM 全量扫描扫出来的，不是猜的）。
+
+   修法：把这些深底在 paper 下翻成纸面色调，与文字重映射方向一致。
+   只处理亮度 < 0.30 的深色；浅色底（如 bg-[#e8c684]）不在此列。
+   ============================================================ */
+
+html[data-visual-mode="paper"] .bg-\[\#04090c\]\/95 { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#04110f\] { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#050807\] { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#050807\]\/60 { background-color: rgb(255 252 245 / 0.92); }
+html[data-visual-mode="paper"] .bg-\[\#050807\]\/62 { background-color: rgb(255 252 245 / 0.92); }
+html[data-visual-mode="paper"] .bg-\[\#050807\]\/70 { background-color: rgb(255 252 245 / 0.92); }
+html[data-visual-mode="paper"] .bg-\[\#050807\]\/80 { background-color: rgb(255 252 245 / 0.92); }
+html[data-visual-mode="paper"] .bg-\[\#050b0a\]\/95 { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#061513\] { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#071817\]\/75 { background-color: rgb(255 252 245 / 0.92); }
+html[data-visual-mode="paper"] .bg-\[\#071817\]\/95 { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#081715\]\/95 { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0A1F1B\] { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0E1A17\] { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0a1a16\] { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0a1a17\] { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0b1512\]\/95 { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0b1816\]\/90 { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0c1a15\]\/95 { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0d1a17\] { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0d1a18\]\/95 { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#0e1a17\]\/95 { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#121e24\] { background-color: #FFFCF5; }
+html[data-visual-mode="paper"] .bg-\[\#121e24\]\/92 { background-color: #FFFCF5; }
+
+/* ------------------------------------------------------------
+   PAPER · 纯 text-white + 带不透明度的彩色文字
+   ------------------------------------------------------------
+   上一轮漏了两类，DOM 全量对比度扫描扫出来的：
+     · **纯 `text-white`**（不带 /xx）—— 例如 Culture.jsx 的 h1 标题，
+       实测 rgb(255,255,255) 压在米白纸上，对比度 1.13。
+       之前我用 `text-white\b` 统计得出"0 处"，那个 grep 写错了。
+     · **带透明度的彩色文字** `text-emerald-100/75`、`text-yellow-200/80`
+       —— 上一条正则用了 `$` 锚在结尾，匹配不到带 /alpha 的写法，
+       397 处全部漏掉。
+   这一批补齐；赭金系仍用 !important（theme.css 会抢）。
+   ------------------------------------------------------------ */
+html[data-visual-mode="paper"] .text-white { color: rgb(36 31 23); }
+html[data-visual-mode="paper"] .text-amber-100 { color: rgb(138 90 18) !important; }
+html[data-visual-mode="paper"] .text-amber-100\/70 { color: rgb(138 90 18 / 0.700) !important; }
+html[data-visual-mode="paper"] .text-amber-100\/80 { color: rgb(138 90 18 / 0.800) !important; }
+html[data-visual-mode="paper"] .text-amber-100\/90 { color: rgb(138 90 18 / 0.900) !important; }
+html[data-visual-mode="paper"] .text-amber-200 { color: rgb(146 95 19) !important; }
+html[data-visual-mode="paper"] .text-amber-200\/70 { color: rgb(146 95 19 / 0.700) !important; }
+html[data-visual-mode="paper"] .text-amber-200\/75 { color: rgb(146 95 19 / 0.750) !important; }
+html[data-visual-mode="paper"] .text-amber-200\/80 { color: rgb(146 95 19 / 0.800) !important; }
+html[data-visual-mode="paper"] .text-amber-200\/85 { color: rgb(146 95 19 / 0.850) !important; }
+html[data-visual-mode="paper"] .text-amber-200\/90 { color: rgb(146 95 19 / 0.900) !important; }
+html[data-visual-mode="paper"] .text-amber-300\/90 { color: rgb(155 101 20 / 0.900) !important; }
+html[data-visual-mode="paper"] .text-blue-300 { color: rgb(34 92 166); }
+html[data-visual-mode="paper"] .text-cyan-200\/80 { color: rgb(19 98 111 / 0.800); }
+html[data-visual-mode="paper"] .text-cyan-300 { color: rgb(20 103 118); }
+html[data-visual-mode="paper"] .text-emerald-100 { color: rgb(22 101 76); }
+html[data-visual-mode="paper"] .text-emerald-100\/70 { color: rgb(22 101 76 / 0.92); }
+html[data-visual-mode="paper"] .text-emerald-100\/75 { color: rgb(22 101 76 / 0.92); }
+html[data-visual-mode="paper"] .text-emerald-100\/80 { color: rgb(22 101 76 / 0.92); }
+html[data-visual-mode="paper"] .text-emerald-100\/85 { color: rgb(22 101 76 / 0.92); }
+html[data-visual-mode="paper"] .text-emerald-100\/90 { color: rgb(22 101 76 / 0.92); }
+html[data-visual-mode="paper"] .text-emerald-200 { color: rgb(23 107 81); }
+html[data-visual-mode="paper"] .text-emerald-200\/70 { color: rgb(23 107 81 / 0.700); }
+html[data-visual-mode="paper"] .text-emerald-200\/80 { color: rgb(23 107 81 / 0.800); }
+html[data-visual-mode="paper"] .text-emerald-200\/85 { color: rgb(23 107 81 / 0.850); }
+html[data-visual-mode="paper"] .text-emerald-200\/90 { color: rgb(23 107 81 / 0.900); }
+html[data-visual-mode="paper"] .text-emerald-300 { color: rgb(25 113 85); }
+html[data-visual-mode="paper"] .text-emerald-300\/70 { color: rgb(25 113 85 / 0.700); }
+html[data-visual-mode="paper"] .text-emerald-300\/75 { color: rgb(25 113 85 / 0.750); }
+html[data-visual-mode="paper"] .text-emerald-300\/80 { color: rgb(25 113 85 / 0.800); }
+html[data-visual-mode="paper"] .text-emerald-300\/90 { color: rgb(25 113 85 / 0.900); }
+html[data-visual-mode="paper"] .text-emerald-400 { color: rgb(26 119 90); }
+html[data-visual-mode="paper"] .text-green-300 { color: rgb(50 119 65); }
+html[data-visual-mode="paper"] .text-green-400 { color: rgb(53 125 68); }
+html[data-visual-mode="paper"] .text-lime-200 { color: rgb(78 113 33) !important; }
+html[data-visual-mode="paper"] .text-lime-300 { color: rgb(83 120 35) !important; }
+html[data-visual-mode="paper"] .text-orange-200 { color: rgb(159 85 23) !important; }
+html[data-visual-mode="paper"] .text-orange-300 { color: rgb(168 90 25) !important; }
+html[data-visual-mode="paper"] .text-orange-400 { color: rgb(177 94 26) !important; }
+html[data-visual-mode="paper"] .text-pink-100 { color: rgb(145 42 96); }
+html[data-visual-mode="paper"] .text-pink-200 { color: rgb(154 45 102); }
+html[data-visual-mode="paper"] .text-pink-300 { color: rgb(162 47 108); }
+html[data-visual-mode="paper"] .text-purple-200 { color: rgb(104 57 146); }
+html[data-visual-mode="paper"] .text-purple-300 { color: rgb(110 60 155); }
+html[data-visual-mode="paper"] .text-purple-300\/70 { color: rgb(110 60 155 / 0.700); }
+html[data-visual-mode="paper"] .text-red-100 { color: rgb(155 44 44); }
+html[data-visual-mode="paper"] .text-red-100\/70 { color: rgb(155 44 44 / 0.700); }
+html[data-visual-mode="paper"] .text-red-100\/85 { color: rgb(155 44 44 / 0.850); }
+html[data-visual-mode="paper"] .text-red-200 { color: rgb(164 47 47); }
+html[data-visual-mode="paper"] .text-red-200\/70 { color: rgb(164 47 47 / 0.700); }
+html[data-visual-mode="paper"] .text-red-200\/80 { color: rgb(164 47 47 / 0.800); }
+html[data-visual-mode="paper"] .text-red-200\/90 { color: rgb(164 47 47 / 0.900); }
+html[data-visual-mode="paper"] .text-red-300 { color: rgb(174 49 49); }
+html[data-visual-mode="paper"] .text-red-300\/70 { color: rgb(174 49 49 / 0.700); }
+html[data-visual-mode="paper"] .text-red-300\/80 { color: rgb(174 49 49 / 0.800); }
+html[data-visual-mode="paper"] .text-red-300\/85 { color: rgb(174 49 49 / 0.850); }
+html[data-visual-mode="paper"] .text-red-300\/90 { color: rgb(174 49 49 / 0.900); }
+html[data-visual-mode="paper"] .text-red-400 { color: rgb(183 52 52); }
+html[data-visual-mode="paper"] .text-rose-200 { color: rgb(159 47 76); }
+html[data-visual-mode="paper"] .text-rose-300 { color: rgb(168 49 81); }
+html[data-visual-mode="paper"] .text-sky-100 { color: rgb(21 84 122); }
+html[data-visual-mode="paper"] .text-sky-200 { color: rgb(22 89 129); }
+html[data-visual-mode="paper"] .text-sky-300 { color: rgb(24 94 137); }
+html[data-visual-mode="paper"] .text-teal-100 { color: rgb(17 94 89); }
+html[data-visual-mode="paper"] .text-teal-200 { color: rgb(18 100 94); }
+html[data-visual-mode="paper"] .text-teal-300 { color: rgb(19 105 100); }
+html[data-visual-mode="paper"] .text-violet-100 { color: rgb(86 60 150); }
+html[data-visual-mode="paper"] .text-violet-100\/80 { color: rgb(86 60 150 / 0.800); }
+html[data-visual-mode="paper"] .text-violet-100\/90 { color: rgb(86 60 150 / 0.900); }
+html[data-visual-mode="paper"] .text-violet-200 { color: rgb(91 64 159); }
+html[data-visual-mode="paper"] .text-violet-200\/90 { color: rgb(91 64 159 / 0.900); }
+html[data-visual-mode="paper"] .text-violet-300 { color: rgb(96 67 168); }
+html[data-visual-mode="paper"] .text-violet-300\/70 { color: rgb(96 67 168 / 0.700); }
+html[data-visual-mode="paper"] .text-yellow-100 { color: rgb(122 90 16) !important; }
+html[data-visual-mode="paper"] .text-yellow-100\/70 { color: rgb(122 90 16 / 0.700) !important; }
+html[data-visual-mode="paper"] .text-yellow-100\/75 { color: rgb(122 90 16 / 0.750) !important; }
+html[data-visual-mode="paper"] .text-yellow-100\/80 { color: rgb(122 90 16 / 0.800) !important; }
+html[data-visual-mode="paper"] .text-yellow-100\/90 { color: rgb(122 90 16 / 0.900) !important; }
+html[data-visual-mode="paper"] .text-yellow-200 { color: rgb(129 95 17) !important; }
+html[data-visual-mode="paper"] .text-yellow-200\/70 { color: rgb(129 95 17 / 0.700) !important; }
+html[data-visual-mode="paper"] .text-yellow-200\/75 { color: rgb(129 95 17 / 0.750) !important; }
+html[data-visual-mode="paper"] .text-yellow-200\/80 { color: rgb(129 95 17 / 0.800) !important; }
+html[data-visual-mode="paper"] .text-yellow-200\/90 { color: rgb(129 95 17 / 0.900) !important; }
+html[data-visual-mode="paper"] .text-yellow-300 { color: rgb(137 101 18) !important; }
+html[data-visual-mode="paper"] .text-yellow-300\/70 { color: rgb(137 101 18 / 0.700) !important; }
+html[data-visual-mode="paper"] .text-yellow-300\/80 { color: rgb(137 101 18 / 0.800) !important; }
+html[data-visual-mode="paper"] .text-yellow-400 { color: rgb(144 106 19) !important; }
+html[data-visual-mode="paper"] .text-yellow-400\/70 { color: rgb(144 106 19 / 0.92) !important; }
+
+/* ------------------------------------------------------------
+   PAPER · 最后一批：最浅档（*-50）与硬编码 hex 文字色
+   ------------------------------------------------------------
+   再扫描一次后的残留：`text-emerald-50` 这类最浅档，以及
+   `text-[#6ee7a8]` 这类**硬编码 hex** 文字色（不经过 Tailwind 调色板，
+   所以前面的重映射都覆盖不到）。同样按"同色系压深"处理。
+   ------------------------------------------------------------ */
+html[data-visual-mode="paper"] .text-emerald-50 { color: rgb(21 95 71); }
+html[data-visual-mode="paper"] .text-red-50 { color: rgb(146 41 41); }
+html[data-visual-mode="paper"] .text-yellow-50 { color: rgb(115 85 15); }
+html[data-visual-mode="paper"] .text-\[\#3a9ad0\] { color: rgb(20 52 71); }
+html[data-visual-mode="paper"] .text-\[\#8a6ae0\]\/80 { color: rgb(47 36 76 / 0.800); }
+html[data-visual-mode="paper"] .text-\[\#CB8DFF\] { color: rgb(69 48 87); }
+html[data-visual-mode="paper"] .text-\[\#CB8DFF\]\/70 { color: rgb(69 48 87 / 0.700); }
+html[data-visual-mode="paper"] .text-\[\#CB8DFF\]\/80 { color: rgb(69 48 87 / 0.800); }
+html[data-visual-mode="paper"] .text-\[\#E4C8FF\] { color: rgb(78 68 87); }
+html[data-visual-mode="paper"] .text-\[\#E4C8FF\]\/90 { color: rgb(78 68 87 / 0.900); }
+html[data-visual-mode="paper"] .text-\[\#c9b8ff\] { color: rgb(68 63 87); }
+html[data-visual-mode="paper"] .text-\[\#c9b8ff\]\/80 { color: rgb(68 63 87 / 0.800); }
+html[data-visual-mode="paper"] .text-\[\#d4a574\] { color: rgb(72 56 39); }
+html[data-visual-mode="paper"] .text-\[\#d8b1ff\] { color: rgb(73 60 87); }
+html[data-visual-mode="paper"] .text-\[\#e05a8a\] { color: rgb(76 31 47); }
+html[data-visual-mode="paper"] .text-\[\#e05a8a\]\/80 { color: rgb(76 31 47 / 0.800); }
+html[data-visual-mode="paper"] .text-\[\#e8c684\] { color: rgb(79 67 45); }
+html[data-visual-mode="paper"] .text-\[\#e8c684\]\/70 { color: rgb(79 67 45 / 0.700); }
+html[data-visual-mode="paper"] .text-\[\#e8c684\]\/90 { color: rgb(79 67 45 / 0.900); }
+html[data-visual-mode="paper"] .text-\[\#f6f1e6\] { color: rgb(84 82 78); }
+html[data-visual-mode="paper"] .text-\[\#ffb37d\] { color: rgb(87 61 42); }
+html[data-visual-mode="paper"] .text-\[\#ffd3b3\] { color: rgb(87 72 61); }
+
+/* ------------------------------------------------------------
+   PAPER · 变体类：placeholder / hover / group-hover / focus …
+   ------------------------------------------------------------
+   前几轮只覆盖了**基类** `text-white`、`text-white/40`，漏了带变体前缀的写法。
+   实测规模：`hover:text-white` 123 处、`placeholder:text-white/25` 10 处、
+   `placeholder:text-white/30` 8 处、`hover:text-white/80` 17 处 …
+
+   placeholder 尤其要紧：搜索框的提示文字在纸面上是白字压米白，
+   整个输入框看起来像空的。
+
+   hover 类同样需要在纸面上变成墨色，否则"悬停后反而看不见"。
+   ============================================================ */
+html[data-visual-mode="paper"] .group-hover\:text-white\/40 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .group-hover\:text-white\/60 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .hover\:text-white { color: rgb(36 31 23); }
+html[data-visual-mode="paper"] .hover\:text-white\/50 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .hover\:text-white\/60 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .hover\:text-white\/70 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .hover\:text-white\/75 { color: rgb(36 31 23 / 0.750); }
+html[data-visual-mode="paper"] .hover\:text-white\/80 { color: rgb(36 31 23 / 0.800); }
+html[data-visual-mode="paper"] .hover\:text-white\/90 { color: rgb(36 31 23 / 0.900); }
+html[data-visual-mode="paper"] .placeholder\:text-white\/20 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .placeholder\:text-white\/20::placeholder { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .placeholder\:text-white\/25 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .placeholder\:text-white\/25::placeholder { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .placeholder\:text-white\/30 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .placeholder\:text-white\/30::placeholder { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .placeholder\:text-white\/40 { color: rgb(36 31 23 / 0.75); }
+html[data-visual-mode="paper"] .placeholder\:text-white\/40::placeholder { color: rgb(36 31 23 / 0.75); }
+
+/* ============================================================
+   深色世界 · 最淡一档文字的"可读性下限"
+   ------------------------------------------------------------
+   实测：`text-white/20`（9px 标签）、`/25`（11px 说明）、`/30` 在深色底上
+   对比度只有 **2.2 / 2.5**，WCAG 正文要 4.5、大字要 3。
+   它们的设计意图是"退到背景里"，但 20% 已经退过头了 —— 小字号下基本糊掉。
+
+   这里只抬最淡的两档（/15、/20、/25），/30 及以上不动：
+   保留"层次感"（越不重要越淡），但把**下限**拉到仍可辨认的程度。
+   PAPER 由 world-shim.css 单独处理（那里是反方向：压深）。
+   ============================================================ */
+html[data-visual-mode="midnight"] .text-white\/15,
+html[data-visual-mode="forest"] .text-white\/15,
+html[data-visual-mode="modern"] .text-white\/15 { color: rgb(255 255 255 / 0.26); }
+html[data-visual-mode="midnight"] .hover\:text-white\/15,
+html[data-visual-mode="forest"] .hover\:text-white\/15,
+html[data-visual-mode="modern"] .hover\:text-white\/15 { color: rgb(255 255 255 / 0.44); }
+html[data-visual-mode="midnight"] .text-white\/20,
+html[data-visual-mode="forest"] .text-white\/20,
+html[data-visual-mode="modern"] .text-white\/20 { color: rgb(255 255 255 / 0.34); }
+html[data-visual-mode="midnight"] .hover\:text-white\/20,
+html[data-visual-mode="forest"] .hover\:text-white\/20,
+html[data-visual-mode="modern"] .hover\:text-white\/20 { color: rgb(255 255 255 / 0.52); }
+html[data-visual-mode="midnight"] .text-white\/25,
+html[data-visual-mode="forest"] .text-white\/25,
+html[data-visual-mode="modern"] .text-white\/25 { color: rgb(255 255 255 / 0.4); }
+html[data-visual-mode="midnight"] .hover\:text-white\/25,
+html[data-visual-mode="forest"] .hover\:text-white\/25,
+html[data-visual-mode="modern"] .hover\:text-white\/25 { color: rgb(255 255 255 / 0.58); }
+
+/* ------------------------------------------------------------
+   PAPER · 最淡几档文字的下限（与深色世界对称的处理）
+   ------------------------------------------------------------
+   实测：词汇页每张词卡的"继续学习"提示行是 `text-white/15`（6 处类名、
+   但渲染出 183 个元素），在纸面上被映射成 ink 21.6% —— 对比度 1.55，
+   基本看不见。
+
+   15% 这个档位在任何底色上都过淡了（它不是"次要信息"，是"看不见的信息"）。
+   这里把 PAPER 的最淡三档抬到可辨认区间，同时保留"越淡越次要"的层次：
+     /15 → 0.46   /20 → 0.50   /25 → 0.54
+   （深色世界对应档位已在上面用白色抬升到 0.26 / 0.34 / 0.40，
+     纸面需要更实一点的墨色，因为浅底上的低透明度衰减更明显。）
+   ------------------------------------------------------------ */
+html[data-visual-mode="paper"][data-visual-mode="paper"] .text-white\/15,
+html[data-visual-mode="paper"][data-visual-mode="paper"] [class*="text-white/15"] { color: rgb(36 31 23 / 0.75) !important; }
+html[data-visual-mode="paper"][data-visual-mode="paper"] .text-white\/20,
+html[data-visual-mode="paper"][data-visual-mode="paper"] [class*="text-white/20"] { color: rgb(36 31 23 / 0.75) !important; }
+html[data-visual-mode="paper"][data-visual-mode="paper"] .text-white\/25,
+html[data-visual-mode="paper"][data-visual-mode="paper"] [class*="text-white/25"] { color: rgb(36 31 23 / 0.75) !important; }
+
+/* 悬停态不要反而更淡 */
+html[data-visual-mode="paper"] .group:hover .group-hover\:text-white\/15,
+html[data-visual-mode="paper"] [class*="group-hover:text-white/"] { color: rgb(36 31 23 / 0.75); }
+
+/* ------------------------------------------------------------
+   PAPER · 强调文字的低透明度必须同时抬升
+   ------------------------------------------------------------
+   我前面把浅色强调文字（#6ee7a8 一类）remap 成同色系深色时，
+   **保留了原来的不透明度** —— 这是错的：
+   `rgb(26 119 90 / 0.92)` 叠在米白纸上，实际渲染出来是很浅的灰绿，
+   对比度只有 **1.79**（WCAG 正文要 4.5）。实测词汇页 183 个元素都栽在这。
+
+   深色要真正"读得出来"，在不透明底上必须给足 alpha。这里按
+   "原 alpha 越低、抬得越多" 收敛到 0.72~0.86 区间。
+   ------------------------------------------------------------ */
+html[data-visual-mode="paper"] .text-amber-200\/60 { color: rgb(163 106 21 / 88); }
+html[data-visual-mode="paper"] .text-emerald-100\/50 { color: rgb(26 119 90 / 84); }
+html[data-visual-mode="paper"] .text-emerald-100\/60 { color: rgb(26 119 90 / 88); }
+html[data-visual-mode="paper"] .text-emerald-200\/40 { color: rgb(26 119 90 / 80); }
+html[data-visual-mode="paper"] .text-emerald-200\/50 { color: rgb(26 119 90 / 84); }
+html[data-visual-mode="paper"] .text-emerald-200\/55 { color: rgb(26 119 90 / 86); }
+html[data-visual-mode="paper"] .text-emerald-200\/60 { color: rgb(26 119 90 / 88); }
+html[data-visual-mode="paper"] .text-emerald-200\/\[0\.05\] { color: rgb(26 119 90 / 0.92); }
+html[data-visual-mode="paper"] .text-emerald-300\/40 { color: rgb(26 119 90 / 80); }
+html[data-visual-mode="paper"] .text-emerald-300\/50 { color: rgb(26 119 90 / 84); }
+html[data-visual-mode="paper"] .text-emerald-300\/55 { color: rgb(26 119 90 / 86); }
+html[data-visual-mode="paper"] .text-emerald-300\/60 { color: rgb(26 119 90 / 88); }
+html[data-visual-mode="paper"] .text-emerald-300\/\[0\.05\] { color: rgb(26 119 90 / 0.92); }
+html[data-visual-mode="paper"] .text-emerald-400\/60 { color: rgb(26 119 90 / 88); }
+html[data-visual-mode="paper"] .text-purple-100\/40 { color: rgb(116 64 163 / 80); }
+html[data-visual-mode="paper"] .text-purple-200\/40 { color: rgb(116 64 163 / 80); }
+html[data-visual-mode="paper"] .text-purple-200\/60 { color: rgb(116 64 163 / 88); }
+html[data-visual-mode="paper"] .text-purple-300\/50 { color: rgb(116 64 163 / 84); }
+html[data-visual-mode="paper"] .text-purple-300\/60 { color: rgb(116 64 163 / 88); }
+html[data-visual-mode="paper"] .text-red-200\/50 { color: rgb(183 52 52 / 84); }
+html[data-visual-mode="paper"] .text-red-300\/50 { color: rgb(183 52 52 / 84); }
+html[data-visual-mode="paper"] .text-red-300\/60 { color: rgb(183 52 52 / 88); }
+html[data-visual-mode="paper"] .text-teal-200\/60 { color: rgb(20 111 105 / 88); }
+html[data-visual-mode="paper"] .text-violet-200\/60 { color: rgb(101 71 177 / 88); }
+html[data-visual-mode="paper"] .text-yellow-100\/50 { color: rgb(144 106 19 / 84); }
+html[data-visual-mode="paper"] .text-yellow-200\/40 { color: rgb(144 106 19 / 80); }
+html[data-visual-mode="paper"] .text-yellow-200\/50 { color: rgb(144 106 19 / 84); }
+html[data-visual-mode="paper"] .text-yellow-200\/60 { color: rgb(144 106 19 / 88); }
+html[data-visual-mode="paper"] .text-yellow-200\/\[0\.06\] { color: rgb(144 106 19 / 0.92); }
+html[data-visual-mode="paper"] .text-yellow-300\/30 { color: rgb(144 106 19 / 75); }
+html[data-visual-mode="paper"] .text-yellow-300\/40 { color: rgb(144 106 19 / 80); }
+html[data-visual-mode="paper"] .text-yellow-300\/50 { color: rgb(144 106 19 / 84); }
+html[data-visual-mode="paper"] .text-yellow-300\/60 { color: rgb(144 106 19 / 88); }
+html[data-visual-mode="paper"] .text-yellow-300\/\[0\.05\] { color: rgb(144 106 19 / 0.92); }
+
+/* ------------------------------------------------------------
+   深色世界 · /30 与 /35 档位（最后一批）
+   ------------------------------------------------------------
+   上一步只抬了 /15 /20 /25，但 /30（168 处）与 /35（104 处）才是用量最大的
+   两档：它们是页面上的"次要说明文字"。30% 白在深底上对比度约 2.6，
+   小字号下依然吃力。
+
+   这里各抬 0.14：/30 → 0.44、/35 → 0.49。仍然明显弱于正文白字
+   （/70、/80），层次感保留，只是不再"糊在背景里"。
+   ------------------------------------------------------------ */
+html[data-visual-mode="midnight"] .text-white\/30,
+html[data-visual-mode="forest"] .text-white\/30,
+html[data-visual-mode="modern"] .text-white\/30 { color: rgb(255 255 255 / 0.44); }
+
+html[data-visual-mode="midnight"] .text-white\/35,
+html[data-visual-mode="forest"] .text-white\/35,
+html[data-visual-mode="modern"] .text-white\/35 { color: rgb(255 255 255 / 0.49); }
+
+html[data-visual-mode="midnight"] .hover\:text-white\/30:hover,
+html[data-visual-mode="forest"] .hover\:text-white\/30:hover,
+html[data-visual-mode="modern"] .hover\:text-white\/30:hover { color: rgb(255 255 255 / 0.62); }

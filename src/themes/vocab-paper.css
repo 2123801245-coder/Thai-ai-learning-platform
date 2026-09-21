@@ -1,0 +1,1089 @@
+/* src/themes/vocab-paper.css
+   =========================================================
+   PAPER 世界 · 词汇页版式层（“专业语言学习手册 / 词典”）
+   =========================================================
+
+   为什么单独开一个文件
+   --------------------
+   与 course-paper.css 同一个思路：world-shim.css 只解决**颜色**（把
+   text-white/40、bg-white/[0.04] 这类深色底专用工具类按世界重映射），
+   四个世界的**版式**原本一模一样 —— 同样的 28px 圆角、同样的玻璃卡、
+   同样的渐变光晕。词汇页要讲的是“词典/语言手册”：词条编号、词性标注、
+   释义分行、目录式入口、细线分隔、大留白。这些属于版式不属于颜色，
+   所以单独一层，且**只写“形”**（间距/字号/字距/行高/圆角/边框/伪元素）。
+
+   这一层只管“形”，颜色交给既有的两层（重要，别回头改方向）
+   ----------------------------------------------------------
+   theme.css 里有 4 条 `html.theme-custom[data-mode="light"] [class*=text-white]`
+   一类的 `!important` 重映射。有人以为 PAPER 下它们会抢走本文件的颜色声明，
+   于是把自己 23 条本来有效的声明删掉了 —— 那是**误判**：
+   ThemeContext 里 PAPER 是“世界 id”而不是 THEMES 预设，`forceLight` 解析出
+   undefined → `data-mode` 实际是 `"dark"`（源码里有注释解释为什么故意保持
+   dark）。所以那 4 条 `!important` 在 PAPER 下**不生效**，本文件写颜色是有
+   效的。但为了不与 world-shim.css（同样是 0,2,1）打顺序战，本文件仍然以
+   版式为主：只在 word-shim 没管、且纸张对比度确实不够的地方用
+   `color-mix(in srgb, var(--tp-text) ...)` / `var(--tp-accent)` 补色。
+
+   规则边界（硬约束）
+   ------------------
+   1. 所有选择器都带 `html[data-visual-mode="paper"]` 前缀。
+      类名无条件加在组件上（另外三个世界匹配不到任何声明 = 惰性），
+      所以另外三个世界的 DOM class 变了但渲染零变化。
+   2. 不改 theme.css / world-shim.css / index.css；本文件从 Vocab 页
+      import，跟着该页 CSS chunk 走。
+   3. 页眉/页脚用 `hidden` **属性**控制（不是 `hidden` 类）：根容器有
+      space-y-* 时，它的选择器只认 `[hidden]` 属性；用类的话页眉会在
+      另外三个世界凭空多出一份兄弟间距，版式就动了。
+
+   特异性备忘（踩坑）
+   ------------------
+   `html[data-visual-mode="paper"] .tv-x` = (0,2,1)：
+     · 赢 Tailwind 工具类 (0,1,0)、hover 变体 (0,2,0) ✓
+     · 打平 world-shim.css 与 `.theme-custom .rounded-2xl/rounded-3xl/
+       .premium-glass` 那几条（同为 0,2,1）→ 只能靠加载顺序。
+       本文件与 world-shim（main.jsx 全站入口）不同 chunk，顺序不保证，
+       所以凡是要改“shim / theme.css 已经管过”的属性（border-radius、
+       background-color、border-color），选择器都把类名写两遍抬到
+       (0,3,1)。用 `!important` 也能赢，但会压掉同页面后续样式，不划算。
+     · 输给 `space-y-*` 的 `> :not([hidden]) ~ :not([hidden])` (0,3,0)，
+       所以凡是和兄弟间距打架的地方（.tv-index-grid、.tv-ledger 的格）
+       同样写两遍类名。
+     · 用 `.tv-a .tv-b`（两个不同类）凑特异性的做法不可取：一旦以后
+       有人给 `.tv-b` 单独写规则，(0,3,1) 会反过来压住它。这里一律用
+       “同一个类名写两遍”的写法，语义即“我不想被任何人抢走”。
+   ========================================================= */
+
+
+/* =========================================================
+   1. 页面骨架：手册开本
+   ---------------------------------------------------------
+   1500px 是“仪表盘”的宽度；手册开本更窄，正文才读得下去。
+
+   间距为什么写在这里而不是 `.tv-page > * + *`
+   ------------------------------------------
+   根容器是 `space-y-6`（选择器 `> :not([hidden]) ~ :not([hidden])`，(0,3,0)）。
+   想覆盖它得写 `.tv-page.tv-page > * + *`（(0,3,1)）—— 可以，但那会**同时**
+   盖掉作为直接子元素的最后一个区块自身的 mt（例如“添加生词”悬浮按钮那一层），
+   牵连太多。手册的节奏按区块各自给，所以只收窄开本，间距写在每个区块规则里。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-page {
+  max-width: 1180px;
+  margin-inline: auto;
+}
+
+/* sm 以上 Tailwind 给的是 px-6/lg:px-8，纸上统一到 1.25/2.25rem
+   （px-0 的小屏也给一点页边距，别让词条贴屏幕边） */
+html[data-visual-mode="paper"] .tv-page {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  html[data-visual-mode="paper"] .tv-page {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  html[data-visual-mode="paper"] .tv-page {
+    padding-left: 2.25rem;
+    padding-right: 2.25rem;
+  }
+}
+
+
+/* =========================================================
+   2. 页眉 / 页脚（running head & colophon）
+   ---------------------------------------------------------
+   只在 PAPER 出现，靠 `hidden` 属性显隐（见文件头“规则边界 3”）。
+   两端对齐的一行小字，是“这是一本书”最省也最有效的信号。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-runhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 2px solid color-mix(in srgb, var(--tp-text) 28%, transparent);
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tp-text) 55%, transparent);
+  /* 页眉带 [hidden] 属性 → 后面的 hero 拿不到 space-y 的上边距，
+     这里自己把间距交出来（与 course-paper.css 同一手法） */
+  margin-bottom: 2.6rem;
+}
+
+html[data-visual-mode="paper"] .tv-runhead > :last-child {
+  font-family: var(--tp-font-display);
+  letter-spacing: 0.14em;
+}
+
+/* 页脚（colophon）：词汇页**没有**页脚 —— 这里不写“看着好看但永远匹配不到”
+   的规则。课程页有 .tp-paper-colophon，词汇页尾是分页器（.tv-pager），
+   分页器自己带一道上细线，收尾已经完整。 */
+
+
+/* =========================================================
+   3. 书名页（Hero 区）
+   ---------------------------------------------------------
+   深空海报 → 手册扉页：关掉粒子与角饰，标题改衬线大字距，
+   副题加一道细线收在下面（用 border-bottom，不碰颜色层管过的属性）。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-ornament {
+  display: none;
+}
+
+html[data-visual-mode="paper"] .tv-hero {
+  margin-bottom: 2.2rem;
+}
+
+/* 副题行（纯排版用，不是文案）：词条数 / 模式 / 词书，只在 PAPER 出现。
+   加类改 flex 方向不现实（行内元素），直接 block + 缩进式排法。 */
+html[data-visual-mode="paper"] .tv-runner {
+  display: block;
+  margin-bottom: 1.4rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tp-text) 55%, transparent);
+}
+
+/* 导学卡的外层壳（.mb-4）在纸面上放宽一档：它下面是台账细线，
+   两张“块”挨太近会失去手册的呼吸感。这里用 margin-bottom 而不是
+   改父容器的 space-y —— 只影响这一处。 */
+html[data-visual-mode="paper"] .tv-start-shell {
+  margin-bottom: 2.2rem;
+}
+
+html[data-visual-mode="paper"] .tv-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.42em;
+  /* emerald-300/80 不在 world-shim 的覆盖清单里（它按 /10~/95 的档位枚举），
+     纸上对比度不足 → 这里自己给墨色。这条是实测有效的，别删。 */
+  color: color-mix(in srgb, var(--tp-text) 56%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-eyebrow > svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.5;
+}
+
+html[data-visual-mode="paper"] .tv-title {
+  font-size: clamp(1.65rem, 1.25rem + 1.2vw, 2.35rem);
+  font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: 0.005em;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+}
+
+/* 「Vocabulary」在世界里是渐变剪字（bg-clip-text），纸面上没有渐变文字：
+   退回朴素同号字，并给它一个手册常见的斜体衬线语气 */
+html[data-visual-mode="paper"] .tv-title-en.tv-title-en {
+  background-image: none;
+  -webkit-text-fill-color: currentColor;
+  color: color-mix(in srgb, var(--tp-accent) 88%, var(--tp-text));
+  font-family: var(--tp-font-display);
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+html[data-visual-mode="paper"] .tv-lede {
+  margin-top: 0.95rem;
+  max-width: 32em;
+  font-size: 0.95rem;
+  line-height: 1.95;
+}
+
+
+/* =========================================================
+   4. 台账式数据行（原四张统计卡）
+   ---------------------------------------------------------
+   手册里没有四张彩色卡片，只有一条数据行：上下细线分栏，数字用衬线。
+   卡片底色/边框归 world-shim + theme.css 的圆角层管，这里只改形态与排版。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-ledger.tv-ledger {
+  gap: 1.3rem 2rem;
+  padding: 1.15rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--tp-text) 26%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 14%, transparent);
+  margin-bottom: 2rem;
+}
+
+/* 两遍类名压过 Tailwind 的 `.grid-cols-2/.grid-cols-4`（同为 0,1,0，
+   但这一层可能后加载；写死成台账更像书的栏目分割） */
+html[data-visual-mode="paper"] .tv-ledger.tv-ledger {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  html[data-visual-mode="paper"] .tv-ledger.tv-ledger {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+html[data-visual-mode="paper"] .tv-ledger-cell.tv-ledger-cell {
+  background-color: transparent;
+  background-image: none;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0.2rem 0 0.2rem 0.95rem;
+}
+
+/* 纸不会浮起来：取消统计卡的 hover 位移与提亮 */
+html[data-visual-mode="paper"] .tv-ledger-cell.tv-ledger-cell:hover {
+  transform: none;
+  background-color: transparent;
+}
+
+html[data-visual-mode="paper"] .tv-ledger-icon {
+  background-color: transparent;
+  border: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+  border-radius: 2px;
+  padding: 0.3rem;
+}
+
+html[data-visual-mode="paper"] .tv-ledger-label {
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tp-text) 52%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-ledger-value {
+  font-family: var(--tp-font-display);
+  font-size: 1.4rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.005em;
+  color: var(--tp-text);
+}
+
+
+/* =========================================================
+   5. 检索栏与筛选（手册的检索工具）
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-search.tv-search {
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-visual-mode="paper"] .tv-search input {
+  padding-top: 1.05rem;
+  padding-bottom: 1.05rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.015em;
+}
+
+html[data-visual-mode="paper"] .tv-filters.tv-filters {
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-visual-mode="paper"] .tv-filters > button:first-child {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 18%, transparent);
+}
+
+/* 胶囊 → 方角细框（书里没有药丸），选中态靠边线与字重说话 */
+html[data-visual-mode="paper"] .tv-chip.tv-chip {
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+  padding: 0.32rem 0.7rem;
+}
+
+
+/* =========================================================
+   6. 学习方式 · 目录（原六个彩色模式按钮）
+   ---------------------------------------------------------
+   手册的入口是一份目录：每条一行「序号 · 名称 · 一句话说明」，
+   行与行之间细线分隔，行尾一个页码位（用 ::after 生成，不改 DOM）。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-index.tv-index {
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0.5rem 1.1rem 0.7rem;
+}
+
+html[data-visual-mode="paper"] .tv-index-group {
+  gap: 0;
+}
+
+html[data-visual-mode="paper"] .tv-index-label {
+  width: 2.6rem;
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tp-text) 48%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-index-grid.tv-index-grid {
+  display: block;
+  grid-template-columns: none;
+}
+
+html[data-visual-mode="paper"] .tv-index-item.tv-index-item {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 16%, transparent);
+  border-radius: 0;
+  padding: 0.7rem 0.15rem;
+  text-align: left;
+}
+
+html[data-visual-mode="paper"] .tv-index-item.tv-index-item:last-child {
+  border-bottom: 0;
+}
+
+/* 行尾页码位：内容来自既有数组下标（CSS 计数器），不新增数据 */
+html[data-visual-mode="paper"] .tv-index-grid {
+  counter-reset: tvdir;
+}
+
+html[data-visual-mode="paper"] .tv-index-item {
+  counter-increment: tvdir;
+}
+
+html[data-visual-mode="paper"] .tv-index-item::after {
+  content: counter(tvdir, decimal-leading-zero);
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--tp-font-display);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: color-mix(in srgb, var(--tp-text) 40%, transparent);
+}
+
+/* 目录条文字：名称在前、说明在后、独占一行（原是两个块级 span） */
+html[data-visual-mode="paper"] .tv-index-item > span:first-of-type {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+html[data-visual-mode="paper"] .tv-index-item > span:first-of-type > span {
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
+}
+
+/* 一句话说明：目录里排在名称下方，最多两行（原来是 truncate，
+   纸上宁可折行也不要被截断——手册的说明文字不该消失） */
+html[data-visual-mode="paper"] .tv-index-hint {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  white-space: normal;
+  line-height: 1.7;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 目录条在纸上要多一行：名称/建议徽章与说明分成两行排 */
+html[data-visual-mode="paper"] .tv-index-item.tv-index-item {
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: 0.15rem;
+}
+
+html[data-visual-mode="paper"] .tv-index-item > span:first-of-type {
+  flex: 1 1 auto;
+}
+
+html[data-visual-mode="paper"] .tv-index-hint {
+  flex: 1 1 100%;
+  padding-left: 2rem;
+}
+
+/* 页码位要落在第一行末尾，所以给它负的 flex 基线 */
+html[data-visual-mode="paper"] .tv-index-item::after {
+  align-self: baseline;
+}
+
+/* 目录序号（① ② ③…）：只在 PAPER 出现，字号与行对齐 */
+html[data-visual-mode="paper"] .tv-index-no {
+  flex-shrink: 0;
+  width: 1.4rem;
+  font-family: var(--tp-font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--tp-accent) 80%, var(--tp-text));
+}
+
+/* 其余三个世界：目录序号不出现（隐藏属性，不占位、不进 space-y 计算） */
+html[data-visual-mode="paper"] .tv-index-no[hidden] {
+  display: none;
+}
+
+
+/* =========================================================
+   7. 词条区（原“找到 N 个词汇 / 第 X 页”）
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-entrybar {
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 24%, transparent);
+  margin-bottom: 1.6rem;
+}
+
+html[data-visual-mode="paper"] .tv-entrybar-count {
+  font-family: var(--tp-font-display);
+  font-size: 1rem;
+}
+
+html[data-visual-mode="paper"] .tv-entrybar-page {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+
+/* =========================================================
+   8. 词条卡（原玻璃卡 → 词典条目）
+   ---------------------------------------------------------
+   手册的条目是“一栏文字”：无光晕、无悬浮位移、小圆角、细线分隔；
+   词条编号排在标签行最前（像词典的行首序号），
+   词性/类别/难度做成方角小标注而不是药丸；
+   泰语词头用衬线大字，释义与例句分行并加大行高（印刷品节奏）。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-entry.tv-entry {
+  background-image: none;
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* 两遍类名：压掉 `.premium-glass` 那层按 --tp-radius-md 设的圆角（同为 0,2,1） */
+html[data-visual-mode="paper"] .tv-entry.tv-entry {
+  border-radius: var(--tp-radius-sm);
+}
+
+html[data-visual-mode="paper"] .tv-entry.tv-entry:hover {
+  transform: none;
+  box-shadow: var(--tp-shadow);
+}
+
+/* 词条编号：原「Thai Word」小标签的位置改成行首序号；标签本身在纸上多余，
+   直接藏掉（display:none 的元素不参与排版，其他世界不受影响）。 */
+html[data-visual-mode="paper"] .tv-entry-kicker {
+  display: none;
+}
+
+html[data-visual-mode="paper"] .tv-entry-no {
+  flex-shrink: 0;
+  font-family: var(--tp-font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--tp-accent) 85%, var(--tp-text));
+  padding-right: 0.5rem;
+  margin-right: 0.15rem;
+  border-right: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-entry-head {
+  gap: 0.4rem;
+  padding-bottom: 0;
+}
+
+/* 词性 / 类别 / 难度：方角细框小标注，字距拉开 */
+html[data-visual-mode="paper"] .tv-entry-tag.tv-entry-tag {
+  border-radius: 2px;
+  padding: 0.22rem 0.5rem;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+html[data-visual-mode="paper"] .tv-entry-word {
+  font-size: clamp(1.9rem, 1.5rem + 1.2vw, 2.5rem);
+  font-weight: 600;
+  font-family: var(--tp-font-display);
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+html[data-visual-mode="paper"] .tv-entry-pron.tv-entry-pron {
+  border-radius: 2px;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  box-shadow: none;
+}
+
+/* 释义：从“小方块”变成一条带虚线的分行释义（册子里释义与词头分开） */
+html[data-visual-mode="paper"] .tv-entry-gloss.tv-entry-gloss {
+  border-radius: 0;
+  border: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--tp-text) 24%, transparent);
+  background-color: transparent;
+  padding: 0.8rem 0 0;
+}
+
+html[data-visual-mode="paper"] .tv-entry-gloss-label {
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+html[data-visual-mode="paper"] .tv-entry-gloss-text {
+  font-size: 1.02rem;
+  line-height: 1.9;
+}
+
+html[data-visual-mode="paper"] .tv-entry-example.tv-entry-example {
+  border-radius: 0;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--tp-accent) 55%, transparent);
+  background-color: transparent;
+  padding: 0.15rem 0 0.15rem 0.9rem;
+}
+
+html[data-visual-mode="paper"] .tv-entry-example-label {
+  font-size: 9px;
+  letter-spacing: 0.28em;
+}
+
+html[data-visual-mode="paper"] .tv-entry-example-thai {
+  line-height: 1.95;
+}
+
+html[data-visual-mode="paper"] .tv-entry-example-cn {
+  line-height: 1.85;
+}
+
+html[data-visual-mode="paper"] .tv-entry-actions {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+html[data-visual-mode="paper"] .tv-entry-action.tv-entry-action {
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+}
+
+/* 收藏 / 发音：圆形图标按钮 → 方角（书页上没有圆形按钮） */
+html[data-visual-mode="paper"] .tv-entry-actions button {
+  border-radius: 3px;
+}
+
+
+/* =========================================================
+   9. “今天从这里开始” → 手册第〇节的导学
+   ---------------------------------------------------------
+   保留四步路径的语义与顺序（LEARNING_STEPS 不动），只把它排成
+   目录式的四行：序号 + 名称 + 箭头，当前步用世界强调色标出。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-start.tv-start {
+  background-image: none;
+  border: 1px solid color-mix(in srgb, var(--tp-text) 24%, transparent);
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 1.35rem 1.5rem 1.2rem;
+}
+
+html[data-visual-mode="paper"] .tv-start-kicker {
+  font-size: 10px;
+  letter-spacing: 0.38em;
+  color: color-mix(in srgb, var(--tp-text) 52%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-start-kicker > svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.5;
+}
+
+html[data-visual-mode="paper"] .tv-start-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+
+html[data-visual-mode="paper"] .tv-start-title > span {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+html[data-visual-mode="paper"] .tv-start-reason {
+  max-width: 36em;
+  line-height: 1.9;
+}
+
+html[data-visual-mode="paper"] .tv-start-cta.tv-start-cta {
+  background-image: none;
+  background-color: var(--tp-accent);
+  border-radius: 2px;
+  box-shadow: none;
+  padding: 0.75rem 1.4rem;
+  letter-spacing: 0.08em;
+  font-size: 13px;
+  transform: none;
+}
+
+/* 四步路径：药丸 → 目录行（一行一步，序号方框，行间细线） */
+html[data-visual-mode="paper"] .tv-start-steps {
+  display: block;
+  margin-top: 1.1rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--tp-text) 20%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-start-steps > li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+}
+
+html[data-visual-mode="paper"] .tv-start-steps > li > svg {
+  display: none;
+}
+
+html[data-visual-mode="paper"] .tv-start-step.tv-start-step {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 14%, transparent);
+  border-radius: 0;
+  padding: 0.5rem 0.1rem;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+}
+
+html[data-visual-mode="paper"] .tv-start-steps > li:last-child .tv-start-step {
+  border-bottom: 0;
+}
+
+html[data-visual-mode="paper"] .tv-start-step > span:first-child {
+  border-radius: 2px;
+  width: 1.15rem;
+  height: 1.15rem;
+  font-size: 10px;
+}
+
+/* 当前步：强调色竖线 + 加粗（底色交给既有的两层，这里只加“形”的信号） */
+html[data-visual-mode="paper"] .tv-start-step-on.tv-start-step-on {
+  border-bottom-color: color-mix(in srgb, var(--tp-accent) 45%, transparent);
+  box-shadow: inset 2px 0 0 var(--tp-accent);
+  padding-left: 0.6rem;
+}
+
+html[data-visual-mode="paper"] .tv-start-progress {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid color-mix(in srgb, var(--tp-text) 20%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-start-track.tv-start-track {
+  height: 5px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--tp-text) 28%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-start-fill {
+  border-radius: 0;
+  background-image: none;
+  background-color: var(--tp-accent);
+}
+
+
+/* =========================================================
+   10. 翻转卡 → 翻页（VocabFlip）
+   ---------------------------------------------------------
+   屏幕上它是 3D 卡片；纸上应该像**翻页**：
+     · 两个窄栏、细线、小圆角，去掉光晕与图案层
+     · 进度条改刻度尺，进度数字改衬线段落号
+     · 卡片正面只减字号，**不碰** .tv-flip-front 上的 transform ——
+       那是 rotateY 翻面本身（inline style，CSS 抢不过，改了就等于把
+       翻转交互弄坏）。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-flip-root {
+  padding-top: 0.5rem;
+}
+
+html[data-visual-mode="paper"] .tv-flip-head {
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-flip-exit.tv-flip-exit {
+  border-radius: 2px;
+  letter-spacing: 0.08em;
+}
+
+html[data-visual-mode="paper"] .tv-flip-counter-label {
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+html[data-visual-mode="paper"] .tv-flip-counter-value {
+  font-family: var(--tp-font-display);
+  font-size: 1.05rem;
+}
+
+html[data-visual-mode="paper"] .tv-flip-progress.tv-flip-progress {
+  height: 5px;
+  margin-bottom: 1.6rem;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--tp-text) 28%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-flip-progress > div {
+  border-radius: 0;
+  background-image: none;
+  background-color: var(--tp-accent);
+}
+
+html[data-visual-mode="paper"] .tv-flip-stage {
+  perspective: none;
+}
+
+html[data-visual-mode="paper"] .tv-flip-face.tv-flip-face {
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-visual-mode="paper"] .tv-flip-front {
+  /* 只改排版。绝不写 transform / backface-visibility：那一对由组件
+     的 inline style 负责，是翻面交互本体。 */
+  font-size: 0.95rem;
+}
+
+html[data-visual-mode="paper"] .tv-flip-kicker {
+  font-size: 10px;
+  letter-spacing: 0.4em;
+  color: color-mix(in srgb, var(--tp-text) 52%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-flip-front h2 {
+  font-family: var(--tp-font-display);
+  font-size: clamp(2.4rem, 1.8rem + 2vw, 3.4rem);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  text-shadow: none;
+}
+
+html[data-visual-mode="paper"] .tv-flip-pron {
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  margin-top: 0.7rem;
+}
+
+html[data-visual-mode="paper"] .tv-flip-hint {
+  margin-top: 2rem;
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  color: color-mix(in srgb, var(--tp-text) 45%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-flip-back h3 {
+  font-family: var(--tp-font-display);
+  font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem);
+  font-weight: 600;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+}
+
+/* 例句：删掉内嵌的深色小方块，改成左侧一道细线 */
+html[data-visual-mode="paper"] .tv-flip-example.tv-flip-example {
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--tp-accent) 50%, transparent);
+  border-radius: 0;
+  background-color: transparent;
+  padding: 0.2rem 0 0.2rem 1rem;
+  margin-top: 1.6rem;
+}
+
+html[data-visual-mode="paper"] .tv-flip-example p {
+  line-height: 1.95;
+}
+
+/* 认识 / 不认识：大圆角按钮 → 方角图章式按钮 */
+html[data-visual-mode="paper"] .tv-flip-judge.tv-flip-judge {
+  border-radius: 2px;
+  letter-spacing: 0.1em;
+  padding: 0.7rem 1.6rem;
+  font-size: 13px;
+}
+
+html[data-visual-mode="paper"] .tv-flip-status {
+  margin-top: 1.2rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid color-mix(in srgb, var(--tp-text) 20%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-flip-status > div:first-child {
+  border-radius: 2px;
+}
+
+/* 结分屏 / 空态：卡片 → 册子末页 */
+html[data-visual-mode="paper"] .tv-flip-endscreen.tv-flip-endscreen {
+  border-radius: var(--tp-radius-sm);
+  background-image: none;
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 2.4rem 2rem;
+}
+
+html[data-visual-mode="paper"] .tv-flip-endscreen h2 {
+  font-family: var(--tp-font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+html[data-visual-mode="paper"] .tv-flip-endscreen .tv-flip-endgrid {
+  gap: 0.6rem;
+}
+
+html[data-visual-mode="paper"] .tv-flip-endscreen button {
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+}
+
+html[data-visual-mode="paper"] .tv-flip-endscreen .tv-flip-endtrack {
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--tp-text) 28%, transparent);
+}
+
+
+/* =========================================================
+   11. 测验（VocabQuiz）· 试卷感
+   ---------------------------------------------------------
+   题干卷面：大留白、衬线题干、小圆角、细线分栏；
+   选项从“彩色药丸”改成答题卡的方框（选中/正确仍靠原色层表达）。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-quiz-root {
+  padding-top: 0.35rem;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-typebar.tv-quiz-typebar {
+  border-radius: var(--tp-radius-sm);
+  gap: 0;
+  padding: 0.35rem 0.75rem;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-type.tv-quiz-type {
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0.6rem 0.25rem;
+  letter-spacing: 0.06em;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-type.tv-quiz-type:hover {
+  border-radius: 0;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-daily.tv-quiz-daily {
+  border-radius: var(--tp-radius-sm);
+}
+
+html[data-visual-mode="paper"] .tv-quiz-daily .tv-quiz-chip.tv-quiz-chip {
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-diffbar.tv-quiz-diffbar {
+  border-radius: var(--tp-radius-sm);
+  gap: 0;
+  padding: 0.35rem 0.75rem;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-diff.tv-quiz-diff {
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0.6rem 0.25rem;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-card.tv-quiz-card {
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-card .tv-quiz-pad {
+  padding: 1.6rem 1.5rem 1.8rem;
+}
+
+@media (min-width: 640px) {
+  html[data-visual-mode="paper"] .tv-quiz-card .tv-quiz-pad {
+    padding: 2.2rem 2.6rem 2.4rem;
+  }
+}
+
+html[data-visual-mode="paper"] .tv-quiz-kicker {
+  font-size: 10px;
+  letter-spacing: 0.4em;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-stem {
+  font-family: var(--tp-font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-lead {
+  line-height: 1.9;
+  letter-spacing: 0.02em;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-hint.tv-quiz-hint {
+  border-radius: 0;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--tp-accent) 55%, transparent);
+  line-height: 1.9;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-input.tv-quiz-input {
+  border-radius: var(--tp-radius-sm);
+  border-width: 1px;
+  letter-spacing: 0.1em;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-submit.tv-quiz-submit {
+  border-radius: 2px;
+  background-image: none;
+  background-color: var(--tp-accent);
+  letter-spacing: 0.1em;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-option.tv-quiz-option {
+  border-radius: 2px;
+  border-width: 1px;
+  letter-spacing: 0.02em;
+  line-height: 1.8;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-foot {
+  margin-top: 1.4rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid color-mix(in srgb, var(--tp-text) 20%, transparent);
+}
+
+html[data-visual-mode="paper"] .tv-quiz-score {
+  border-radius: 2px;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-result.tv-quiz-result {
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-result h2 {
+  font-family: var(--tp-font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+html[data-visual-mode="paper"] .tv-quiz-result button {
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+}
+
+
+/* =========================================================
+   12. 空态 / 分页（册子末页与页码）
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tv-empty.tv-empty {
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 3.4rem 2rem;
+}
+
+html[data-visual-mode="paper"] .tv-empty-icon {
+  border-radius: 2px;
+}
+
+html[data-visual-mode="paper"] .tv-empty h3 {
+  font-family: var(--tp-font-display);
+  font-weight: 600;
+}
+
+html[data-visual-mode="paper"] .tv-empty button {
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+}
+
+html[data-visual-mode="paper"] .tv-pager {
+  margin-top: 2.6rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+  gap: 0.4rem;
+}
+
+html[data-visual-mode="paper"] .tv-pager-btn.tv-pager-btn {
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+}
+
+html[data-visual-mode="paper"] .tv-pager-num.tv-pager-num {
+  border-radius: 2px;
+  font-family: var(--tp-font-display);
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------
+   词卡底部提示行（"继续学习"）的可读性
+   ------------------------------------------------------------
+   实测：这一行继承父容器 `.tv-entry-meta` 的 `text-white/15` ——
+   15% 不透明度在任何底色上都过淡；在纸面上映射后也只有 1.55 的对比度，
+   而它在词汇页会渲染 **183 个**（每张词卡一个），是页面上出现次数最多的
+   一段文字，却几乎看不见。
+
+   类名双写抬到 (0,3,1)，确保压过 world-shim 的同类规则。
+   ------------------------------------------------------------ */
+html[data-visual-mode="paper"] .tv-entry-meta.tv-entry-meta {
+  color: rgb(36 31 23 / 0.75);
+}
+html[data-visual-mode="paper"] .tv-entry-meta.tv-entry-meta .tv-entry-action {
+  color: rgb(31 106 82 / 0.95);
+  border-color: rgb(31 106 82 / 0.28);
+}

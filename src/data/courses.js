@@ -1,5 +1,14 @@
 // src/data/courses.js
 
+import {
+  BASIC_READER_COURSE_ID,
+  lessonAudioCourses,
+} from "./lessonAudio";
+import { getLessonsByCourseId } from "./lessons";
+
+// 供 LessonText 等页面直接引用（避免各处再 import lessonAudio）
+export { BASIC_READER_COURSE_ID };
+
 // =========================================================
 // ThaiAI 课程数据
 // =========================================================
@@ -27,8 +36,46 @@
 export const courses = [
 
   // =========================================================
-  // 免费基础课程
+  // 基础课程（音频图文课 + 视频课目录）
   // =========================================================
+
+  // =========================================================
+  // 音频图文课 · 基础泰语精读（真实内容，已上线）
+  // =========================================================
+  // 课时即 courseTexts.js 的 14 篇原创课文；渲染页
+  // LessonText（/lessons/:lessonId）：中泰对照、生词点读、
+  // 逐段朗读（本地预生成音频 + 在线 TTS 兜底）、语法、练习。
+  // 课时列表由 lessonAudioCourses 单一数据源生成，见文末。
+
+  {
+    id: BASIC_READER_COURSE_ID,
+
+    title: "基础泰语精读",
+
+    description:
+      "课文精读音频课：中泰对照逐段朗读、生词点读、句型讲解与课后练习，系统学习课文表达",
+
+    progress: 0,
+
+    lessons: lessonAudioCourses.length,
+
+    completed: 0,
+
+    duration: "约 3 小时",
+
+    level: "基础",
+
+    levelKey: "basic",
+
+    category: "精读",
+
+    color: "emerald",
+
+    status: "learning",
+
+    isVip: true,
+  },
+
 
   {
     id: "thai-pronunciation",
@@ -38,13 +85,13 @@ export const courses = [
     description:
       "从零开始掌握泰语元音、辅音、声调与基本拼读规则",
 
-    progress: 72,
+    progress: 0,
 
     lessons: 8,
 
-    completed: 6,
+    completed: 0,
 
-    duration: "约 2 小时",
+    duration: "视频制作中",
 
     level: "基础",
 
@@ -54,7 +101,7 @@ export const courses = [
 
     color: "emerald",
 
-    status: "learning",
+    status: "coming",
 
     isVip: false,
   },
@@ -74,7 +121,7 @@ export const courses = [
 
     completed: 0,
 
-    duration: "约 2 小时",
+    duration: "视频制作中",
 
     level: "基础",
 
@@ -84,7 +131,7 @@ export const courses = [
 
     color: "teal",
 
-    status: "available",
+    status: "coming",
 
     isVip: false,
   },
@@ -104,7 +151,7 @@ export const courses = [
 
     completed: 0,
 
-    duration: "约 2.5 小时",
+    duration: "视频制作中",
 
     level: "基础",
 
@@ -114,7 +161,7 @@ export const courses = [
 
     color: "yellow",
 
-    status: "available",
+    status: "coming",
 
     isVip: false,
   },
@@ -138,7 +185,7 @@ export const courses = [
 
     completed: 0,
 
-    duration: "约 2.5 小时",
+    duration: "视频制作中",
 
     level: "进阶",
 
@@ -148,7 +195,7 @@ export const courses = [
 
     color: "blue",
 
-    status: "vip",
+    status: "coming",
 
     isVip: true,
   },
@@ -168,7 +215,7 @@ export const courses = [
 
     completed: 0,
 
-    duration: "约 4 小时",
+    duration: "视频制作中",
 
     level: "进阶",
 
@@ -178,7 +225,7 @@ export const courses = [
 
     color: "purple",
 
-    status: "vip",
+    status: "coming",
 
     isVip: true,
   },
@@ -198,7 +245,7 @@ export const courses = [
 
     completed: 0,
 
-    duration: "约 3 小时",
+    duration: "视频制作中",
 
     level: "进阶",
 
@@ -208,7 +255,7 @@ export const courses = [
 
     color: "blue",
 
-    status: "vip",
+    status: "coming",
 
     isVip: true,
   },
@@ -228,7 +275,7 @@ export const courses = [
 
     completed: 0,
 
-    duration: "约 3.5 小时",
+    duration: "视频制作中",
 
     level: "进阶",
 
@@ -238,7 +285,7 @@ export const courses = [
 
     color: "orange",
 
-    status: "vip",
+    status: "coming",
 
     isVip: true,
   },
@@ -258,7 +305,7 @@ export const courses = [
 
     completed: 0,
 
-    duration: "约 2 小时",
+    duration: "视频制作中",
 
     level: "进阶",
 
@@ -268,7 +315,7 @@ export const courses = [
 
     color: "purple",
 
-    status: "vip",
+    status: "coming",
 
     isVip: true,
   },
@@ -479,6 +526,35 @@ export const comingCourses =
     (course) =>
       course.status === "coming"
   );
+
+
+// =========================================================
+// 音频图文课课时列表（数据驱动）
+// =========================================================
+// 统一课时获取口：音频图文课返回 lessonAudioCourses，
+// 视频课沿用 lessons.js。Home / Plan / CourseDetail /
+// LessonVideo 全部经由此函数取课时。
+
+export function getCourseLessons(courseId) {
+  if (courseId === BASIC_READER_COURSE_ID) {
+    return lessonAudioCourses;
+  }
+  return getLessonsByCourseId(courseId);
+}
+
+
+// =========================================================
+// 课时跳转地址（音频课 / 视频课统一出口）
+// =========================================================
+// 音频图文课（lesson.audio 存在）跳 LessonText（/lessons/:id），
+// 其余跳视频播放页。
+
+export function getLessonHref(courseId, lesson) {
+  if (lesson?.audio) {
+    return `/lessons/${lesson.id}`;
+  }
+  return `/course/${courseId}/lesson/${lesson.id}`;
+}
 
 
 // =========================================================

@@ -32,7 +32,9 @@ const difficultyLabels = {
   },
 };
 
-export default function VocabGridItem({ item, index }) {
+/* ordinal：词条在整本词书里的序号（由 Vocabulary.jsx 按分页位置算出）。
+   只用于 PAPER 世界的“词典行首编号”，不参与任何业务判断。 */
+export default function VocabGridItem({ item, index, ordinal }) {
   const [speaking, setSpeaking] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const { toggleFavorite, isFavorite } = useVocabFavorites();
@@ -75,6 +77,7 @@ export default function VocabGridItem({ item, index }) {
         y: -4,
       }}
       className="
+        tv-entry
         group
         relative
         overflow-hidden
@@ -90,12 +93,14 @@ export default function VocabGridItem({ item, index }) {
       <ThaiPatternOverlay
         patternId={`thai-card-${index}`}
         opacity={0.05}
+        className="tv-ornament"
       />
 
       {/* 顶部光晕 */}
 
       <div
         className="
+          tv-ornament
           pointer-events-none
           absolute
           -right-16
@@ -115,6 +120,7 @@ export default function VocabGridItem({ item, index }) {
 
       <div
         className="
+          tv-ornament
           pointer-events-none
           absolute
           -bottom-20
@@ -129,7 +135,7 @@ export default function VocabGridItem({ item, index }) {
 
       {/* 内侧高光 */}
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      <div className="tv-ornament pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
       <div className="relative p-4 sm:p-5">
         {imageUrl && (
@@ -148,13 +154,22 @@ export default function VocabGridItem({ item, index }) {
             标签区域 + 收藏按钮
         ========================= */}
 
-        <div className="mb-4 flex items-start justify-between gap-2 sm:mb-5">
+        <div className="tv-entry-head mb-4 flex items-start justify-between gap-2 sm:mb-5">
 
           <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+
+            {/* 词条行首编号：只有 PAPER 有规则匹配；其他三个世界它带
+                hidden 属性 → 不占位、也不是 flex 的可见项（gap 不受影响）。 */}
+            {ordinal ? (
+              <span hidden className="tv-entry-no" aria-hidden="true">
+                {String(ordinal).padStart(3, "0")}
+              </span>
+            ) : null}
 
             {item.category && (
               <span
                 className="
+                  tv-entry-tag
                   rounded-full
                   border
                   border-white/[0.07]
@@ -173,6 +188,7 @@ export default function VocabGridItem({ item, index }) {
             {item.part_of_speech && (
               <span
                 className="
+                  tv-entry-tag
                   rounded-full
                   border
                   border-yellow-300/[0.12]
@@ -190,6 +206,7 @@ export default function VocabGridItem({ item, index }) {
 
             <span
               className={`
+                tv-entry-tag
                 rounded-full
                 border
                 px-2.5
@@ -204,7 +221,7 @@ export default function VocabGridItem({ item, index }) {
 
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="tv-entry-actions flex items-center gap-1.5">
             {/* 收藏按钮 */}
             <button
               onClick={(e) => {
@@ -291,6 +308,7 @@ export default function VocabGridItem({ item, index }) {
 
             <span
               className="
+                tv-entry-kicker
                 text-[9px]
                 font-semibold
                 uppercase
@@ -305,6 +323,7 @@ export default function VocabGridItem({ item, index }) {
 
           <h3
             className="
+              tv-entry-word
               mt-2
               font-thai
               text-[2.4rem]
@@ -327,6 +346,7 @@ export default function VocabGridItem({ item, index }) {
           {item.pronunciation && (
             <p
               className="
+                tv-entry-pron
                 mt-2
                 inline-flex
                 items-center
@@ -356,6 +376,7 @@ export default function VocabGridItem({ item, index }) {
 
         <div
           className="
+            tv-entry-gloss
             mb-4
             rounded-xl
             border
@@ -366,12 +387,13 @@ export default function VocabGridItem({ item, index }) {
           "
         >
 
-          <div className="text-[9px] tracking-wider text-white/20">
+          <div className="tv-entry-gloss-label text-[9px] tracking-wider text-white/20">
             中文释义
           </div>
 
           <p
             className="
+              tv-entry-gloss-text
               mt-1
               text-[16px]
               font-semibold
@@ -391,6 +413,7 @@ export default function VocabGridItem({ item, index }) {
         {item.example_thai && (
           <div
             className="
+              tv-entry-example
               mb-2
               rounded-xl
               border
@@ -405,6 +428,7 @@ export default function VocabGridItem({ item, index }) {
 
               <span
                 className="
+                  tv-entry-example-label
                   flex
                   items-center
                   gap-1
@@ -450,6 +474,7 @@ export default function VocabGridItem({ item, index }) {
 
             <p
               className="
+                tv-entry-example-thai
                 font-thai
                 text-[15px]
                 leading-relaxed
@@ -462,6 +487,7 @@ export default function VocabGridItem({ item, index }) {
             {item.example_chinese && (
               <p
                 className="
+                  tv-entry-example-cn
                   mt-1.5
                   text-[13px]
                   leading-relaxed
@@ -479,11 +505,11 @@ export default function VocabGridItem({ item, index }) {
             底部装饰
         ========================= */}
 
-        <div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-white/15 transition-all group-hover:text-emerald-300/40">
+        <div className="tv-entry-meta mt-3 flex items-center justify-between gap-2 text-[10px] text-white/15 transition-all group-hover:text-emerald-300/40">
           <button
             type="button"
             onClick={() => setContextOpen(true)}
-            className="flex items-center gap-1 rounded-full border border-emerald-300/10 bg-emerald-400/[0.04] px-2.5 py-1.5 text-emerald-200/60 transition hover:border-emerald-300/25 hover:bg-emerald-400/[0.09] hover:text-emerald-100"
+            className="tv-entry-action flex items-center gap-1 rounded-full border border-emerald-300/10 bg-emerald-400/[0.04] px-2.5 py-1.5 text-emerald-200/60 transition hover:border-emerald-300/25 hover:bg-emerald-400/[0.09] hover:text-emerald-100"
             aria-label={`查看 ${item.thai_word} 的泰语语境`}
           >
             <Lightbulb className="h-3 w-3" />

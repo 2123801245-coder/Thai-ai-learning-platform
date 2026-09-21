@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -12,17 +12,27 @@ import {
   Sparkles,
   SlidersHorizontal,
   X,
+  Shuffle,
+  FileText,
+  Puzzle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { preloadThaiAudio } from "@/lib/audioManager";
 import { getLocalTtsUrl } from "@/lib/thaiSpeech";
-import { base44 } from "@/api/base44Client";
 import { getVocabulary } from "@/api/vocabulary";
+import { useLearningProgress } from "@/hooks/useLearningProgress";
+import { StartHereCard } from "@/components/vocabulary/StartHereCard";
+import { fetchWrongBook } from "@/lib/wordBooks";
+import { getVocabularyGuidance } from "@/lib/vocabularyGuidance";
 import AddVocabDialog from "@/components/vocabulary/AddVocabDialog";
 import VocabGridItem from "@/components/vocabulary/VocabGridItem";
 import VocabQuiz from "@/components/vocabulary/VocabQuiz";
 import VocabFlip from "@/components/vocabulary/VocabFlip";
+/* 三种练习模式（原独立页面）合并进词汇星球；embedded 渲染去页级容器 */
+import VocabMatch from "@/pages/VocabMatch";
+import SentenceFill from "@/pages/SentenceFill";
+import WordSegment from "@/pages/WordSegment";
 import { localVocabulary } from "@/data/vocabulary";
 import { expandedVocabulary } from "@/data/vocabularyExpansion";
 import { verifiedVocabularyBatch } from "@/data/verifiedVocabularyBatch";
@@ -38,6 +48,10 @@ import {
   ThaiCorner,
   ParticleField,
 } from "@/components/common/ThaiDecor";
+/* PAPER 世界的词汇页版式层（“专业语言学习手册”）。
+   跟本页 chunk 走：只有进词汇页才加载，四世界共用一套 DOM，
+   规则全部带 html[data-visual-mode="paper"] 前缀 → 另外三个世界匹配不到。 */
+import "@/themes/vocab-paper.css";
 
 const difficulties = [
   { id: "all", label: "全部" },
@@ -46,26 +60,87 @@ const difficulties = [
   { id: "advanced", label: "高级" },
 ];
 
+/* =========================================================
+   词汇星球的六种模式
+   ---------------------------------------------------------
+   前三种是「学」：浏览 / 翻转卡 / 测验（词书内单词）。
+   后三种是「练」：词汇配对 / 句子填空 / 分词练习——原本是三个独立
+   页面（/vocab-match、/sentence-fill、/word-segment），现在作为
+   词汇星球的练习方式收进来：同一颗星球里学完直接练，少三个入口。
+   旧路径保留为 301 重定向，深链不丢。
+========================================================= */
 const modes = [
   {
     id: "browse",
     label: "浏览词汇",
+    short: "浏览",
     icon: LayoutGrid,
+    kind: "learn",
   },
   {
     id: "flip",
     label: "翻转卡",
+    short: "翻转",
     icon: Layers,
+    kind: "learn",
   },
   {
     id: "quiz",
     label: "测验",
+    short: "测验",
     icon: Brain,
+    kind: "learn",
+  },
+  {
+    id: "match",
+    label: "词汇配对",
+    short: "配对",
+    icon: Shuffle,
+    kind: "drill",
+  },
+  {
+    id: "fill",
+    label: "句子填空",
+    short: "填空",
+    icon: FileText,
+    kind: "drill",
+  },
+  {
+    id: "segment",
+    label: "分词练习",
+    short: "分词",
+    icon: Puzzle,
+    kind: "drill",
   },
 ];
 
+/* 当前模式徽标与切换器共用同一份定义，避免两处各写一套分支 */
+const MODE_BY_ID = Object.fromEntries(modes.map((item) => [item.id, item]));
+
+/* 每个模式一句话说明：
+   原来只有"浏览/翻转/测验"三个词，用户分不清该用哪个。 */
+const MODE_HINTS = {
+  browse: "按词书翻看全部词条",
+  flip: "一张张过，点「认识」即记住",
+  quiz: "四选一自测，答错进错题本",
+  match: "泰语 ↔ 中文速配",
+  fill: "从例句里选出缺失的词",
+  segment: "把整句拆成词，练断句",
+};
+
+const modeGroups = [
+  { key: "learn", label: "学", items: modes.filter((item) => item.kind === "learn") },
+  { key: "drill", label: "练", items: modes.filter((item) => item.kind === "drill") },
+];
+
+const MODE_IDS = modes.map((item) => item.id);
+
 const PAGE_SIZE = 18;
 
+/* 练习模式只有一个真源：URL 的 ?mode=。
+   旧路径 /vocab-match、/sentence-fill、/word-segment 已在路由层
+   重定向到 /vocabulary?mode=xxx，所以组件不再需要 initialMode prop
+   （那是一段没有任何调用方的死代码）。 */
 export default function Vocabulary() {
   const [vocab, setVocab] = useState([]);
 
@@ -83,7 +158,53 @@ export default function Vocabulary() {
   const [showFilters, setShowFilters] = useState(false);
 
   const location = useLocation();
+  const navigate = useNavigate();
   const [wrongQuizWords, setWrongQuizWords] = useState(null);
+
+  /* 学习进度 + 错题本：用来回答「我今天该先干什么」 */
+  const { progress } = useLearningProgress();
+  const [wrongCount, setWrongCount] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    fetchWrongBook()
+      .then((book) => {
+        if (alive) setWrongCount(book?.words?.length || 0);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /* =========================================================
+     今天从这里开始：把六个等权重的模式收敛成一条有序的路
+     ---------------------------------------------------------
+     推荐顺序（都用真实数据判断，不是固定文案）：
+       ① 错题本有词        → 先清错题（遗忘曲线优先）
+       ② 今日目标没达标    → 认识新词
+       ③ 认识过了但没测过  → 去测验
+       ④ 其余情况          → 巩固练习
+     ========================================================= */
+  const todayWords = progress?.today_words || 0;
+  const dailyGoal = progress?.daily_goal || 20;
+  const goalDone = todayWords >= dailyGoal;
+  const masteredTotal = progress?.total_vocabulary || 0;
+
+  /* 推荐逻辑在 src/lib/vocabularyGuidance.js（纯函数，可单测） */
+  const guidance = useMemo(
+    () => getVocabularyGuidance({ todayWords, dailyGoal, wrongCount }),
+    [todayWords, dailyGoal, wrongCount]
+  );
+
+  /* 推荐动作 → 直接切模式（与 chooseMode 同一套 URL 规范） */
+  const startRecommended = () => {
+    if (guidance.goto) {
+      navigate(guidance.goto);
+      return;
+    }
+    chooseMode(guidance.mode);
+  };
 
   useEffect(() => {
     if (location.state?.quizFromWrong && location.state?.wrongWords?.length > 0) {
@@ -93,11 +214,36 @@ export default function Vocabulary() {
     }
   }, [location.state]);
 
+  /* =========================================================
+     ?mode= 深链：/vocabulary?mode=match 这种链接（以及三条旧路径的
+     重定向）能直接落在对应练习上；切换模式时反向写回 URL，
+     刷新/分享都不丢当前模式。
+     只在 URL 真的带了合法 mode 时才跟——这样「错题本→测验」那类
+     由 state 驱动的切模式不会被 URL 拉回去。
+  ========================================================= */
+  const urlMode = new URLSearchParams(location.search).get("mode");
+
+  useEffect(() => {
+    if (urlMode && MODE_IDS.includes(urlMode) && urlMode !== mode) {
+      setMode(urlMode);
+      setWrongQuizWords(null);
+    }
+    // mode 故意不入依赖：只在 URL 变化时跟随 URL
+  }, [urlMode, mode]);
+
+  const chooseMode = (id) => {
+    setMode(id);
+    setWrongQuizWords(null);
+    const params = new URLSearchParams(location.search);
+    params.set("mode", id);
+    navigate(`${location.pathname}?${params.toString()}`, { replace: true });
+  };
+
   /* =========================
      加载词汇
 
      优先读取后端词库（内置 src/data/vocabulary.js 已同步进数据库）；
-     后端不可用 → base44 云端；
+     后端不可用 → 本地内置词库；
      都不可用 / 为空 → 本地内置词库（完全离线可用）。
   ========================= */
 
@@ -121,23 +267,13 @@ export default function Vocabulary() {
       );
     }
 
-    // 2. base44 云端词库
+    /* 2. base44 平台词库通道已废弃
+       ------------------------------------------------
+       本项目已迁到自有 Express 后端，base44 侧没有对应表/权限，
+       每次调用都会返回 401 并把错误打进控制台（用户看到"加载失败"的噪音）。
+       这里不再发这个请求：后端词库（第 1 步）拿不到时直接落到本地内置词库。 */
     if (!data) {
-      try {
-        const remote = await base44.entities.Vocabulary.list(
-          "-created_date",
-          500
-        );
-
-        if (remote && remote.length > 0) {
-          data = remote;
-        }
-      } catch (error) {
-        console.error(
-          "加载云端词汇失败，使用本地词库:",
-          error
-        );
-      }
+      console.info("后端词库为空，使用本地内置词库");
     }
 
     // 3. 本地内置词库
@@ -392,7 +528,22 @@ export default function Vocabulary() {
   return (
     <div className="relative min-h-screen text-white">
 
-      <main className="relative z-10 mx-auto max-w-[1500px] px-0 py-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-6 lg:px-8 lg:pb-28">
+      <main className="tv-page relative z-10 mx-auto max-w-[1500px] px-0 py-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-6 lg:px-8 lg:pb-28">
+
+        {/* =========================
+            PAPER 页眉（running head）
+            --------------------------
+            只在 paper 世界显示，另外三个世界由 .tv-runhead 的规则
+            匹配不到而保持隐藏。这里必须用 hidden **属性**而不是 `hidden` 类：
+            父容器带 space-y-*，那个选择器只认 [hidden] 属性；
+            用类的话页眉会在另外三个世界凭空多出一份兄弟间距。
+            间距由 .tv-runhead 的 margin-bottom 交出（见 vocab-paper.css）。
+        ========================= */}
+
+        <div hidden className="tv-runhead" aria-hidden="true">
+          <span>词汇学习 · 词条手册</span>
+          <span>THAI VOCABULARY · LEXICON</span>
+        </div>
 
         {/* =========================
             Hero
@@ -407,7 +558,7 @@ export default function Vocabulary() {
             opacity: 1,
             y: 0,
           }}
-          className="relative mb-5 px-1 sm:mb-7 sm:px-0"
+          className="tv-hero relative mb-5 px-1 sm:mb-7 sm:px-0"
         >
           {/* 金色粒子场（Thai Gold × Learning 记忆点） */}
 
@@ -419,46 +570,77 @@ export default function Vocabulary() {
           <ThaiCorner
             corners={["tl", "br"]}
             size={24}
-            className="hidden sm:block"
+            className="tv-ornament hidden sm:block"
           />
 
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-5">
 
             <div>
-              <div className="mb-3 flex items-center gap-2 text-xs font-semibold tracking-[0.22em] text-emerald-300/80">
+              <div className="tv-eyebrow mb-3 flex items-center gap-2 text-xs font-semibold tracking-[0.22em] text-emerald-300/80">
                 <Sparkles className="h-4 w-4" />
                 THAI VOCABULARY SPACE
               </div>
 
-              <h1 className="text-2xl font-black tracking-tight sm:text-4xl">
+              <h1 className="tv-title text-2xl font-black tracking-tight sm:text-4xl">
                 词汇学习
 
-                <span className="ml-3 bg-gradient-to-r from-emerald-300 via-teal-200 to-yellow-300 bg-clip-text text-transparent">
+                <span className="tv-title-en ml-3 bg-gradient-to-r from-emerald-300 via-teal-200 to-yellow-300 bg-clip-text text-transparent">
                   Vocabulary
                 </span>
               </h1>
 
-              <p className="mt-2 text-sm text-white/40 sm:text-base">
+              <p className="tv-lede mt-2 text-sm text-white/40 sm:text-base">
                 浏览、背诵并练习你的泰语词汇
               </p>
             </div>
 
+            {/* 次级行动：这不是日常第一件事，所以从"最显眼的主按钮"
+                降为描边按钮，把视觉主位让给下方引导卡的「开始认识新词」。 */}
             <button
               onClick={() => setDialogOpen(true)}
-              className="group flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 via-teal-400 to-yellow-300 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-900/30 transition-all hover:-translate-y-0.5 hover:shadow-emerald-400/20 sm:w-auto"
+              className="tv-add group flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-4 py-2.5 text-[13px] font-semibold text-white/70 transition-all hover:border-emerald-300/30 hover:bg-white/[0.07] hover:text-white sm:w-auto"
             >
-              <Plus className="h-4 w-4 transition-transform group-hover:rotate-90" />
+              <Plus className="h-3.5 w-3.5 transition-transform group-hover:rotate-90" />
               添加生词
             </button>
 
           </div>
         </motion.div>
 
+        {/* PAPER 副题行：纯排版的“版本行”（词条数 / 当前模式 / 词书），
+            数字全部取自下面已经算好的既有值，不新增任何数据来源。
+            同样用 hidden 属性控制显隐。 */}
+
+        <p hidden className="tv-runner" aria-hidden="true">
+          {vocab.length} entries · {filtered.length} shown · {MODE_BY_ID[mode]?.short || "浏览"}
+          {book !== "all" ? ` · ${book}` : ""}
+        </p>
+
+        {/* =========================
+            今天从这里开始（引导）
+            --------------------------
+            原来首屏是"统计数字 + 六个等权重按钮"，用户不知道先点哪个。
+            这里用真实数据给出**唯一的下一步**，并把它放在最显眼的位置。
+        ========================= */}
+
+        <div className="tv-start-shell mb-4">
+          <StartHereCard
+            recommendId={guidance.recommendId}
+            reason={guidance.reason}
+            ctaLabel={guidance.ctaLabel}
+            onStart={startRecommended}
+            todayWords={todayWords}
+            dailyGoal={dailyGoal}
+            wrongCount={wrongCount}
+            bookName={book !== "all" ? book : undefined}
+          />
+        </div>
+
         {/* =========================
             数据概览
         ========================= */}
 
-        <div className="mb-3 grid grid-cols-2 gap-2.5 px-1 sm:mb-3 sm:gap-3 sm:px-0 sm:grid-cols-4">
+        <div className="tv-ledger mb-3 grid grid-cols-2 gap-2.5 px-1 sm:mb-3 sm:gap-3 sm:px-0 sm:grid-cols-4">
 
           <MiniStat
             label="词汇总量"
@@ -476,25 +658,15 @@ export default function Vocabulary() {
 
           <MiniStat
             label="当前模式"
-            value={
-              mode === "browse"
-                ? "浏览"
-                : mode === "flip"
-                  ? "翻转"
-                  : "测验"
-            }
-            icon={
-              mode === "browse"
-                ? LayoutGrid
-                : mode === "flip"
-                  ? Layers
-                  : Brain
-            }
+            value={MODE_BY_ID[mode]?.short || "浏览"}
+            icon={MODE_BY_ID[mode]?.icon || LayoutGrid}
           />
 
+          {/* 「Ready」原来是个没有信息量的占位；换成真实累计读数 */}
           <MiniStat
-            label="学习状态"
-            value="Ready"
+            label="累计掌握"
+            value={masteredTotal}
+            suffix="词"
             icon={Sparkles}
           />
 
@@ -506,7 +678,7 @@ export default function Vocabulary() {
             搜索
         ========================= */}
 
-        <div className="relative mb-4 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] shadow-xl backdrop-blur-xl">
+        <div className="tv-search relative mb-4 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] shadow-xl backdrop-blur-xl">
 
           <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/30" />
 
@@ -534,7 +706,7 @@ export default function Vocabulary() {
             筛选
         ========================= */}
 
-        <div className="mb-5 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] backdrop-blur-xl">
+        <div className="tv-filters mb-5 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] backdrop-blur-xl">
 
           <button
             onClick={() =>
@@ -650,51 +822,83 @@ export default function Vocabulary() {
             学习模式
         ========================= */}
 
-        <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5 shadow-xl backdrop-blur-xl sm:mb-6">
+        <div className="tv-index mb-5 space-y-1 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5 shadow-xl backdrop-blur-xl sm:mb-6">
 
-          <div className="grid grid-cols-3 gap-1">
+          {/* 两行六模式：学（浏览/翻转卡/测验）与练（配对/填空/分词）。
+             配对/填空/分词原本是三个独立页面，现在就是词汇星球的练习方式。
+             PAPER 下这一块排成“目录”：每模式一行，行首序号、行尾页码位。 */}
+          {modeGroups.map((group) => (
 
-            {modes.map((item) => {
+          <div key={group.key} className="tv-index-group flex items-center gap-1">
+
+            <span className="tv-index-label w-5 shrink-0 pl-1 text-[11px] font-semibold tracking-wider text-white/25">
+              {group.label}
+            </span>
+
+            <div className="tv-index-grid grid flex-1 grid-cols-3 gap-1">
+
+            {group.items.map((item) => {
               const Icon = item.icon;
               const active = mode === item.id;
 
               return (
                 <button
                   key={item.id}
-                  onClick={() => setMode(item.id)}
-                  className={`relative flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
+                  onClick={() => chooseMode(item.id)}
+                  title={MODE_HINTS[item.id]}
+                  className={`tv-index-item relative flex flex-col items-start gap-0.5 rounded-xl px-3 py-2.5 text-left transition-all ${
                     active
                       ? "text-white"
-                      : "text-white/35 hover:text-white/70"
+                      : "text-white/40 hover:text-white/75"
                   }`}
                 >
+
+                  {/* 目录序号：只在 PAPER 显示（hidden 属性 → 不占位、
+                      不进任何 space-y 的选择器范围；其他世界无规则匹配） */}
+                  <span hidden className="tv-index-no" aria-hidden="true">
+                    {group.key === "learn" ? "0" : "1"}
+                    {group.items.indexOf(item) + 1}
+                  </span>
 
                   {active && (
                     <motion.div
                       layoutId="activeMode"
-                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-400/20 to-teal-400/10"
+                      className="tv-ornament absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-400/20 to-teal-400/10"
                     />
                   )}
 
-                  <span className="relative flex items-center gap-2">
-
+                  <span className="relative flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                     <Icon
-                      className={`h-4 w-4 ${
+                      className={`h-4 w-4 shrink-0 ${
                         active
                           ? "text-emerald-300"
                           : ""
                       }`}
                     />
-
-                    {item.label}
-
+                    <span className="text-[13px] font-semibold">{item.label}</span>
+                    {/* 当前推荐的那一步直接标出来：用户不需要自己判断先做哪个 */}
+                    {guidance.recommendId === item.id ? (
+                      <span className="rounded-full border border-emerald-300/35 bg-emerald-400/[0.14] px-1.5 py-px text-[9px] font-bold text-emerald-200">
+                        建议
+                      </span>
+                    ) : null}
                   </span>
+
+                  {/* 一句话说明：解决"六个词分不清差别" */}
+                  <span className="tv-index-hint relative block truncate text-[10.5px] font-normal text-white/30">
+                    {MODE_HINTS[item.id]}
+                  </span>
+
 
                 </button>
               );
             })}
 
+            </div>
+
           </div>
+
+          ))}
 
         </div>
 
@@ -705,13 +909,13 @@ export default function Vocabulary() {
         {mode === "browse" && (
           <>
 
-            <div className="mb-4 flex items-center justify-between">
+            <div className="tv-entrybar mb-4 flex items-center justify-between">
 
               <div className="flex items-center gap-2 text-sm text-white/40">
 
                 <BookOpen className="h-4 w-4 text-emerald-300/70" />
 
-                <span>
+                <span className="tv-entrybar-count">
                   找到{" "}
                   <span className="font-bold text-emerald-300">
                     {filtered.length}
@@ -722,7 +926,7 @@ export default function Vocabulary() {
               </div>
 
               {filtered.length > 0 && (
-                <div className="text-xs text-white/25">
+                <div className="tv-entrybar-page text-xs text-white/25">
                   第 {page} / {totalPages} 页
                 </div>
               )}
@@ -779,6 +983,9 @@ export default function Vocabulary() {
                       <VocabGridItem
                         item={item}
                         index={index}
+                        /* 词条序号（词典行首编号）：纯排版用，由分页位置算出，
+                           没进任何 state，也不改 VocabGridItem 的既有 props 语义 */
+                        ordinal={(page - 1) * PAGE_SIZE + index + 1}
                       />
                     </motion.div>
                   ))}
@@ -786,7 +993,7 @@ export default function Vocabulary() {
                 </div>
 
                 {totalPages > 1 && (
-                  <div className="mt-8 flex flex-wrap items-center justify-center gap-1.5">
+                  <div className="tv-pager mt-8 flex flex-wrap items-center justify-center gap-1.5">
 
                     <PaginationButton
                       disabled={page === 1}
@@ -818,7 +1025,7 @@ export default function Vocabulary() {
                             onClick={() =>
                               setPage(Number(number))
                             }
-                            className={`h-9 w-9 rounded-lg text-xs font-semibold transition-all ${
+                            className={`tv-pager-num h-9 w-9 rounded-lg text-xs font-semibold transition-all ${
                               page === number
                                 ? "bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-lg shadow-emerald-900/30"
                                 : "border border-white/10 bg-white/[0.04] text-white/40 hover:bg-white/[0.08] hover:text-white"
@@ -880,6 +1087,16 @@ export default function Vocabulary() {
           />
         )}
 
+        {/* =========================
+            练习模式（原独立页面，现为词汇星球的练习方式）
+        ========================= */}
+
+        {mode === "match" && <VocabMatch embedded />}
+
+        {mode === "fill" && <SentenceFill embedded />}
+
+        {mode === "segment" && <WordSegment embedded />}
+
       </main>
 
       {/* =========================
@@ -930,27 +1147,27 @@ function MiniStat({
   icon: Icon,
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:bg-white/[0.06]">
+    <div className="tv-ledger-cell rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:bg-white/[0.06]">
 
       <div className="flex items-center justify-between">
 
-        <div className="rounded-xl bg-emerald-400/10 p-2">
+        <div className="tv-ledger-icon rounded-xl bg-emerald-400/10 p-2">
           <Icon className="h-4 w-4 text-emerald-300" />
         </div>
 
-        <Sparkles className="h-3.5 w-3.5 text-yellow-300/30" />
+        <Sparkles className="tv-ornament h-3.5 w-3.5 text-yellow-300/30" />
 
       </div>
 
       <div className="mt-3">
 
-        <div className="text-[11px] text-white/35">
+        <div className="tv-ledger-label text-[11px] text-white/35">
           {label}
         </div>
 
         <div className="mt-1 flex items-baseline gap-1">
 
-          <span className="text-xl font-black text-white">
+          <span className="tv-ledger-value text-xl font-black text-white">
             {value}
           </span>
 
@@ -1004,7 +1221,7 @@ function FilterButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+      className={`tv-chip rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
         active
           ? gold
             ? "border-yellow-300/30 bg-yellow-300/15 text-yellow-200"
@@ -1030,7 +1247,7 @@ function PaginationButton({
     <button
       disabled={disabled}
       onClick={onClick}
-      className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/50 transition-all hover:bg-white/[0.08] hover:text-white disabled:pointer-events-none disabled:opacity-20"
+      className="tv-pager-btn flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/50 transition-all hover:bg-white/[0.08] hover:text-white disabled:pointer-events-none disabled:opacity-20"
     >
       {children}
     </button>
@@ -1056,10 +1273,10 @@ function EmptyState({
         opacity: 1,
         y: 0,
       }}
-      className="rounded-[28px] border border-white/10 bg-white/[0.035] px-6 py-20 text-center shadow-xl backdrop-blur-xl"
+      className="tv-empty rounded-[28px] border border-white/10 bg-white/[0.035] px-6 py-20 text-center shadow-xl backdrop-blur-xl"
     >
 
-      <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl border border-emerald-300/10 bg-emerald-400/[0.06]">
+      <div className="tv-empty-icon mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl border border-emerald-300/10 bg-emerald-400/[0.06]">
         <BookOpen className="h-9 w-9 text-emerald-300/40" />
       </div>
 

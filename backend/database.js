@@ -463,15 +463,30 @@ db.serialize(() => {
   `);
 
   // ================================
-  // AI 泰语老师长期记忆表
-  //（记住学生名字/水平/兴趣/常见错误，跨会话生效）
+  // AI 泰语老师长期记忆表（分类记忆，一条记忆一行）
+  //
+  //   memory_type: profile | goal | habit | weakness | error | interest | preference
+  //   importance:  1~5（越高越优先注入提示词）
+  //   source:      ai（对话提取）/ placement（入学测试）/ manual（用户手改）
+  //   hits:        同一句话被提到几次（重复出现 → 排序自动上浮）
+  //
+  // 升级前这张表是 (user_id PRIMARY KEY, memory TEXT) 的 JSON blob；
+  // 旧结构会在 backend/aiMemory.js 的 ensureMemorySchema() 里被改名为
+  // ai_teacher_memory_legacy 备份，并拆成分类条目导入一次。
+  // 表结构定义也保留在那边（含迁移逻辑），这里建表保证首次启动就有表。
   // ================================
 
   db.run(`
     CREATE TABLE IF NOT EXISTS ai_teacher_memory (
-      user_id INTEGER PRIMARY KEY,
-      memory TEXT DEFAULT '{}',
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id      INTEGER NOT NULL,
+      memory_type  TEXT NOT NULL,
+      content      TEXT NOT NULL,
+      importance   INTEGER DEFAULT 3,
+      source       TEXT DEFAULT 'ai',
+      hits         INTEGER DEFAULT 1,
+      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -561,6 +576,71 @@ db.serialize(() => {
       granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (user_id, milestone)
     )
+  `);
+
+  // ================================
+  // 用户学习画像（AI 入学测试产物）
+  //
+  // 一个用户一行（user_id UNIQUE），测试完成即 upsert。
+  // 多选字段（专业方向 / 兴趣媒体 / 学习方式）用逗号分隔字符串存；
+  // 测试明细（各板块正确率、得分）存 JSON 文本，方便后续个性化推荐。
+  // ================================
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      user_id INTEGER NOT NULL UNIQUE,
+
+      thai_level TEXT,
+
+      learning_goal TEXT,
+
+      professional_direction TEXT,
+
+      media_interest TEXT,
+
+      learning_style TEXT,
+
+      target_scenario TEXT,
+
+      test_score INTEGER DEFAULT 0,
+
+      test_detail TEXT,
+
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_user_profiles_user
+    ON user_profiles (user_id)
+  `);
+
+  // ================================
+  // 专业泰语模块 · 专题课（Thai Professional Hub）
+  //
+  // 「不要设计成固定课程」：每个方向下的内容板块（模块）聚合
+  // 专题课/专题词书/练习入口，用户选择方向后自动织入学习路线。
+  // 幂等 seed：按 id upsert，course 主体与 lessons 都可反复启动同步。
+  // ================================
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS professional_courses (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL,
+      level TEXT,
+      lessons INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_professional_courses_category
+    ON professional_courses (category)
   `);
 
   // ================================

@@ -1,9 +1,10 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Volume2, CheckCircle2, XCircle, RotateCcw, ArrowRight } from "lucide-react";
 import WordBookPicker from "@/components/practice/WordBookPicker";
 import { speakThai } from "@/lib/thaiSpeech";
-import { mergeBooks, generateFillQuestions, getSavedBookId, saveBookId, fetchWrongBook, recordWrongWord, formatWrongDate, getVocabBooks } from "@/lib/wordBooks";
+import { mergeBooks, generateFillQuestions, getSavedBookId, saveBookId, fetchWrongBook, formatWrongDate } from "@/lib/wordBooks";
+import { usePracticeReward } from "@/hooks/usePracticeReward";
 
 /* 词书来源统一使用 getVocabBooks()（与词汇学习板块一致）
    generateFillQuestions 从词书例句中自动挖空生成题目 */
@@ -170,7 +171,7 @@ function speak(text) {
   speakThai(text, { rate: 0.8 });
 }
 
-export default function SentenceFill() {
+export default function SentenceFill({ embedded = false }) {
   const [wrongBook, setWrongBook] = useState(null);
 
   const refreshWrongBook = useCallback(() => {
@@ -207,6 +208,12 @@ export default function SentenceFill() {
   const [selectedOption, setSelectedOption] = useState(null);
   const [showResult, setShowResult] = useState(null);
   const [score, setScore] = useState(0);
+  /* 练习结算：答对计 XP/连续天数，答错进错题本（见 usePracticeReward） */
+  const reward = usePracticeReward();
+  /* initSet 是 useCallback([])，不能把 reward 挂进依赖（会让出题函数每渲染重建），
+     所以用 ref 拿最新的 resetRound */
+  const rewardRef = useRef(reward);
+  rewardRef.current = reward;
   const [correctCount, setCorrectCount] = useState(0);
   const [completed, setCompleted] = useState(false);
 
@@ -222,6 +229,8 @@ export default function SentenceFill() {
     setScore(0);
     setCorrectCount(0);
     setCompleted(false);
+    /* 新的一轮：清空结算去重，重练的错词要重新计分 */
+    rewardRef.current.resetRound();
   }, []);
 
   useEffect(() => {
@@ -247,19 +256,29 @@ export default function SentenceFill() {
     const isCorrect = option === questions[currentQ].blank;
     setShowResult(isCorrect ? "correct" : "wrong");
 
+    const q = questions[currentQ];
+
     if (isCorrect) {
       setScore((s) => s + 10);
       setCorrectCount((c) => c + 1);
-    } else {
-      // 答错 → 记入错题本并刷新词书（不阻塞交互）
-      const q = questions[currentQ];
-      recordWrongWord({
+      /* 本地分数只做即时反馈；XP/连续天数写进学习进度 */
+      reward.correct({
         thai: q.blank,
         chinese: q.hint,
         roman: q.roman,
         sentence: q.fullSentence,
         sentenceCn: q.translation,
-      }).then(refreshWrongBook);
+      });
+    } else {
+      // 答错 → 记入错题本并刷新词书（不阻塞交互）
+      reward.wrong({
+        thai: q.blank,
+        chinese: q.hint,
+        roman: q.roman,
+        sentence: q.fullSentence,
+        sentenceCn: q.translation,
+      });
+      refreshWrongBook();
     }
 
     setTimeout(() => {
@@ -278,11 +297,18 @@ export default function SentenceFill() {
   const q = questions[currentQ];
 
   return (
-    <div className="flex flex-col h-full p-4 sm:p-6 space-y-4 overflow-y-auto">
+    /* embedded：作为「词汇星球」里的一种练习模式渲染（外层负责留白与滚动） */
+    <div
+      className={
+        embedded
+          ? "flex flex-col space-y-4"
+          : "flex flex-col h-full p-4 sm:p-6 space-y-4 overflow-y-auto"
+      }
+    >
       {/* 顶部 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-white">句子填空补词</h1>
+          {!embedded && <h1 className="text-xl font-bold text-white">句子填空补词</h1>}
           <p className="text-white/40 text-sm">根据提示，选择正确的泰语单词填入空白处</p>
         </div>
         <div className="flex items-center gap-3">

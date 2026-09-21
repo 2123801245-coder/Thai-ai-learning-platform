@@ -4,26 +4,18 @@
 //
 //   - 把 ThaiPBS 新闻的标题 + 导语翻译成简体中文，并生成罗马音注音
 //     （RTGS 风格、带声调符号，与 src/data/thaiCorpus.js 的注音风格一致）。
-//   - 使用 DeepSeek（国内可达、便宜）OpenAI 兼容接口，一次调用批量处理多条。
-//   - 未配置 DEEPSEEK_API_KEY 或调用失败时优雅降级：原样返回 items，
-//     不阻塞新闻展示。
-//
-// 环境变量：
-//   DEEPSEEK_API_KEY   必填，DeepSeek API key（https://platform.deepseek.com）
-//   DEEPSEEK_BASE_URL  可选，默认 https://api.deepseek.com
-//   DEEPSEEK_MODEL     可选，默认 deepseek-chat
+//   - 模型调用统一走 backend/aiProvider.js（DeepSeek / Agnes 网关 / 任何
+//     OpenAI 兼容网关，由 AI_PROVIDER 或可用 key 自动挑选），一次调用批量处理多条。
+//   - 未配置可用模型或调用失败时优雅降级：原样返回 items，不阻塞新闻展示。
 
-import dotenv from "dotenv";
-dotenv.config();
+import "./env.js";
+import { chatCompletion, resolveChatProvider } from "./aiProvider.js";
 
-const API_KEY = process.env.DEEPSEEK_API_KEY || "";
-const BASE_URL = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/+$/, "");
-const MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
 const BATCH_SIZE = 5; // 每批条数，控制单次响应长度
 const TIMEOUT_MS = 60000;
 
 export function isTranslateEnabled() {
-  return !!API_KEY;
+  return Boolean(resolveChatProvider());
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -60,33 +52,14 @@ async function translateChunk(chunk) {
 
   const userPrompt = `请翻译以下泰语新闻：\n${JSON.stringify(payload, null, 2)}`;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`DeepSeek HTTP ${res.status}: ${body.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("DeepSeek 返回为空");
+    const content = await chatCompletion(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      { temperature: 0.2, jsonMode: true, timeoutMs: TIMEOUT_MS }
+    );
     const parsed = JSON.parse(content);
     const list = parsed?.items || [];
     if (!Array.isArray(list) || list.length !== chunk.length) {
@@ -104,8 +77,6 @@ async function translateChunk(chunk) {
   } catch (err) {
     console.error(`[translate] 批量翻译失败: ${err.name === "AbortError" ? "超时" : err.message}`);
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -177,33 +148,14 @@ async function translateArticleChunk(paragraphs) {
 
   const userPrompt = `请翻译以下泰语新闻段落：\n${JSON.stringify(payload, null, 2)}`;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`DeepSeek HTTP ${res.status}: ${body.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("DeepSeek 返回为空");
+    const content = await chatCompletion(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      { temperature: 0.2, jsonMode: true, timeoutMs: TIMEOUT_MS }
+    );
     const parsed = JSON.parse(content);
     const list = parsed?.items || [];
     if (!Array.isArray(list) || list.length !== paragraphs.length) {
@@ -220,8 +172,6 @@ async function translateArticleChunk(paragraphs) {
   } catch (err) {
     console.error(`[translate] 整篇翻译失败: ${err.name === "AbortError" ? "超时" : err.message}`);
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

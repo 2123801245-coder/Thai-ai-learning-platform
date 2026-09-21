@@ -497,3 +497,367 @@ html.theme-custom[data-mode="light"] .gold-gradient-text {
 }
 
 /* 深色：白色系维持原样（不额外处理） */
+/* ============================================================
+   浅色模式：照片英雄区（佛像首页 / World Hero Band / 学习星系场景）
+   ------------------------------------------------------------
+   这两个板块背后是同一张真实照片，不是页面底色，所以「白字 → 深字」
+   那套批量重映射在这里是错的：深字压在暗照片上根本读不出来（实测截图上
+   「欢迎回来，我的学习伙伴」几乎看不见）。所以这里开一个例外：
+
+     · 文案块（.world-scene-copy）保持浅色字 + 更强投影
+     · HUD 药丸、状态牌、底部提示继续走「黑底 → 白卡」重映射 ——
+       白卡浮在照片上本来就很清楚，正是浅色模式想要的样子
+     · 其余硬编码深底（bg-[#050807] 等）转白卡
+     · 带子底缘的融色改成融回页面底色，浅色下不能再出现一条黑边
+   ============================================================ */
+
+/*
+ * 文案块：浅色模式仍然用浅色字（它背后的表面是照片）。
+ * 但按钮要排除在外：文案块里的次级按钮是 bg-black/40 + text-white/xx，
+ * 浅色模式下底色会被翻成白卡 —— 再把字强行改回白色就是白底白字（实测
+ * 「回到佛像大厅」几乎看不见）。排除后按钮自己拿回深字，照片上的标题
+ * 与正文继续用浅字。
+ */
+html.theme-custom[data-mode="light"] .world-scene-copy [class*="text-white"]:not(button) {
+  color: #ffffff !important;
+}
+html.theme-custom[data-mode="light"] .world-scene-copy [class*="text-white/"]:not(button) {
+  color: rgba(255, 255, 255, 0.86) !important;
+}
+html.theme-custom[data-mode="light"] .world-scene-copy {
+  text-shadow:
+    0 2px 18px rgba(0, 0, 0, 0.8),
+    0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* 世界组件里的硬编码深底（GuardianScene 的回复面板、场景根节点等）转白卡 */
+html.theme-custom[data-mode="light"] [class*="bg-[#050807]"] {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+}
+
+/* 带子底缘：融回页面底色，而不是压成一条黑边 */
+html.theme-custom[data-mode="light"] .world-band-fade {
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--tp-bg, #ffffff) 88%, transparent)
+  ) !important;
+}
+
+/* 照片上的玻璃芯片（HeroChip / 底部提示）用的是内联深底，
+   浅色模式下保持深底浅字才读得出来，只补一点边框可见度 */
+html.theme-custom[data-mode="light"] .world-chip {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+/*
+ * 浅色下被翻成白卡的那些药丸（日期、连续天数/XP/词量、场景数…）会落在
+ * 照片的亮部（天空、寺庙、水面）上，白卡配白天空几乎看不见边界。
+ * 给它们补一层柔和投影，让卡片从照片上浮起来 —— 只动投影，不改颜色。
+ */
+html.theme-custom[data-mode="light"] .world-scene [class*="bg-black/"],
+html.theme-custom[data-mode="light"] .world-band [class*="bg-black/"] {
+  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.32);
+}
+
+/* ============================================================
+   Visual Worlds — "Theme = Visual World"
+   ------------------------------------------------------------
+   上面那一段是旧的颜色变量层（Color Switcher）。
+   这一段是新增的**形态语言层**：四个世界通过 visualMode 切换
+   typography / radius / border / shadow / texture / animation /
+   image treatment，而不只是换颜色。
+   组件不需要知道自己在哪个世界 —— 只消费变量即可。
+   ============================================================ */
+
+/* ---------- 1. 主题切换过渡（300–500ms，不刷新、不重排） ---------- */
+html[data-visual-mode] body,
+html[data-visual-mode] .premium-glass,
+html[data-visual-mode] .premium-glass-strong,
+html[data-visual-mode] .page-shell,
+html[data-visual-mode] .tp-surface {
+  transition:
+    background-color 380ms var(--tp-anim-ease, ease),
+    background-image 380ms var(--tp-anim-ease, ease),
+    color 380ms var(--tp-anim-ease, ease),
+    border-color 380ms var(--tp-anim-ease, ease),
+    box-shadow 380ms var(--tp-anim-ease, ease);
+}
+/*
+ * ⚠️ 这里**不能**写 `html[data-visual-mode] * { transition-property: none }`。
+ * 之前为了"避免尺寸过渡引起抖动"这么写过一次，结果是全站所有过渡
+ * 动画（hover、淡入、卡片 lift）一起失效 —— 选择器 `*` 太宽了。
+ * 正确做法：只在需要跟随主题变化的**具体属性**上做过渡（见上一条规则），
+ * 不对整个元素列表关掉 transition。 */
+
+
+/* ---------- 2. Typography：标题字体随世界变化 ---------- */
+html[data-visual-mode] h1,
+html[data-visual-mode] h2,
+html[data-visual-mode] h3,
+html[data-visual-mode] .tp-display {
+  font-family: var(--tp-font-display);
+  font-weight: var(--tp-display-weight, 400);
+  letter-spacing: var(--tp-display-tracking, 0);
+}
+html[data-visual-mode] body { font-family: var(--tp-font-body); }
+
+/* PAPER：正文也走衬线，读书感更强 */
+html[data-visual-mode="paper"] p,
+html[data-visual-mode="paper"] li {
+  font-family: "Noto Sans Thai", Georgia, serif;
+  line-height: 1.85;
+}
+
+/* ---------- 3. 圆角：三个层级都随世界走 ---------- */
+html[data-visual-mode] .premium-glass,
+html[data-visual-mode] .premium-glass-strong,
+html[data-visual-mode] .tp-surface {
+  border-radius: var(--tp-radius-md);
+  border-width: var(--tp-border-width);
+  border-color: var(--tp-border);
+  box-shadow: var(--tp-shadow);
+}
+
+/* ---------- 4. 图片处理：四个世界绝不能共用同一套滤镜 ---------- */
+html[data-visual-mode] img:not([data-no-theme-filter]) {
+  filter: var(--tp-img-filter);
+  transition: filter 380ms var(--tp-anim-ease, ease);
+}
+/* 头像、图标不该被调色 */
+html[data-visual-mode] img[alt=""],
+html[data-visual-mode] .no-theme-filter img,
+html[data-visual-mode] img.no-theme-filter {
+  filter: none;
+}
+/* PAPER：图片更像印刷品，给一点纸边 */
+html[data-visual-mode="paper"] article img,
+html[data-visual-mode="paper"] figure img {
+  border: 1px solid var(--tp-border);
+  padding: 6px;
+  background: #fffdf7;
+}
+
+/* ---------- 5. 纹理层：每个世界一种"空气" ---------- */
+html[data-visual-mode] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: var(--tp-texture-opacity);
+}
+
+/* MIDNIGHT：极低的星尘 + 夜空渐变 */
+html[data-visual-mode="midnight"] body::before {
+  background-image:
+    radial-gradient(120% 80% at 50% -10%, rgba(31, 107, 82, 0.16), transparent 62%),
+    radial-gradient(1px 1px at 18% 24%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 72% 16%, rgba(255, 255, 255, 0.34), transparent),
+    radial-gradient(1px 1px at 41% 62%, rgba(255, 255, 255, 0.3), transparent),
+    radial-gradient(1px 1px at 86% 72%, rgba(255, 255, 255, 0.26), transparent),
+    radial-gradient(1px 1px at 8% 82%, rgba(255, 255, 255, 0.22), transparent);
+}
+
+/* PAPER：纸张纤维颗粒（SVG 噪点，纯 CSS 不加载图片） */
+html[data-visual-mode="paper"] body::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+  opacity: calc(var(--tp-texture-opacity) * 0.5);
+}
+
+/* FOREST：山雾（两层很淡的横向渐变，缓慢漂移） */
+html[data-visual-mode="forest"] body::before {
+  background-image:
+    linear-gradient(180deg, rgba(180, 205, 185, 0.07), transparent 42%),
+    linear-gradient(180deg, transparent 58%, rgba(120, 160, 130, 0.09)),
+    radial-gradient(90% 50% at 30% 100%, rgba(78, 122, 94, 0.12), transparent 70%);
+  animation: tp-mist 42s ease-in-out infinite alternate;
+}
+@keyframes tp-mist {
+  from { background-position: 0 0, 0 0, 0 0; transform: translateX(-1.2%); }
+  to   { background-position: 3% 1%, -3% -1%, 2% 0; transform: translateX(1.2%); }
+}
+
+/* MODERN：极淡网格，理性、结构化 */
+html[data-visual-mode="modern"] body::before {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* 减弱动效：关掉雾气漂移 */
+@media (prefers-reduced-motion: reduce) {
+  html[data-visual-mode="forest"] body::before { animation: none; }
+}
+
+/* ---------- 6. 动画速度：四个世界各自的节奏 ---------- */
+html[data-visual-mode] .tp-anim,
+html[data-visual-mode] .transition-all,
+html[data-visual-mode] .transition-colors {
+  transition-duration: var(--tp-anim);
+  transition-timing-function: var(--tp-anim-ease);
+}
+/* MODERN 要"快而准"：微交互更短 */
+html[data-visual-mode="modern"] button,
+html[data-visual-mode="modern"] a {
+  transition-duration: calc(var(--tp-anim) * 0.6);
+}
+/* PAPER 几乎静止：不做位移类动效 */
+html[data-visual-mode="paper"] .tp-parallax,
+html[data-visual-mode="paper"] .thai-ambient-foreground {
+  display: none;
+}
+
+/* ---------- 7. 密度：PAPER 留白更多，MODERN 更紧凑 ---------- */
+html[data-visual-mode] .tp-density {
+  padding: calc(1rem * var(--tp-density));
+}
+
+/* ---------- 8. 移动端降载：保性能，不取消主题 ---------- */
+@media (max-width: 767px) {
+  html[data-visual-mode] body::before { opacity: calc(var(--tp-texture-opacity) * 0.5); }
+  html[data-visual-mode] .premium-glass,
+  html[data-visual-mode] .premium-glass-strong {
+    backdrop-filter: blur(calc(var(--tp-blur) * 0.5));
+  }
+  html[data-visual-mode="forest"] body::before { animation: none; }
+}
+
+/* ============================================================
+   主题切换窗口（Theme Switch Window）
+   ------------------------------------------------------------
+   问题：兼容垫片重映射了约 2800 个颜色类名，它们是**瞬间突变**的 ——
+   只有壳层平滑、页面内部硬切，看起来像闪一下。
+
+   不能直接写 `html[data-visual-mode] * { transition: ... }`：
+   那条规则的特异性与 Tailwind 的 `.transition-colors` 相同且在后，
+   会**永久覆盖**组件的 hover/淡入时序（已经踩过一次类似坑：
+   之前写过 `* { transition-property: none }`，把全站动画都杀了）。
+
+   正确做法是"切换窗口"：切换时给 <html> 加 `.theme-switching`，
+   420ms 后移除。只在这段窗口里做全局过渡，日常交互不受影响。
+   这里的 !important 只在窗口内生效，是这种技术的标准用法。
+   ============================================================ */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition:
+    color 420ms ease,
+    background-color 420ms ease,
+    border-color 420ms ease,
+    box-shadow 420ms ease,
+    fill 420ms ease,
+    stroke 420ms ease,
+    filter 420ms ease,
+    opacity 420ms ease !important;
+  /* 不碰 width/height/padding/margin，避免 layout 抖动 */
+}
+
+/* 用户要求减弱动效时不做这个过渡 */
+@media (prefers-reduced-motion: reduce) {
+  html.theme-switching,
+  html.theme-switching *,
+  html.theme-switching *::before,
+  html.theme-switching *::after {
+    transition: none !important;
+  }
+}
+
+/* ============================================================
+   Visual Worlds · 表面与层级（Surface & Elevation）
+   ------------------------------------------------------------
+   为什么要重做这一层
+   ------------------
+   全站最主要的表面类是 `premium-glass`（59 处）、`.glass`（83 处，含
+   premium-glass 的误匹配）、`liquid-glass`（19）、`apple-surface`（13）。
+   它们原来的写法**各自为政、而且大多是深色世界的硬编码值**：
+
+     · .premium-glass  background: rgba(255,255,255,.06) 渐变 + 白边框
+       → 在米白纸上：白叠加白 = 表面完全消失，边框也看不见
+     · .liquid-glass    background: rgba(255,255,255,.01)  → 几乎不存在
+     · .glass           .dark 规则给深绿 0.75；PAPER 挂着 .dark
+       → 米白纸上出现深绿玻璃块
+     · .apple-surface   走 --tp-card（已部分世界化），但阴影是硬编码黑
+
+   结果是"主题换了，但卡片长得一样/或更难看了"。这里统一成一套
+   世界表面 token，四个世界的表面、边框、内高光、阴影、选中色、
+   滚动条、焦点环全部跟随世界。
+   ============================================================ */
+
+/* ---------- 一级表面（卡片主体） ---------- */
+html[data-visual-mode] .premium-glass,
+html[data-visual-mode] .glass,
+html[data-visual-mode] .liquid-glass,
+html[data-visual-mode] .apple-material {
+  background: var(--tp-surface-bg);
+  border: var(--tp-border-width, 1px) solid var(--tp-hairline);
+  box-shadow: var(--tp-surface-inset), var(--tp-shadow);
+  backdrop-filter: blur(var(--tp-blur)) saturate(118%);
+  -webkit-backdrop-filter: blur(var(--tp-blur)) saturate(118%);
+}
+
+/* ---------- 二级表面（抬升：弹窗、强调卡） ---------- */
+html[data-visual-mode] .premium-glass-strong,
+html[data-visual-mode] .apple-surface {
+  background: var(--tp-surface-bg-strong);
+  border: var(--tp-border-width, 1px) solid var(--tp-hairline);
+  box-shadow: var(--tp-surface-inset-strong), var(--tp-shadow-deep);
+  backdrop-filter: blur(calc(var(--tp-blur) * 1.15)) saturate(122%);
+  -webkit-backdrop-filter: blur(calc(var(--tp-blur) * 1.15)) saturate(122%);
+}
+
+/* apple-surface 的悬停态也跟随世界（原来硬编码 rgba(0,0,0,.18)） */
+html[data-visual-mode] .apple-surface:hover {
+  border-color: color-mix(in srgb, var(--tp-primary) 34%, transparent);
+  box-shadow: var(--tp-surface-inset-strong), var(--tp-shadow-deep);
+}
+
+/* 金色玻璃（VIP）保持金色语义，但明暗跟随世界 */
+html[data-visual-mode] .premium-glass-gold {
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--tp-accent) 10%, var(--tp-surface-bg)),
+    color-mix(in srgb, var(--tp-accent) 3%, var(--tp-surface-bg))
+  );
+  border: var(--tp-border-width, 1px) solid color-mix(in srgb, var(--tp-accent) 30%, transparent);
+  box-shadow: var(--tp-surface-inset), var(--tp-shadow);
+}
+
+/* ---------- 选中文字 / 滚动条 / 焦点环：也属于"世界感" ---------- */
+html[data-visual-mode] ::selection {
+  background: var(--tp-selection);
+  color: var(--tp-text);
+}
+html[data-visual-mode] * {
+  scrollbar-color: var(--tp-scroll) transparent;
+}
+html[data-visual-mode] ::-webkit-scrollbar-thumb {
+  background: var(--tp-scroll);
+  border-radius: 999px;
+}
+html[data-visual-mode] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+html[data-visual-mode] :focus-visible {
+  outline: 2px solid var(--tp-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ---------- 外壳：侧边栏 / 手机底栏 ----------
+   原来侧边栏是硬编码 `bg-[#121e24]/92`，四个世界都是同一块深绿 ——
+   它是每个页面都在的元素，主题换了它不变，"换世界"的感觉就立不住。
+   这里用现成的 `.theme-sidebar` / `.apple-mobile-tabbar` 钩子接管。
+   背景优先级要高于原本的 `bg-[#121e24]/92` 工具类，所以带 !important。 */
+html[data-visual-mode] .theme-sidebar {
+  background: var(--tp-shell-bg) !important;
+  border-right-color: var(--tp-shell-border) !important;
+  box-shadow: var(--tp-shell-shadow) !important;
+}
+html[data-visual-mode] .apple-mobile-tabbar {
+  background: var(--tp-shell-bg) !important;
+  border-top-color: var(--tp-shell-border) !important;
+  box-shadow: var(--tp-shell-shadow-up) !important;
+}

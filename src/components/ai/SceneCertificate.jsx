@@ -16,6 +16,12 @@ export default function SceneCertificate({
   totalStages,
   sceneEmoji,
   date,
+  // 以下文案可覆盖：课程结业证书复用同一张卡片时改标签即可
+  badgeText = "SCENE COMPLETE",
+  vocabLabel = "学习词汇",
+  stagesLabel = "对话轮数",
+  characterLabel = "对话角色",
+  shareText,
 }) {
   const cardRef = useRef(null);
 
@@ -53,8 +59,10 @@ export default function SceneCertificate({
     try {
       if (navigator.share) {
         await navigator.share({
-          title: `ThaiAI 场景完成证书 — ${sceneTitle}`,
-          text: `我在 ThaiAI 完成了「${sceneTitle}」场景对话！学习了 ${vocabLearned} 个词汇，完成了 ${stagesComplete} 轮对话。🎭`,
+          title: `ThaiAI 证书 — ${sceneTitle}`,
+          text:
+            shareText ||
+            `我在 ThaiAI 完成了「${sceneTitle}」场景对话！学习了 ${vocabLearned} 个词汇，完成了 ${stagesComplete} 轮对话。🎭`,
           url: window.location.href,
         });
       } else {
@@ -106,7 +114,7 @@ export default function SceneCertificate({
           <div className="flex items-center justify-center gap-2">
             <Sparkles className="h-4 w-4 text-yellow-300/60" />
             <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-yellow-300/60">
-              SCENE COMPLETE
+              {badgeText}
             </span>
             <Sparkles className="h-4 w-4 text-yellow-300/60" />
           </div>
@@ -140,17 +148,17 @@ export default function SceneCertificate({
             <div className="rounded-xl border border-emerald-300/10 bg-emerald-400/[0.05] p-3">
               <BookOpen className="mx-auto h-4 w-4 text-emerald-300/60" />
               <div className="mt-2 text-2xl font-black text-emerald-300">{vocabLearned}</div>
-              <div className="mt-0.5 text-[10px] text-white/30">学习词汇</div>
+              <div className="mt-0.5 text-[10px] text-white/30">{vocabLabel}</div>
             </div>
             <div className="rounded-xl border border-yellow-300/10 bg-yellow-300/[0.05] p-3">
               <MessageCircle className="mx-auto h-4 w-4 text-yellow-300/60" />
               <div className="mt-2 text-2xl font-black text-yellow-300">{stagesComplete}</div>
-              <div className="mt-0.5 text-[10px] text-white/30">对话轮数</div>
+              <div className="mt-0.5 text-[10px] text-white/30">{stagesLabel}</div>
             </div>
             <div className="rounded-xl border border-purple-300/10 bg-purple-400/[0.05] p-3">
               <User className="mx-auto h-4 w-4 text-purple-300/60" />
               <div className="mt-2 text-sm font-bold text-purple-300 truncate">{characterName || "AI 老师"}</div>
-              <div className="mt-0.5 text-[10px] text-white/30">对话角色</div>
+              <div className="mt-0.5 text-[10px] text-white/30">{characterLabel}</div>
             </div>
           </div>
 

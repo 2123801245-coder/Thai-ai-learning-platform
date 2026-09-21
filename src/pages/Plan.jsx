@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLearningProgress } from "@/hooks/useLearningProgress";
-import { courses } from "@/data/courses";
-import { getLessonsByCourseId } from "@/data/lessons";
+import { courses, getCourseLessons } from "@/data/courses";
 import { getCourseStats, useCourseProgress } from "@/lib/courseProgress";
 import { fetchWrongBook } from "@/lib/wordBooks";
+import { buildDailyTasks } from "@/lib/profileDriven";
+import { useUserProfile } from "@/lib/userProfile";
 import { getAiTeacherMemory, getAiTeacherPlan } from "@/api/aiTeacher";
 import { getPlanOverview, checkInPlan } from "@/api/plan";
 import { Crown } from "lucide-react";
@@ -41,12 +42,10 @@ import {
 const STORAGE_KEY = "thai_ai_plan_v1";
 const PLAN_KEY = "thai_ai_plan_tasks_v1";
 
-const defaultTasks = [
-  { id: "vocab", title: "学习 10 个单词", description: "完成今日词汇任务", goal: "10 词" },
-  { id: "video", title: "观看 1 节视频", description: "完成一节课程视频", goal: "1 节" },
-  { id: "speaking", title: "完成 5 分钟口语", description: "开口练习泰语发音", goal: "5 分钟" },
-  { id: "chat", title: "进行 1 次 AI 对话", description: "和 AI 老师聊一个场景", goal: "1 次" },
-];
+/* 默认任务改由画像生成：见 src/lib/profileDriven.js 的 buildDailyTasks()
+   （无画像时退化为中性基准：10 词 / 1 节课 / 5 分钟口语 / 1 次对话）。
+   上面这些 id（vocab / video / speaking / chat / review）与 TASK_META
+   及自动完成判定保持一致。 */
 
 /* 每个任务类型的图标 / 配色 / 能力入口路由 */
 const TASK_META = {
@@ -168,6 +167,10 @@ export default function Plan() {
 
   const { progress: learningProgress, loading: progressLoading } = useLearningProgress();
 
+  /* 学习画像（AI 入学测试产物）：决定今日任务的词量、时长与定向任务 */
+  const { profile } = useUserProfile();
+  const profileTasks = useMemo(() => buildDailyTasks(profile), [profile]);
+
   /* 错题本数量（用于「复习错题」任务提示，无错题则视为已完成） */
   useEffect(() => {
     fetchWrongBook()
@@ -179,7 +182,7 @@ export default function Plan() {
     () =>
       courses.reduce(
         (s, course) => {
-          const lessons = getLessonsByCourseId(course.id);
+          const lessons = getCourseLessons(course.id);
           const stats = getCourseStats(course.id, lessons);
           return {
             completed: s.completed + stats.completedCount,
@@ -208,21 +211,27 @@ export default function Plan() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* AI 个性化任务（有则用之，否则回退默认任务） */
+  /* AI 个性化任务（有则用之，否则用画像定制的默认任务） */
   const taskList =
-    savedPlan?.tasks?.length > 0 ? savedPlan.tasks : defaultTasks;
+    savedPlan?.tasks?.length > 0 ? savedPlan.tasks : profileTasks;
+
+  /* 画像定制的目标值（无画像时 = 原默认值） */
+  const taskTarget = (id, fallback) =>
+    profileTasks.find((task) => task.id === id)?.target ?? fallback;
+
+  const vocabTarget = taskTarget("vocab", 10);
+  const speakingTarget = taskTarget("speaking", 5);
+  const videoTarget = taskTarget("video", 1);
 
   /* 「每日闭环」自动完成：直接读取学习进度真实计数，任务无需手动勾选 */
   const autoCompleted = {
-    vocab:
-      (learningProgress?.today_words || 0) >=
-      Math.min(10, learningProgress?.daily_goal || 10),
-    video: courseSummary.completed > 0,
+    vocab: (learningProgress?.today_words || 0) >= vocabTarget,
+    video: courseSummary.completed >= videoTarget,
     speaking: Boolean(
       learningProgress?.daily_history?.some(
         (day) =>
           day.date === getToday() &&
-          (day.speaking_minutes || day.speakingMinutes) >= 5
+          (day.speaking_minutes || day.speakingMinutes) >= speakingTarget
       )
     ),
     chat: Boolean(
@@ -578,7 +587,13 @@ export default function Plan() {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-bold text-white">今日任务</h2>
-            <p className="mt-1 text-xs text-white/30">{savedPlan ? "AI 为你定制的个性化任务" : "默认基础任务 · 可用 AI 一键定制"}</p>
+            <p className="mt-1 text-xs text-white/30">
+              {savedPlan
+                ? "AI 为你定制的个性化任务"
+                : profile
+                  ? `按你的画像定制（${profile.thaiLevel} · 每日 ${profileTasks.find((t) => t.id === "vocab")?.target ?? 10} 词）· 可用 AI 一键定制`
+                  : "默认基础任务 · 完成入学测试可自动定制"}
+            </p>
           </div>
           <span className="rounded-lg bg-white/[0.04] px-2.5 py-1 text-[10px] text-white/30">{taskList.length} 项</span>
         </div>
@@ -587,6 +602,7 @@ export default function Plan() {
           <AnimatePresence initial={false}>
             {taskList.map((task) => {
               const meta = TASK_META[task.id] || DEFAULT_META;
+              const route = meta.route || task.route;
               const Icon = meta.Icon || iconMap[task.icon] || BookOpen;
               const done = !!todayDone[task.id];
               return (
@@ -612,12 +628,12 @@ export default function Plan() {
                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${done ? "bg-emerald-400/10 text-emerald-300/70" : meta.chip}`}>
                       {done ? "已完成" : task.goal || "待办"}
                     </span>
-                    {meta.route && !done && (
+                    {route && !done && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          goTo(meta.route);
+                          goTo(route);
                         }}
                         aria-label="前往练习"
                         className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-white/40 transition hover:border-emerald-300/30 hover:text-emerald-300"

@@ -2,18 +2,25 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import SceneCertificate from "@/components/ai/SceneCertificate";
+import TeacherMemoryPanel from "@/components/ai/TeacherMemoryPanel";
+import AIAvatar from "@/components/ai/AIAvatar";
+import useMentorVoice from "@/hooks/useMentorVoice";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageCircle, Plane, Utensils, GraduationCap, ShoppingBag,
   Landmark, Briefcase, Sparkles, Send, Volume2, ArrowLeft, Bot,
   User, Info, ChevronRight, Star, Check, BookOpen, RotateCcw, Mic,
+  Brain, Loader2, BookA,
 } from "lucide-react";
 import { conversationScenes, CONVERSATION_CONFIG } from "@/data/conversations";
-import { getConversationScenes } from "@/api/vocabulary";
 import { askAiTeacher, getAiTeacherQuota } from "@/api/aiTeacher";
+import WorldHero, { HeroChip } from "@/components/world/WorldHero";
 import { ThaiRoof } from "@/components/common/ThaiMotifs";
-import { ThaiCorner, ParticleField } from "@/components/common/ThaiDecor";
+import { ParticleField } from "@/components/common/ThaiDecor";
 import { speakThai, stopThaiAudio } from "@/lib/thaiSpeech";
+import { mergePlacementProfile } from "@/lib/userProfile";
+import { createAudioRecorder } from "@/lib/audioRecorder";
+import { transcribeSpeech } from "@/api/aiTeacher";
 
 /* ── 场景图标 ── */
 const sceneIcons = { MessageCircle, Plane, Utensils, GraduationCap, ShoppingBag, Landmark, Briefcase };
@@ -55,6 +62,7 @@ export default function Conversation() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  const [showMemory, setShowMemory] = useState(false); // 老师记忆面板（合并自 AI Speaking Room）
 
   /* 浮动 AI 助手「解释这个词」携带的待翻译问题 → 预填输入框 */
   useEffect(() => {
@@ -71,6 +79,9 @@ export default function Conversation() {
 
   const [scenes, setScenes] = useState(conversationScenes);
   const bottomRef = useRef(null);
+  /* 首屏两个 CTA 的落点（直接说话区 / 情景场景列表） */
+  const voiceRef = useRef(null);
+  const scenesRef = useRef(null);
 
   // 优先使用本地内置数据（v2 多轮对话树），后端作为备用
   // useEffect(() => {
@@ -101,6 +112,18 @@ export default function Conversation() {
     setScore({ vocabLearned: 0, stagesComplete: 0 });
     setCompleted(false);
     setAiNotice("");
+  }, []);
+
+  /* 首页/每日任务直达场景：/conversation?scene=travel
+     （任务卡里的「练 1 个旅行场景 / 商务场景 / 台词跟读」都走这个入口） */
+  useEffect(() => {
+    const sceneId = (searchParams.get("scene") || "").trim();
+    if (!sceneId) return;
+
+    const found = scenes.find((scene) => scene.id === sceneId);
+    if (found) openScene(found);
+    // 只在首帧应用一次（后续由用户自己切换场景）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const closeScene = useCallback(() => {
@@ -155,6 +178,8 @@ export default function Conversation() {
       const res = await askAiTeacher({
         message: text,
         action: "conversation",
+        // 入学画像：老师按 A0~C1 等级控制泰语难度、纠错重点与目标场景倾斜
+        profile: mergePlacementProfile(),
         scene: {
           id: activeScene.id,
           title: activeScene.title,
@@ -321,26 +346,74 @@ export default function Conversation() {
       <div className="relative space-y-6">
         <ParticleField color="#f5d67b" opacity={0.28} />
 
-        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="relative">
-          <ThaiCorner corners={["tr"]} size={22} className="hidden sm:block" />
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.2em] text-emerald-300/70">
-                <Sparkles className="h-4 w-4" />
-                AI THAI CONVERSATION
-              </div>
-              <h1 className="mt-3 text-3xl font-black text-white">对话练习</h1>
-              <p className="mt-2 text-sm text-white/40">
-                选择场景，和 AI 泰语老师进行多轮真实对话
-              </p>
-              <div className="mt-2 flex items-center gap-2">
-                <span className="rounded-lg border border-purple-300/15 bg-purple-400/[0.06] px-2 py-0.5 text-[10px] font-bold text-purple-300/60">🎭 沉浸式情景模拟</span>
-                <span className="rounded-lg border border-emerald-300/15 bg-emerald-400/[0.06] px-2 py-0.5 text-[10px] font-bold text-emerald-300/60">💬 AI 自由对话</span>
-              </div>
-            </div>
-            <AiStatusBadge />
-          </div>
-        </motion.div>
+        {/*
+         * 首屏：与首页同一套构图语言（同一张宽幅世界 + 左侧泰中文案 +
+         * 右侧真实数字 HUD）。原来那个 emerald 小标题栏撤掉 —— 它和首页
+         * 的打开方式不是同一个世界。
+         */}
+        <WorldHero
+          eyebrow="ThaiAi Conversation Room"
+          thai="ห้องสนทนากับครู"
+          title="AI 对话室"
+          subtitle="选个场景开始情景对话，或直接开口和老师说话。老师按你的等级、目标和兴趣调整说法，也记得你的薄弱点。"
+          focus="46% 42%"
+          accent="#6ee7a8"
+          ariaLabel="AI 对话室"
+          badge={<AiStatusBadge />}
+          stats={[
+            { Icon: MessageCircle, value: `${scenes.length} 个场景`, label: "情景对话场景", tone: "text-emerald-300" },
+            {
+              Icon: Mic,
+              value: quota?.isVip ? "无限" : quota ? `${quota.remainingToday ?? 0} 次` : "…",
+              label: "今日 AI 自由对话剩余次数",
+              tone: "text-[#e8c684]",
+            },
+            { Icon: Brain, value: "老师记得你", label: "AI 老师长期记忆（目标 / 薄弱点 / 兴趣）", tone: "text-violet-300" },
+          ]}
+          chips={
+            <>
+              <HeroChip accent="#6ee7a8">💬 AI 自由对话</HeroChip>
+              <HeroChip accent="#e8c684">🎙️ 语音对话 · 发音评分</HeroChip>
+              <HeroChip accent="#c4b5fd">🎭 沉浸式情景模拟</HeroChip>
+            </>
+          }
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  voiceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+                className="group flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-400/[0.14] px-4 py-2.5 text-[12px] font-bold text-emerald-50 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-emerald-300/45 hover:bg-emerald-400/[0.22]"
+              >
+                <Mic className="h-4 w-4 text-emerald-300 transition group-hover:scale-110" />
+                直接开口和老师说话
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  scenesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3.5 py-2.5 text-[11px] font-semibold text-white/70 backdrop-blur-xl transition hover:text-white"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-[#e8c684]" />
+                挑一个情景场景
+              </button>
+            </>
+          }
+          footer={
+            /* 玻璃芯片而不是裸文字：它浮在照片上，浅色模式会把它翻成白卡深字，
+               既不掉底也不会在照片上读不出来 */
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-black/45 px-3 py-1.5 text-[11px] text-white/60 backdrop-blur-xl">
+              往下：老师的记忆面板 · 情景对话场景 · 发音评分
+            </span>
+          }
+        />
+
+        {/* ══ 直接和老师说话（合并自 AI Speaking Room）══ */}
+        <div ref={voiceRef} className="scroll-mt-6">
+          <VoiceLobby onOpenMemory={() => setShowMemory(true)} />
+        </div>
 
         <div className="flex items-start gap-3 rounded-2xl border border-yellow-300/[0.08] bg-gradient-to-r from-yellow-300/[0.05] via-white/[0.02] to-emerald-400/[0.04] p-4">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-300/70" />
@@ -364,7 +437,7 @@ export default function Conversation() {
         </div>
 
         {/* 场景卡片 */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div ref={scenesRef} className="grid scroll-mt-6 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {scenes.map((scene, index) => {
             const Icon = sceneIcons[scene.icon] || MessageCircle;
             return (
@@ -430,6 +503,23 @@ export default function Conversation() {
             );
           })}
         </div>
+
+        {/* 老师记忆面板（合并自 AI Speaking Room） */}
+        <AnimatePresence>
+          {showMemory && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+              onClick={() => setShowMemory(false)}
+            >
+              <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[420px]">
+                <TeacherMemoryPanel onClose={() => setShowMemory(false)} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -459,8 +549,35 @@ export default function Conversation() {
             <p className="text-xs text-white/35">AI 泰语老师 · {activeScene.subtitle}</p>
           </div>
         </div>
-        <AiStatusBadge compact />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowMemory((v) => !v)}
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-semibold text-white/55 transition hover:border-emerald-300/30 hover:text-emerald-200"
+            aria-expanded={showMemory}
+          >
+            <Brain className="h-4 w-4" />
+            <span className="hidden sm:inline">老师的记忆</span>
+          </button>
+          <AiStatusBadge compact />
+        </div>
       </motion.div>
+
+      {/* 老师记忆抽屉 */}
+      <AnimatePresence>
+        {showMemory && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+            onClick={() => setShowMemory(false)}
+          >
+            <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[420px]">
+              <TeacherMemoryPanel onClose={() => setShowMemory(false)} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 角色扮演 HUD */}
       {activeScene.roleplay && (
@@ -581,21 +698,14 @@ export default function Conversation() {
           </div>
         )}
 
-        {/* 输入区 */}
+        {/* 输入区（含语音输入：转写后自动发送） */}
         {!completed && (
-          <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
-            className="flex items-center gap-3 border-t border-white/[0.06] p-4">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="输入泰语或中文..."
-              className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition focus:border-emerald-300/30 focus:bg-white/[0.06]"
-            />
-            <button type="submit" disabled={!input.trim() || typing}
-              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 via-teal-400 to-emerald-600 text-white shadow-lg shadow-emerald-900/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">
-              <Send className="h-4 w-4" />
-            </button>
-          </form>
+          <VoiceInputBar
+            input={input}
+            setInput={setInput}
+            onSubmit={() => sendMessage()}
+            typing={typing}
+          />
         )}
 
         {/* 场景完成证书 */}
@@ -638,6 +748,267 @@ export default function Conversation() {
         </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   语音大厅（合并自 AI Speaking Room）：
+   场景选择页顶部的「直接和老师说话」区。
+   AIAvatar + 按住说话 + 老师语音回复，不进场景也能聊。
+════════════════════════════════════════ */
+function VoiceLobby({ onOpenMemory }) {
+  const meterRef = useRef(null);
+  const [exchanges, setExchanges] = useState([]);
+
+  const onExchange = useCallback((exchange) => {
+    setExchanges((prev) => [
+      ...prev.slice(-2),
+      { heard: exchange.heard, reply: exchange.reply },
+    ]);
+  }, []);
+
+  const voice = useMentorVoice({ meterRef, sceneId: null, onExchange });
+  const phase = voice.phase;
+  const busy = phase !== "idle";
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative overflow-hidden rounded-3xl border border-emerald-300/[0.12] bg-gradient-to-br from-emerald-950/60 via-black/50 to-[#050807]/80 p-5 sm:p-6"
+      aria-label="直接和老师说话"
+    >
+      <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-400/[0.07] blur-3xl" />
+
+      <div className="relative flex flex-col items-center gap-5 sm:flex-row sm:gap-7">
+        {/* 老师头像 + 状态 */}
+        <div className="flex flex-col items-center gap-2">
+          <AIAvatar
+            state={phase === "idle" ? "idle" : phase}
+            level={phase === "listening" || phase === "speaking" ? 0.55 : 0}
+            size={120}
+            className="drop-shadow-[0_0_28px_rgba(52,211,153,0.2)]"
+          />
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.18em] text-emerald-300/70">
+            {phase === "idle" ? "老师已就位" : phase === "listening" ? "正在听你说…" : phase === "thinking" ? "思考中…" : "老师正在说"}
+          </p>
+        </div>
+
+        {/* 交互区 */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-white">直接和老师说话</h2>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-white/40">
+                不用选场景，开口就行。老师会记住你的目标、接住你的话题，还能给你的发音打分。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenMemory}
+              className="flex shrink-0 items-center gap-1 rounded-full border border-white/[0.08] px-2.5 py-1 text-[10.5px] font-semibold text-white/55 transition hover:border-emerald-300/40 hover:text-emerald-200"
+            >
+              <Brain className="h-3 w-3" />
+              老师的记忆
+            </button>
+          </div>
+
+          {/* 最近一轮对话回顾 */}
+          <div className="mt-3 space-y-1.5">
+            {exchanges.length === 0 && !voice.error ? (
+              <p className="text-[11px] text-white/25">
+                第一次对话会出现在这里 · 麦克风权限首次使用时申请
+              </p>
+            ) : null}
+            {voice.error ? (
+              <p className="text-[11px] text-amber-200/85">{voice.error}</p>
+            ) : null}
+            {exchanges.map((ex, i) => (
+              <div key={i} className="rounded-xl border border-white/[0.06] bg-black/30 px-3 py-2">
+                <p className="text-[11px] text-white/45">你：{ex.heard || "（没听清，请再说一次）"}</p>
+                <p className="mt-0.5 font-viaoda text-[14px] text-emerald-50">{ex.reply.thai}</p>
+                {ex.reply.chinese ? (
+                  <p className="mt-0.5 text-[10.5px] text-white/45">{ex.reply.chinese}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          {/* 麦克风 + 发音评分 */}
+          <div className="mt-4 flex items-center gap-2.5">
+            <button
+              type="button"
+              ref={meterRef}
+              onClick={() => (phase === "listening" ? voice.stop() : voice.start())}
+              disabled={phase === "thinking" || phase === "speaking"}
+              style={{ "--lvl": "0" }}
+              className={`mentor-mic flex h-12 w-12 items-center justify-center rounded-full border transition ${
+                phase === "listening"
+                  ? "border-emerald-300/60 bg-emerald-400/25"
+                  : "border-emerald-300/25 bg-emerald-400/[0.12] hover:border-emerald-300/45"
+              } disabled:cursor-wait disabled:opacity-60`}
+              aria-label={phase === "listening" ? "结束说话" : "开始说泰语"}
+            >
+              {phase === "thinking" || phase === "speaking" ? (
+                <Loader2 className="h-5 w-5 animate-spin text-emerald-200" />
+              ) : (
+                <Mic className="h-5 w-5 text-emerald-300" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={voice.assessPronunciation}
+              disabled={busy || voice.analyzing || !voice.reply}
+              title="对老师刚说的那句做发音评分"
+              className="flex h-10 items-center gap-1.5 rounded-full border border-[#e8c684]/30 bg-[#e8c684]/[0.12] px-3.5 text-[11.5px] font-bold text-[#e8c684] transition hover:bg-[#e8c684]/[0.22] disabled:opacity-35"
+            >
+              {voice.analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookA className="h-4 w-4" />}
+              发音评分
+            </button>
+            {voice.pronunciation ? (
+              <span className="text-[11.5px] font-bold text-[#e8c684]">
+                {voice.pronunciation.score} 分
+                {voice.pronunciation.tone ? ` · 声调 ${voice.pronunciation.tone}` : ""}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </motion.section>
+  );
+}
+
+/* ════════════════════════════════════════
+   聊天页语音输入条：按住说话 → 转写 → 发送
+   （转写失败不阻塞，输入框照常可用）
+════════════════════════════════════════ */
+function VoiceInputBar({ input, setInput, onSubmit, typing }) {
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [error, setError] = useState("");
+  const recorderRef = useRef(null);
+  const rafRef = useRef(0);
+  const timerRef = useRef(0);
+  const btnRef = useRef(null);
+
+  const paintLevel = useCallback(() => {
+    const el = btnRef.current;
+    const rec = recorderRef.current;
+    if (el && rec) {
+      const level = rec.isRecording?.() ? rec.getLevel?.() || 0 : 0;
+      el.style.setProperty("--lvl", level.toFixed(3));
+    }
+    rafRef.current = requestAnimationFrame(paintLevel);
+  }, []);
+
+  const stopLoop = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    }
+    btnRef.current?.style.setProperty("--lvl", "0");
+  }, []);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    stopLoop();
+    try { recorderRef.current?.stop?.(); } catch { /* 已停 */ }
+  }, [stopLoop]);
+
+  const start = async () => {
+    if (recording || transcribing || typing) return;
+    setError("");
+    if (!recorderRef.current) recorderRef.current = createAudioRecorder();
+    try {
+      await recorderRef.current.start();
+    } catch {
+      setError("麦克风没连上（权限或设备问题），打字也可以");
+      return;
+    }
+    setRecording(true);
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(paintLevel);
+    timerRef.current = setTimeout(() => finishRef.current?.(), 15000);
+  };
+
+  const finish = async () => {
+    const rec = recorderRef.current;
+    if (!rec || !recording) return;
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = 0; }
+    stopLoop();
+    setRecording(false);
+    let wav = null;
+    try { wav = rec.stop(); } catch { wav = null; }
+    if (!wav) { setError("这一段没录到声音，再试一次"); return; }
+
+    setTranscribing(true);
+    try {
+      const form = new FormData();
+      form.append("audio", wav, "chat.wav");
+      form.append("language", "th-TH");
+      const res = await transcribeSpeech(form);
+      const text = String(res?.data?.text || res?.data?.transcript || "").trim();
+      if (text) {
+        setInput(text);
+        // 拿到转写直接发（sendMessage 是异步的，这里只触发）
+        setTimeout(() => onSubmit(), 50);
+      } else {
+        setError("没听清你说的话，再试一次或直接打字");
+      }
+    } catch (e) {
+      setError(
+        e?.response?.status === 401
+          ? "登录后老师才听得到你说话"
+          : "转写服务暂时不可用，直接打字也可以"
+      );
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  const finishRef = useRef(finish);
+  finishRef.current = finish;
+
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); onSubmit(); }}
+      className="flex items-center gap-3 border-t border-white/[0.06] p-4"
+    >
+      <button
+        type="button"
+        ref={btnRef}
+        onClick={() => (recording ? finish() : start())}
+        disabled={transcribing || typing}
+        style={{ "--lvl": "0" }}
+        className={`mentor-mic flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border transition ${
+          recording
+            ? "border-emerald-300/60 bg-emerald-400/25"
+            : "border-white/10 bg-white/[0.04] text-white/50 hover:border-emerald-300/30 hover:text-emerald-200"
+        } disabled:cursor-wait disabled:opacity-40`}
+        aria-label={recording ? "结束录音并发送" : "按住说话（自动转写发送）"}
+      >
+        {transcribing ? (
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-200" />
+        ) : (
+          <Mic className="h-4 w-4" />
+        )}
+      </button>
+      <input
+        value={recording ? "正在听你说…说完点一下麦克风" : input}
+        onChange={(e) => setInput(e.target.value)}
+        readOnly={recording}
+        placeholder="输入泰语或中文，或点左侧麦克风说话"
+        className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition focus:border-emerald-300/30 focus:bg-white/[0.06]"
+      />
+      <button type="submit" disabled={!input.trim() || typing || recording}
+        className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 via-teal-400 to-emerald-600 text-white shadow-lg shadow-emerald-900/30 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">
+        <Send className="h-4 w-4" />
+      </button>
+      {error ? <p className="sr-only">{error}</p> : null}
+      {error ? (
+        <p className="absolute -bottom-1 left-4 hidden text-[10px] text-amber-200/80">{error}</p>
+      ) : null}
+    </form>
   );
 }
 
@@ -740,9 +1111,13 @@ function AiBubble({ text, roman, chinese, vocab, grammar, culturalNote, onSpeak,
 }
 
 /* ── AI 状态徽章 ── */
+/*
+ * AI 状态牌。底色改深（bg-black/45）：它现在挂在首屏那张世界照片上，
+ * 原来那层很淡的翡翠底在亮部寺庙前读不出来。
+ */
 function AiStatusBadge({ compact = false }) {
   return (
-    <div className={`flex items-center gap-2.5 rounded-xl border border-emerald-300/15 bg-emerald-400/[0.06] backdrop-blur-xl ${compact ? "px-3 py-2" : "px-4 py-2.5"}`}>
+    <div className={`flex items-center gap-2.5 rounded-xl border border-emerald-300/15 bg-black/45 backdrop-blur-xl ${compact ? "px-3 py-2" : "px-4 py-2.5"}`}>
       <span className="relative flex h-2.5 w-2.5">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300/60" />
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-300" />

@@ -23,15 +23,16 @@ import {
   BarChart3,
   MessageCircle,
   Languages,
+  Compass,
+  Trophy,
+  RefreshCw,
 } from "lucide-react";
 
 import { BangkokSkyline } from "@/components/common/ThaiDecor";
 
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
-import AITeacher from "@/components/AITeacher";
-import AiTodayMission from "@/components/ai/AiTodayMission";
-import AbilitySection from "@/components/dashboard/AbilitySection";
+// AbilitySection 已随板块迁移到 /universe（LearningUniverse）
 import VipPanel from "@/components/common/VipPanel";
 import {
   ThaiCorner,
@@ -43,18 +44,54 @@ import {
   StaggerGroup,
   StaggerItem,
 } from "@/components/ui/premium";
-import VocabularyCard from "@/components/VocabularyCard";
-import ProgressDashboard from "@/components/ProgressDashboard";
+import DailyMissionCard from "@/components/dashboard/DailyMissionCard";
+import AIRecommendationCard from "@/components/dashboard/AIRecommendationCard";
+
+/* =========================================================
+   ThaiAI World · 沉浸式世界的四层空间
+   （英雄守护者 / 学习星系 / 技能树 / 数字博物馆 + AI 教室）
+========================================================= */
+import AITeacherSpace from "@/components/world/AITeacherSpace";
+import LearningGalaxy from "@/components/world/LearningGalaxy";
+// SkillTree / DigitalMuseum / SharePostcard 已随板块迁移到 /universe（LearningUniverse）
+import {
+  buildIdentity,
+  buildPlanets,
+  buildWorldTheme,
+  currentPlanet,
+} from "@/lib/worldData";
+import { generateLearningPath } from "@/lib/learningPath";
+import { useMediaProgress } from "@/lib/mediaProgress";
+import { useTodayActivity } from "@/lib/useTodayActivity";
+import GuardianScene from "@/components/world/GuardianScene";
+import UniverseRow from "@/components/home/UniverseRow";
+import ContinueLearning from "@/components/home/ContinueLearning";
+import LevelCard from "@/components/home/LevelCard";
+import TodayRecap from "@/components/home/TodayRecap";
 import { useLearningProgress } from "@/hooks/useLearningProgress";
-import { courses } from "@/data/courses";
-import { getLessonsByCourseId } from "@/data/lessons";
+import { courses, getCourseLessons, getLessonHref } from "@/data/courses";
 import { getCourseStats, getCourseProgress } from "@/lib/courseProgress";
 import { useAuth } from "@/lib/AuthContext";
 import { API_BASE_URL } from "@/lib/api";
-import { getPlanOverview } from "@/api/plan";
 import { speakThai } from "@/lib/thaiSpeech";
 import { useFeatureFlag } from "@/lib/features";
 import { adminGenerateCodes } from "@/api/auth";
+import {
+  getLevelMeta,
+  goalEmoji,
+  goalTitle,
+  hasPlacementProfile,
+  directionTitles,
+  mediaTitles,
+} from "@/lib/placement";
+import { useUserProfile } from "@/lib/userProfile";
+import { THAI_TIPS } from "@/data/dailyContent";
+import { useDailyContent } from "@/lib/dailyContent";
+import {
+  buildDailyTasks,
+  getProfileBookHint,
+  recommendCourses,
+} from "@/lib/profileDriven";
 
 
 const TOTAL_WORDS = 500;
@@ -68,393 +105,12 @@ const QUICK_PLANS = [
 
 
 /* =========================================================
-   今日一句泰语 · 泰语诗歌（原创诗句，无侵权风险）
+   今日一句泰语 / 泰语小知识
+
+   内容池（含每条内容的等级与兴趣标签）已移到 src/data/dailyContent.js，
+   按人挑选的逻辑在 src/lib/dailyContent.js：
+   等级 ±1 收敛 + 兴趣命中加权 + 当天稳定 + 近三天不重复。
 ========================================================= */
-
-const DAILY_SENTENCES = [
-  {
-    thai: "สายน้ำไหลผ่านกาลเวลา\nใจเรายังอยู่ที่เดิม",
-    chinese: "河水淌过悠悠时光，\n心仍停在最初的地方。",
-    pronunciation: "sǎai-náam lǎi phàan kaa-laa-wee-laa · jai rao yang yùu thîi doem",
-    category: "诗 · กวีนิพนธ์",
-  },
-  {
-    thai: "ใบไม้ร่วงหล่นตามลม\nฤดูกาลหมุนเวียนสอนใจ",
-    chinese: "落叶随风飘零，\n季节更替，教会人心。",
-    pronunciation: "bai-máai rûuan lòn taam lom · rú-duu-gaan mùn-wian sɔ̌ɔn jai",
-    category: "诗 · กวีนิพนธ์",
-  },
-  {
-    thai: "แสงจันทร์ส่องยามค่ำคืน\nให้ใจที่เหนื่อยล้าได้พัก",
-    chinese: "月光洒落夜晚，\n让疲惫的心得以安歇。",
-    pronunciation: "sǎeng jan sɔ̀ɔng yaam khâm-khuen · hâi jai thîi nʉ̀ai-láa dâai phák",
-    category: "诗 · กวีนิพนธ์",
-  },
-  {
-    thai: "ทุกย่างก้าวคือบทเรียน\nทุกเช้าคือความหวังใหม่",
-    chinese: "每一步都是功课，\n每一个清晨都是新的希望。",
-    pronunciation: "thúk yâang kâao khʉʉ bòt-rian · thúk cháao khʉʉ khwaam-wǎng mài",
-    category: "诗 · กวีนิพนธ์",
-  },
-  {
-    thai: "ดั่งดอกไม้ในสวนใจ\nบานเสมอไม่รู้โรย",
-    chinese: "如心园中的花朵，\n常开不败，永不凋零。",
-    pronunciation: "dàng dɔ̀ɔk-máai nai sǔan jai · baan sà-məə mâi rúu rooy",
-    category: "诗 · กวีนิพนธ์",
-  },
-  {
-    thai: "ยิ้มวันนี้แม้ฝนพรำ\nโลกทั้งใบก็สดใส",
-    chinese: "纵使细雨绵绵，\n今日一笑，全世界都明亮。",
-    pronunciation: "yím wan níi máe fǒn phram · lôok tháng bai gɔ̂ sòt-sǎi",
-    category: "诗 · กวีนิพนธ์",
-  },
-  {
-    thai: "เวลาคือครูที่ใจเย็น\nสอนให้เรารู้จักรอ",
-    chinese: "时间是位耐心的老师，\n教会我们如何等待。",
-    pronunciation: "wee-laa khʉʉ khruu thîi jai yen · sɔ̌ɔn hâi rao rúu-jàk rɔɔ",
-    category: "诗 · กวีนิพนธ์",
-  },
-  {
-    thai: "ฝันของเรายังอยู่ไกล\nแต่ก้าวแรกเริ่มจากวันนี้",
-    chinese: "梦想虽在远方，\n但第一步始于今天。",
-    pronunciation: "fǎn khɔ̌ɔng rao yang yùu klai · tàe kâao rɛ̂ɛk rə̂əm jàak wan níi",
-    category: "诗 · กวีนิพนธ์",
-  },
-];
-
-/* =========================================================
-   泰语小知识
-========================================================= */
-
-const THAI_TIPS = [
-  {
-    type: "🗣️",
-    category: "日常表达",
-    title: "ครับ、ค่ะ、นะ、จ๊ะ",
-    content:
-      "泰语非常常用语气词。男性常用ครับ，女性常用ค่ะ；นะ可以让语气更加柔和，จ๊ะ则常见于亲切、轻松的表达。",
-    thai: "วันนี้ไปกินข้าวกันนะ",
-    chinese: "今天一起去吃饭吧。",
-  },
-  {
-    type: "📚",
-    category: "语法知识",
-    title: "กำลัง 表示“正在”",
-    content:
-      "กำลัง + 动词可以表示动作正在进行，相当于中文的“正在……”。",
-    thai: "ผมกำลังเรียนภาษาไทยครับ",
-    chinese: "我正在学习泰语。",
-  },
-  {
-    type: "📚",
-    category: "语法知识",
-    title: "แล้ว 表示“已经”",
-    content:
-      "แล้ว通常放在动词后面，用来表示动作已经发生或完成。",
-    thai: "ผมกินข้าวแล้วครับ",
-    chinese: "我已经吃饭了。",
-  },
-  {
-    type: "📚",
-    category: "语法知识",
-    title: "จะ 表示将来",
-    content:
-      "จะ + 动词，可以表示将要发生的事情、计划或者打算。",
-    thai: "พรุ่งนี้ผมจะไปมหาวิทยาลัย",
-    chinese: "明天我要去大学。",
-  },
-  {
-    type: "📚",
-    category: "语法知识",
-    title: "ยัง 表示“还、仍然”",
-    content:
-      "ยัง常用于表示某种状态还在持续，也经常和ไม่搭配使用。",
-    thai: "ผมยังไม่กินข้าวครับ",
-    chinese: "我还没吃饭。",
-  },
-  {
-    type: "🔊",
-    category: "发音知识",
-    title: "泰语有五个声调",
-    content:
-      "泰语共有五个声调：中调、低调、降调、高调和升调。声调不同，词义也可能发生变化。",
-    thai: "มา",
-    chinese: "来。",
-  },
-  {
-    type: "🔊",
-    category: "发音知识",
-    title: "注意长短元音",
-    content:
-      "泰语中的元音有长短之分。学习新词时不能只记辅音，还要注意元音的长度。",
-    thai: "กิน",
-    chinese: "吃。",
-  },
-  {
-    type: "🇹🇭",
-    category: "文化知识",
-    title: "พี่ 和 น้อง",
-    content:
-      "泰语非常重视年龄关系。พี่通常称呼比自己年长的人，น้อง通常称呼比自己年幼的人。",
-    thai: "พี่ครับ ขอถามหน่อยครับ",
-    chinese: "哥哥/姐姐，我想问一下。",
-  },
-  {
-    type: "🇹🇭",
-    category: "文化知识",
-    title: "泰国人的礼貌表达",
-    content:
-      "ครับ、ค่ะ不仅仅是语法成分，也是泰语交流中非常重要的礼貌表达。",
-    thai: "ขอบคุณครับ",
-    chinese: "谢谢。",
-  },
-  {
-    type: "⚠️",
-    category: "易错知识",
-    title: "不要完全按照中文语序翻译",
-    content:
-      "很多泰语表达不能逐字对应中文。常见搭配最好整体记忆，而不是一个词一个词地翻译。",
-    thai: "กินข้าว",
-    chinese: "吃饭。",
-  },
-  {
-    type: "⚠️",
-    category: "易错知识",
-    title: "ครับ 和 คะ / ค่ะ 不要混用",
-    content:
-      "ครับ通常由男性使用；女性常使用ค่ะ或คะ。初学阶段很容易混淆。",
-    thai: "สวัสดีครับ",
-    chinese: "你好。（男性说法）",
-  },
-  {
-    type: "💬",
-    category: "口语知识",
-    title: "ไม่เป็นไร 不只是“没关系”",
-    content:
-      "ไม่เป็นไร根据语境可以表示“没关系”“没事”“不用客气”等多种意思。",
-    thai: "ไม่เป็นไรครับ",
-    chinese: "没关系 / 没事。",
-  },
-  {
-    type: "💬",
-    category: "口语知识",
-    title: "โอเค 很常见",
-    content:
-      "โอเค来自英语 OK，在泰国日常口语中非常常见，可以直接理解为“好的”“OK”。",
-    thai: "โอเคครับ",
-    chinese: "好的 / OK。",
-  },
-  {
-    type: "💧",
-    category: "民俗谚语",
-    theme: "时机",
-    title: "น้ำขึ้นให้รีบตัก · 水涨快舀",
-    content:
-      "字面是「水涨了要赶紧舀」，意思是机会来了要马上抓住，不要等它溜走。类似中文「趁热打铁」「机不可失」。",
-    thai: "น้ำขึ้นให้รีบตัก",
-    chinese: "水涨快舀——抓住时机，趁热打铁。",
-  },
-  {
-    type: "🛠️",
-    category: "民俗谚语",
-    theme: "耐心",
-    title: "ช้าๆ ได้พร้าเล่มงาม · 慢工出细活",
-    content:
-      "字面是「慢慢地磨，才能得到漂亮的柴刀」。意思是做事不要急躁，耐心打磨才能做好。类似中文「慢工出细活」「欲速则不达」。",
-    thai: "ช้าๆ ได้พร้าเล่มงาม",
-    chinese: "慢工出细活——欲速则不达。",
-  },
-  {
-    type: "🐟",
-    category: "民俗谚语",
-    theme: "言行",
-    title: "ปลาหมอตายเพราะปาก · 祸从口出",
-    content:
-      "字面是「攀鲈鱼死于自己的嘴」。警示说话要谨慎，很多祸事都因多嘴而起。类似中文「祸从口出」「言多必失」。",
-    thai: "ปลาหมอตายเพราะปาก",
-    chinese: "鱼死于嘴——祸从口出。",
-  },
-  {
-    type: "🐮",
-    category: "民俗谚语",
-    theme: "教育",
-    title: "รักวัวให้ผูก รักลูกให้ตี · 严是爱",
-    content:
-      "字面是「爱牛就要拴住它，爱孩子就要管教他」。意思是真正的爱要包含约束与教导。类似中文「严是爱，松是害」。",
-    thai: "รักวัวให้ผูก รักลูกให้ตี",
-    chinese: "爱牛需拴，爱子须教——严是爱，松是害。",
-  },
-  {
-    type: "🌟",
-    category: "民俗谚语",
-    theme: "励志",
-    title: "ความพยายามอยู่ที่ไหน ความสำเร็จอยู่ที่นั่น · 天道酬勤",
-    content:
-      "泰国家喻户晓的励志谚语：「努力在哪里，成功就在哪里」。鼓励人们坚持不懈，与中文「天道酬勤」「功到自然成」异曲同工。",
-    thai: "ความพยายามอยู่ที่ไหน ความสำเร็จอยู่ที่นั่น",
-    chinese: "努力在哪里，成功就在哪里——天道酬勤。",
-  },
-  {
-    type: "🔥",
-    category: "民俗谚语",
-    theme: "时机",
-    title: "ตีเหล็กเมื่อแดง · 趁热打铁",
-    content:
-      "字面是「铁要趁烧红的时候打」。意思是做事要抓住最佳时机，与中文「趁热打铁」完全对应。",
-    thai: "ตีเหล็กเมื่อแดง",
-    chinese: "趁热打铁——把握时机。",
-  },
-  {
-    type: "🍋",
-    category: "民俗谚语",
-    theme: "耐心",
-    title: "อดเปรี้ยวไว้กินหวาน · 先苦后甜",
-    content:
-      "字面是「忍住酸味，留着吃甜的」。劝人先吃苦后享福，忍耐必有回报。类似中文「先苦后甜」「吃得苦中苦，方为人上人」。",
-    thai: "อดเปรี้ยวไว้กินหวาน",
-    chinese: "先苦后甜——忍耐终有回报。",
-  },
-  {
-    type: "👂",
-    category: "民俗谚语",
-    theme: "言行",
-    title: "ฟังหูไว้หู · 耳听为虚",
-    content:
-      "字面是「听进一只耳朵，留一只耳朵作防备」。劝人不要轻信传言。类似中文「耳听为虚，眼见为实」。",
-    thai: "ฟังหูไว้หู",
-    chinese: "耳听为虚——传言不可轻信。",
-  },
-  {
-    type: "🐘",
-    category: "民俗谚语",
-    theme: "言行",
-    title: "เห็นช้างขี้ ขี้ตามช้าง · 盲目跟风",
-    content:
-      "字面是「看见大象拉屎，也跟着拉」。讽刺盲目从众、人云亦云。类似中文「随大流」「人云亦云」。",
-    thai: "เห็นช้างขี้ ขี้ตามช้าง",
-    chinese: "盲目跟风——人云亦云。",
-  },
-  {
-    type: "🐘",
-    category: "民俗谚语",
-    theme: "言行",
-    title: "ขี่ช้างจับตั๊กแตน · 杀鸡用牛刀",
-    content:
-      "字面是「骑着大象去捉蚱蜢」。比喻用大力气做小事，大材小用。类似中文「杀鸡焉用牛刀」。",
-    thai: "ขี่ช้างจับตั๊กแตน",
-    chinese: "骑象捉蚱蜢——大材小用。",
-  },
-  {
-    type: "🎋",
-    category: "民俗谚语",
-    theme: "教育",
-    title: "ไม้อ่อนดัดง่าย ไม้แก่ดัดยาก · 嫩竹易弯",
-    content:
-      "字面是「嫩竹容易弯，老竹难以弯」。比喻教育要趁早。类似中文「三岁看大，七岁看老」。",
-    thai: "ไม้อ่อนดัดง่าย ไม้แก่ดัดยาก",
-    chinese: "嫩竹易弯，老竹难折——教育趁早。",
-  },
-  {
-    type: "🌊",
-    category: "民俗谚语",
-    theme: "真相",
-    title: "น้ำลดตอผุด · 水落石出",
-    content:
-      "字面是「水退了，树桩就露出来」。比喻真相总会水落石出，谎言掩盖不了一时。类似中文「真相大白」「水落石出」。",
-    thai: "น้ำลดตอผุด",
-    chinese: "水落石出——真相终会大白。",
-  },
-  {
-    type: "🕯️",
-    category: "民俗谚语",
-    theme: "真相",
-    title: "ความจริงไม่ตาย · 真相不死",
-    content:
-      "字面是「真相不会死去」。意为事实永远存在，谎言终将被揭穿。类似中文「纸包不住火」。",
-    thai: "ความจริงไม่ตาย",
-    chinese: "真相不灭——纸包不住火。",
-  },
-  {
-    type: "🌾",
-    category: "民俗谚语",
-    theme: "谦虚",
-    title: "น้ำเต็มแก้ว · 水满则溢",
-    content:
-      "字面是「杯子满了水就会溢出」。比喻自满会招致损失，做人要留有余地。类似中文「满招损，谦受益」。",
-    thai: "น้ำเต็มแก้ว",
-    chinese: "水满则溢——满招损，谦受益。",
-  },
-  {
-    type: "🌾",
-    category: "民俗谚语",
-    theme: "谦虚",
-    title: "รวงข้าวที่สุกจะโน้มลง · 稻熟低头",
-    content:
-      "字面是「成熟的稻穗会低垂下来」。比喻真正有本事的人往往谦虚。类似中文「越饱满的稻穗越低头」。",
-    thai: "รวงข้าวที่สุกจะโน้มลง",
-    chinese: "稻熟低头——越是成熟越谦虚。",
-  },
-  {
-    type: "👥",
-    category: "民俗谚语",
-    theme: "交友",
-    title: "คบคนพาล พาลพาไปหาผิด · 近墨者黑",
-    content:
-      "字面是「与恶人为友，会被带向错误」。提醒交友要谨慎。类似中文「近朱者赤，近墨者黑」。",
-    thai: "คบคนพาล พาลพาไปหาผิด",
-    chinese: "近墨者黑——交友须谨慎。",
-  },
-  {
-    type: "🍽️",
-    category: "民俗谚语",
-    theme: "交友",
-    title: "เพื่อนกินหาง่าย เพื่อนตายหายาก · 患难见真情",
-    content:
-      "字面是「一起吃饭的朋友容易找，共患难的朋友难寻」。类似中文「酒肉朋友易得，患难之交难求」。",
-    thai: "เพื่อนกินหาง่าย เพื่อนตายหายาก",
-    chinese: "患难见真情——酒肉朋友易得。",
-  },
-  {
-    type: "🏞️",
-    category: "民俗谚语",
-    theme: "交友",
-    title: "น้ำพึ่งเรือ เสือพึ่งป่า · 相互依存",
-    content:
-      "字面是「水靠船行，虎靠林生」。比喻人与人互相依存、彼此成全。类似中文「人人为我，我为人人」。",
-    thai: "น้ำพึ่งเรือ เสือพึ่งป่า",
-    chinese: "水靠舟行，虎依林生——彼此依存。",
-  },
-  {
-    type: "💞",
-    category: "民俗谚语",
-    theme: "交友",
-    title: "รักยาวให้บั่น รักสั้นให้ต่อ · 细水长流",
-    content:
-      "字面是「要长久就要收敛，要短暂就放纵」。提醒感情需要克制经营，细水方能长流。",
-    thai: "รักยาวให้บั่น รักสั้นให้ต่อ",
-    chinese: "情长久需克制——细水长流。",
-  },
-  {
-    type: "🐊",
-    category: "民俗谚语",
-    theme: "处世",
-    title: "หนีเสือปะจระเข้ · 祸不单行",
-    content:
-      "字面是「躲开老虎又撞上鳄鱼」。比喻灾祸接踵而至。类似中文「躲过初一躲不过十五」「祸不单行」。",
-    thai: "หนีเสือปะจระเข้",
-    chinese: "躲过虎又逢鳄——祸不单行。",
-  },
-  {
-    type: "🚪",
-    category: "民俗谚语",
-    theme: "处世",
-    title: "เข้าตามตรอก ออกตามประตู · 循规蹈矩",
-    content:
-      "字面是「进来走巷子，出去走大门」。比喻做事要按规矩、光明正大。类似中文「按部就班」「循规蹈矩」。",
-    thai: "เข้าตามตรอก ออกตามประตู",
-    chinese: "有进有出守规矩——光明正大。",
-  },
-];
 
 /* =========================================================
    谚语主题筛选元数据（图标 + 专属主题色，Tailwind 类必须静态）
@@ -522,11 +178,103 @@ function LegacyHome() {
   const isVipUser = !!user?.isVip;
   const isAdmin = Boolean(user?.isAdmin || user?.is_admin || user?.role === "admin");
   const navigate = useNavigate();
+  const location = useLocation();
   const aiTeacher = useFeatureFlag("aiTeacher");
 
   const { progress, loading } = useLearningProgress();
 
+  /* 学习画像（AI 入学测试产物）：驱动推荐课程排序与 ProfileCard */
+  const { profile } = useUserProfile();
+
   const [isSpeaking, setIsSpeaking] = useState(false);
+
+  /* =====================================================
+     ThaiAI World：世界层的真实数据
+     -----------------------------------------------------
+     英雄 HUD / 学习星系由现有画像与学习记录推导（见 src/lib/worldData.js），
+     技能树/博物馆等深层板块已搬到学习宇宙页（/universe）。
+  ===================================================== */
+
+  /*
+   * 老链接 /#universe 的兼容滚动：学习宇宙已改独立页，这里只在有人还
+   * 带着旧锚点进来时，把首页滚到星系板块（id="universe"）兜底。
+   */
+  useEffect(() => {
+    if (location.hash !== "#universe") return undefined;
+
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      const node = document.getElementById("universe");
+      if (node) {
+        node.scrollIntoView({ behavior: "smooth", block: "start" });
+        clearInterval(timer);
+        return;
+      }
+      if (attempts >= 12) clearInterval(timer);
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [location.hash]);
+
+  const hasTest = hasPlacementProfile(profile);
+
+  /* 学习路线（星系的数据源）：没做入学测试就没有路线，世界仍完整可见 */
+  const worldPath = useMemo(
+    () => (hasTest ? generateLearningPath(profile) : null),
+    [profile, hasTest]
+  );
+
+  /*
+   * 世界主题：画像 → 配色 / 命名 / 卫星分布 / 博物馆主展厅。
+   * 这是「同一个 URL，不同账号看到不同世界」的单一开关。
+   */
+  const worldTheme = useMemo(() => buildWorldTheme(profile), [profile]);
+
+  const worldPlanets = useMemo(
+    () => buildPlanets(worldPath, profile),
+    [worldPath, profile]
+  );
+  const focusPlanet = useMemo(() => currentPlanet(worldPlanets), [worldPlanets]);
+
+  /* 技能树 / 博物馆 / 能力评估已搬到学习宇宙页（/universe），数据在那边装配 */
+
+  /* 博物馆的进度来自真实的媒体学习记录（订阅式，学完自动更新） */
+  const mediaProgress = useMediaProgress();
+
+  /*
+   * 「今天发生了什么」。
+   * 星系长期只有「累计进度」一个时间尺度，用户今天练完回来看到的是同一张
+   * 图。这一层把今天的真实时间戳信号（词汇/口语/媒体/课程）归到星球上，
+   * 让今天练过的星球当场扩环、尘埃被吹开，并且在你正看着的时候发生的事
+   * 会炸一下（burst）。
+   */
+  const todayActivity = useTodayActivity({
+    planets: worldPlanets,
+    path: worldPath,
+    progress,
+    mediaState: mediaProgress.state,
+  });
+  const livePlanets = todayActivity.planets;
+
+  /* 身份 HUD：等级/称号/XP 与 AIProfileCard 同源，未测等级不编造 */
+  const worldIdentity = useMemo(() => {
+    let fallback = null;
+    try {
+      fallback = JSON.parse(
+        localStorage.getItem("thai_ai_learning_progress") || "null"
+      );
+    } catch {
+      fallback = null;
+    }
+    return buildIdentity({
+      user,
+      profile,
+      progress,
+      hasTest,
+      localProgressFallback: fallback,
+    });
+  }, [user, profile, progress, hasTest]);
 
   /* =====================================================
      继续学习（有学习进度的课程）
@@ -538,8 +286,8 @@ function LegacyHome() {
     );
 
     return published
-      .map((course) => {
-        const lessons = getLessonsByCourseId(course.id);
+        .map((course) => {
+          const lessons = getCourseLessons(course.id);
         return {
           course,
           lessons,
@@ -560,12 +308,10 @@ function LegacyHome() {
      推荐课程
   ===================================================== */
 
+  // 按学习画像排序：可立即学的优先，其次画像匹配度 + 等级契合度
   const recommendedCourses = useMemo(
-    () =>
-      courses
-        .filter((course) => course.levelKey === "basic")
-        .slice(0, 3),
-    []
+    () => recommendCourses(profile, courses, 3),
+    [profile]
   );
 
   /* =====================================================
@@ -573,12 +319,18 @@ function LegacyHome() {
   ===================================================== */
 
   const resumeCourse = (item) => {
+    /* ContinueLearning 的「全部课程」出口 */
+    if (item?.__all) {
+      navigate("/course");
+      return;
+    }
+
     const last = item.lessons.find(
       (lesson) => lesson.id === item.entry?.lastLessonId
     );
 
     if (isVipUser || last.free || !item.course.isVip) {
-      navigate(`/course/${item.course.id}/lesson/${last.id}`);
+      navigate(getLessonHref(item.course.id, last));
     } else {
       navigate(`/course/${item.course.id}`);
     }
@@ -803,14 +555,11 @@ function LegacyHome() {
   const WEEK_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
   const dateText = `${now.getMonth() + 1}月${now.getDate()}日 星期${WEEK_LABELS[now.getDay()]}`;
   const hour = now.getHours();
-  const timeGreeting =
-    hour >= 5 && hour < 11
-      ? "早上好"
-      : hour >= 11 && hour < 18
-      ? "下午好"
-      : "晚上好";
-  const timeGreetingEmoji =
-    hour >= 5 && hour < 11 ? "🌅" : hour >= 11 && hour < 18 ? "☀️" : "🌙";
+  // 边界取 12:00：11 点仍然属于早上（原来的 11 点分界会让上午显示「下午好」）
+  const isMorning = hour >= 5 && hour < 12;
+  const isAfternoon = hour >= 12 && hour < 18;
+  const timeGreeting = isMorning ? "早上好" : isAfternoon ? "下午好" : "晚上好";
+  const timeGreetingEmoji = isMorning ? "🌅" : isAfternoon ? "☀️" : "🌙";
 
   const totalVocabulary = Math.min(
     progress?.total_vocabulary || 0,
@@ -838,18 +587,8 @@ function LegacyHome() {
      今日一句
   ===================================================== */
 
-  const todaySentence = useMemo(() => {
-    const today = new Date();
-
-    const dateKey =
-      today.getFullYear() +
-      today.getMonth() +
-      today.getDate();
-
-    return DAILY_SENTENCES[
-      Math.abs(dateKey) % DAILY_SENTENCES.length
-    ];
-  }, []);
+  const daily = useDailyContent(profile);
+  const todaySentence = daily.sentence;
 
   /* =====================================================
      播放今日一句
@@ -1229,7 +968,121 @@ function LegacyHome() {
           主体
       ===================================================== */}
 
-      <div className="relative z-10 mx-auto max-w-[1500px] px-0 py-4 sm:px-0 sm:py-5 lg:px-0">
+      {/*
+       * 满屏英雄区（桌面 ≥1100px）：佛像场景脱离居中容器与 MainLayout 内边距，
+       * 铺满整个内容区并撑到 100svh（高度由 GuardianScene 自己管）。
+       * 窄屏不动：仍然是流内的一张圆角场景卡。
+       */}
+      <div className="relative min-[1100px]:-mx-8 min-[1100px]:-mt-9">
+        {/* =====================================================
+            ThaiAI World · 英雄区（全屏电影感场景）
+
+            首页第一眼看的不再是课程列表，而是「我的泰语世界」：
+            中央 AI 泰语守护者（3D，懒加载），环绕身份 HUD。
+            日期与时段问候挂件从卡片行搬进场景右上角（原样保留）。
+        ===================================================== */}
+
+        {/*
+         * 首页骨架（佛像向右扩展版）：佛像场景独占全宽，右侧的等级 /
+         * 今日任务 / 老师推荐变成悬浮在场景右缘的透明玻璃柱（脸部留空）。
+         * 继续学习条保持流内，跟随场景之下。
+         *
+         * 内容全是真实数据：英雄区的三个数字、星球的真实阶段与今日活动；
+         * 三张透明卡的数据源分别是 getLevelInfo、useDailyMissions、
+         * recommendCourses —— 只改了视觉层级，数据与交互不动。
+         */}
+        <div className="relative">
+          {/*
+           * 连续场景（设计说明的关键一笔）：真实佛像照片不是一张卡片里的
+           * 配图，而是一整块场景 —— 「สวัสดี 欢迎回来」、五个图片星球与底部
+           * 小贴士都站在同一张照片里。拆成三张卡（英雄卡 / 星球卡 / 贴士卡）
+           * 会把这页读成「打开三个面板」。
+           *
+           * 交互（光晕 / 涟漪 / 与老师说话）全在 GuardianScene 里。
+           */}
+          <GuardianScene
+              identity={worldIdentity}
+              onStartConversation={() => navigate("/conversation")}
+              onPlacement={() => navigate("/placement-test")}
+              dateWidget={
+                <div className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-black/45 px-3 py-2 backdrop-blur-xl sm:gap-3 sm:px-4">
+                  <span className="text-[13px] font-semibold text-white/85 sm:text-sm">
+                    {dateText}
+                  </span>
+                  <span className="h-4 w-px bg-white/15" />
+                  <span className="flex items-center gap-1.5 text-[11px] text-yellow-200/80 sm:text-xs">
+                    <span>{timeGreetingEmoji}</span>
+                    {timeGreeting}，继续加油!
+                  </span>
+                </div>
+              }
+            >
+              {/* 星球星与小贴士：xl 下给右侧透明柱让位（柱宽 300 + 偏移 20 + 呼吸 20） */}
+              <div className="min-w-0 xl:pr-[340px]">
+                <UniverseRow
+                  bare
+                  planets={livePlanets}
+                  onSelect={(planet) => navigate(planet?.to || "/plan")}
+                />
+
+                {/* 小贴士（设计稿底部那条）。窄屏右侧留出语音核心的位置 */}
+                <div className="relative mx-4 mb-4 flex items-start gap-2 rounded-2xl border border-white/[0.08] bg-black/55 py-2.5 pl-4 pr-24 backdrop-blur-xl sm:mx-5 sm:pr-4 lg:mx-6">
+                  <span className="text-[12px] leading-none">💡</span>
+                  <p className="text-[11px] leading-relaxed text-white/45">
+                    小贴士：每天坚持学习，你的星球会变得更加美丽！
+                  </p>
+                </div>
+              </div>
+          </GuardianScene>
+
+          {/*
+           * 透明玻璃柱（桌面 ≥1280px）：四张卡悬浮在佛像场景右缘，
+           * 背景是半透明玻璃（佛像光透过来），脸部区域留空不遮。
+           * 窄屏与中屏：回落为流内堆叠（1280-1479px 落在场景下方，
+           * 手机在场景内部由 GuardianScene 自己的断点处理）。
+           */}
+          <aside
+            className={
+              "glass-column mx-auto mt-4 w-full max-w-[520px] min-w-0 lg:mt-5 " +
+              "xl:pointer-events-none xl:absolute xl:inset-y-4 xl:right-5 xl:z-20 xl:mx-0 xl:mt-0 xl:flex xl:w-[300px] xl:max-w-none xl:flex-col xl:justify-center xl:gap-3"
+            }
+          >
+            {/*
+             * 柱本身不拦截指针（xl:pointer-events-none）：卡与卡之间的空隙
+             * 可以点到佛像（佛像就是老师，点它进对话室）；每张卡自己恢复
+             * pointer-events，保证按钮全部可点。
+             */}
+            <div className="xl:pointer-events-auto">
+              <LevelCard identity={worldIdentity} transparent />
+            </div>
+            <div className="xl:pointer-events-auto">
+              <DailyMissionCard transparent />
+            </div>
+            <div className="xl:pointer-events-auto">
+              <AIRecommendationCard transparent />
+            </div>
+            <div className="xl:pointer-events-auto">
+              <ContinueLearning
+                items={continueCourses}
+                onResume={resumeCourse}
+                transparent
+              />
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      {/* 其余板块：回到居中的 1500px 容器 */}
+      <div className="relative z-10 mx-auto max-w-[1500px] px-0 py-0 sm:py-0 lg:px-0">
+        {/*
+         * 这里原来摆着一尊程序化几何体守护者（WorldHero）。设计说明里明确
+         * 不要几何体佛像：首页的佛像就是上面那张真实照片，而它同时也是 AI
+         * 老师（点它进对话室）。所以这一整块撤掉了，不再有第二尊。
+         */}
+
+        {/* 快捷入口：一条横向浮层（原来 MobileQuickActions 只有手机端可见） */}
+        <QuickActionBar aiTeacher={aiTeacher} />
+
         {isAdmin && (
           <motion.section
             initial={{ opacity: 0, y: -8 }}
@@ -1258,424 +1111,43 @@ function LegacyHome() {
           </motion.section>          )}
 
         {/* =====================================================
-            欢迎 Hero
+            AI 泰语教室（声波 + 情绪 + 今日安排）
 
+            原来散成三张仪表盘卡的内容在这里合流：
+              ① AI Greeting / 个人等级  → 已上升为英雄区 HUD
+              ② 今日任务（DailyMissionCard，画像定制 + 真实记录自动点亮）
+              ③ AI 推荐（AIRecommendationCard，按目标推荐 + 原因）
+            两个组件均为原样复用，点击直达练习页的能力一点没少。
         ===================================================== */}
 
-        <motion.div
-          initial={{
-            opacity: 0,
-            y: -20,
-          }}
-          animate={{
-            opacity: 1,
-            y: 0,
-          }}
-          transition={{
-            duration: 0.7,
-          }}
-          className="apple-surface group relative mb-5 min-h-[340px] overflow-hidden rounded-[30px] border border-white/[0.08] shadow-[0_20px_80px_rgba(0,0,0,0.3)] transition-all duration-500 hover:border-white/[0.14]"
-        >
-
-          <img
-            src="/thailand-hero-night.jpg"
-            alt="ThaiAI 学习主题视觉"
-            className={`
-              absolute
-              inset-0
-              h-full
-              w-full
-              object-cover
-              object-[72%_center]
-              transition-all
-              duration-[1500ms]
-              ease-out
-              group-hover:scale-[1.02]
-              group-hover:brightness-110
-            `}
-          />
-
-          {/* 泰式金线动态绘制（页面进入，L2 Cultural Motion） */}           <div className="gold-draw pointer-events-none absolute inset-x-12 top-5 z-30 h-px bg-gradient-to-r from-transparent via-yellow-300/30 to-transparent" />
-           <div className="gold-draw pointer-events-none absolute inset-x-20 bottom-5 z-30 h-px bg-gradient-to-r from-transparent via-yellow-300/20 to-transparent" style={{ animationDelay: '0.4s' }} />
-
-          {/* 泰式金线角饰（Hero 四角，极淡） */}
-
-          <ThaiCorner
-            className="z-30"
-            size={30}
-            color="rgba(245, 214, 123, 0.45)"
-          />
-
-          {/* 日期 + 时段问候挂件（参考图右上角） */}
-
-          <div className="pointer-events-none absolute right-5 top-5 z-30 hidden items-center gap-3 rounded-full border border-white/[0.08] bg-white/[0.05] px-4 py-2 backdrop-blur-md sm:flex">
-            <span className="text-sm font-semibold text-white/85">
-              {dateText}
-            </span>
-            <span className="h-4 w-px bg-white/15" />
-            <span className="flex items-center gap-1.5 text-xs text-yellow-200/80">
-              <span>{timeGreetingEmoji}</span>
-              {timeGreeting}，继续加油!
-            </span>
-          </div>
-
-          <div
-            className="
-              theme-hero-overlay-x
-              absolute
-              inset-0
-              bg-gradient-to-r
-              from-[#020c0e]/80
-              via-[#041112]/50
-              to-transparent
-            "
-          />
-
-          <div
-            className="
-              theme-hero-overlay-y
-              absolute
-              inset-0
-              bg-gradient-to-t
-              from-[#030f10]/60
-              via-transparent
-              to-[#020c0e]/25
-            "
-          />
-
-          {/* 深绿氛围光（佛像/寺庙区域）——跟随主题主色 */}
-          <div
-            className="
-              theme-hero-glow
-              pointer-events-none
-              absolute
-              right-[15%]
-              top-[20%]
-              h-96
-              w-96
-              rounded-full
-              bg-emerald-900/20
-              blur-[100px]
-            "
-          />
-
-          <div
-            className="
-              pointer-events-none
-              absolute
-              -left-20
-              -top-20
-              h-72
-              w-72
-              rounded-full
-              bg-[#CB8DFF]/10
-              blur-[80px]
-            "
-          />
-
-          <div
-            className="
-              pointer-events-none
-              absolute
-              -right-16
-              bottom-[-60px]
-              h-64
-              w-64
-              rounded-full
-              bg-yellow-300/[0.06]
-              blur-[60px]
-            "
-          />
-
-          <div
-            className="
-              relative
-              z-10
-              flex
-              min-h-[320px]
-              flex-col
-              justify-between
-              gap-6
-              p-6
-              sm:min-h-[280px]
-              sm:p-7
-              sm:p-8
-              lg:flex-row
-              lg:items-center
-              lg:px-12
-              lg:py-10
-            "
-          >
-
-            {/* 左侧 */}
-
-            <div className="max-w-2xl">
-
-              <div
-                className="
-                  mb-4
-                  flex
-                  items-center
-                  gap-2
-                  text-xs
-                  font-medium
-                  tracking-[0.18em]
-                  text-[#CB8DFF]
-                "
-              >
-
-                <div
-                  className="
-                    flex
-                    h-7
-                    w-7
-                    items-center
-                    justify-center
-                    rounded-lg
-                    border
-                    border-[#CB8DFF]/20
-                    bg-[#CB8DFF]/10
-                    backdrop-blur-md
-                  "
-                >
-                  🇹🇭
-                </div>
-
-                <span>
-                  THAI AI LEARNING SPACE
-                </span>
-
-              </div>
-
-              <h1
-                className="
-                  font-thai-serif
-                  text-4xl
-                  font-black
-                  leading-[1.05]
-                  tracking-tight
-                  text-white
-                  sm:text-5xl
-                  lg:text-[3.5rem]
-                "
-              >
-                สวัสดีครับ，
-
-                <span
-                  className="
-                    ml-2
-                    bg-gradient-to-r
-                    from-yellow-200
-                    via-yellow-300
-                    to-amber-400
-                    bg-clip-text
-                    text-transparent
-                  "
-                >
-                  {user?.nickname || "朋友"}
-                </span>
-              </h1>
-
-              <p
-                className="
-                  mt-4
-                  max-w-xl
-                  text-[15px]
-                  leading-7
-                  text-white/50
-                  sm:text-base
-                "
-              >
-                今天是你坚持学习泰语的{" "}
-                <span className="font-bold text-yellow-300/90">
-                  {loading ? "—" : streak}
-                </span>{" "}
-                天，继续保持这个节奏
-              </p>
-
-              <div
-                className="
-                  mt-6
-                  inline-flex
-                  items-center
-                  gap-3
-                  rounded-full
-                  border
-                  border-white/[0.08]
-                  bg-white/[0.04]
-                  px-5
-                  py-2.5
-                  backdrop-blur-md
-                  transition-all
-                  hover:bg-white/[0.07]
-                  hover:border-white/[0.14]
-                "
-              >
-
-                <Sparkles className="h-4 w-4 text-yellow-300/80" />
-
-                <span className="text-sm tracking-wide text-white/60">
-                  เรียนภาษาไทยทุกวันนะครับ
-                </span>
-
-              </div>
-
-            </div>
-
-            {/* =================================================
-                AI 核心球体（泰国文化 × AI 主视觉）
-            ================================================= */}
-
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 1, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="hidden shrink-0 lg:block"
-            >
-              <AIOrb size={220} />
-            </motion.div>
-
-            {/* =================================================
-                透明学习状态
-            ================================================= */}
-
-            <motion.div
-              whileHover={{
-                y: -3,
-                scale: 1.015,
-              }}
-              transition={{
-                duration: 0.3,
-                ease: [0.22, 1, 0.36, 1],
-              }}
-              className="
-                group
-                relative
-                w-full
-                shrink-0
-                overflow-hidden
-                rounded-[24px]
-                sm:w-[calc(50%-0.75rem)]
-                lg:w-[245px]
-                border
-                border-white/[0.08]
-                bg-white/[0.03]
-                p-5
-                shadow-[0_8px_40px_rgba(0,0,0,0.08)]
-                backdrop-blur-[18px]
-                transition-all
-                duration-300
-                hover:border-white/[0.16]
-                hover:bg-white/[0.05]
-                hover:shadow-[0_12px_50px_rgba(0,0,0,0.12)]
-                lg:w-[245px]
-              "
-            >
-
-              <div
-                className="
-                  pointer-events-none
-                  absolute
-                  -right-10
-                  -top-10
-                  h-24
-                  w-24
-                  rounded-full
-                  bg-yellow-300/[0.08]
-                  blur-2xl
-                "
-              />
-
-              <div className="relative flex items-center gap-4">
-
-                <div
-                  className="
-                    flex
-                    h-12
-                    w-12
-                    shrink-0
-                    items-center
-                    justify-center
-                    rounded-2xl
-                    border
-                    border-yellow-300/[0.14]
-                    bg-yellow-300/[0.045]
-                  "
-                >
-                  <Flame className="h-6 w-6 text-yellow-300" />
-                </div>
-
-                <div>
-
-                  <div className="text-xs text-white/35">
-                    学习状态
-                  </div>
-
-                  <div className="mt-1 text-lg font-bold text-white">
-                    连续学习 {streak} 天
-                  </div>
-
-                </div>
-
-              </div>
-
-              <div
-                className="
-                  relative
-                  mt-5
-                  flex
-                  items-center
-                  justify-between
-                  border-t
-                  border-white/[0.07]
-                  pt-4
-                "
-              >
-
-                <span className="text-xs text-white/35">
-                  {streak > 0
-                    ? "保持这个节奏"
-                    : "今天开始你的学习之旅"}
-                </span>
-
-                <div
-                  className="
-                    h-2
-                    w-2
-                    rounded-full
-                    bg-[#CB8DFF]
-                    shadow-[0_0_12px_rgba(52,211,153,0.8)]
-                  "
-                />
-
-              </div>
-
-            </motion.div>
-
-          </div>
-
-        </motion.div>
+        <AITeacherSpace
+          identity={worldIdentity}
+          progress={progress}
+          guidance={
+            <TodayRecap today={todayActivity} onOpenPlan={() => navigate("/plan")} />
+          }
+        />
 
         {/* =====================================================
-            AI 今日安排（核心：今天学什么 → 开始今日学习）
+            学习星系（取代课程卡片列表）
+            五颗星球 = 学习路线五大块，当前阶段发光；下方是真实阶段明细
         ===================================================== */}
 
-        <AiTodayMission />
+        <LearningGalaxy
+          planets={livePlanets}
+          path={worldPath}
+          theme={worldTheme}
+          today={todayActivity}
+        />
 
         {/* =====================================================
-            泰语能力评估（六维雷达 + 成长曲线）
+            泰语技能树 / 数字博物馆 / 成就卡 / 能力评估
+            → 已整体搬到学习宇宙（/universe）。首页留佛像 + 星系，
+            深层世界探索归宇宙页，两边共用同一份数据源。
         ===================================================== */}
 
-        <AbilitySection progress={progress} loading={loading} />
-
         {/* =====================================================
-            移动端快捷入口
-        ===================================================== */}
-
-        <MobileQuickActions aiTeacher={aiTeacher} />
-
-        {/* =====================================================
-            VIP 到期提醒横幅
+            VIP 到期提醒横幅（续费提醒，点击直达激活面板）
         ===================================================== */}
 
         {vipExpiryReminder && (
@@ -1688,6 +1160,7 @@ function LegacyHome() {
             whileHover={{ y: -2 }}
             className="
               mb-6
+              mt-5
               flex
               w-full
               flex-wrap
@@ -1772,278 +1245,15 @@ function LegacyHome() {
           </motion.button>
         )}
 
-        {/* =====================================================
-            学习数据 + AI 老师（中排，参考图布局）
-        ===================================================== */}
-
-        <div className="mb-6 grid items-stretch gap-5 lg:grid-cols-2">
-
-          {/* 学习数据卡（2x2 指标） */}
-
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, duration: 0.5 }}
-            whileHover={{ y: -2 }}
-            className="apple-surface relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-white/[0.025] p-5 backdrop-blur-xl transition-all duration-300 hover:border-white/[0.12] hover:bg-white/[0.04] hover:shadow-[0_8px_40px_rgba(0,0,0,0.15)] sm:p-6"
-          >
-
-            <div className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-teal-400/[0.05] blur-3xl transition-all duration-500 group-hover:bg-teal-400/[0.08]" />              <div className="relative flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm font-bold text-white/90">
-                <BarChart3 className="h-4 w-4 text-[#CB8DFF]/80" />
-                学习数据
-              </div>
-
-              <button
-                type="button"
-                onClick={() => navigate("/profile")}
-                className="flex items-center gap-1 text-[11px] text-white/30 transition-colors duration-200 hover:text-[#CB8DFF]"
-              >
-                查看详细数据
-                <ChevronRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
-              </button>
-            </div>
-
-            <StaggerGroup className="mt-5 grid grid-cols-2 gap-3">
-
-          <StaggerItem>
-            <StatCard
-              icon={Flame}
-              title="连续学习"
-              value={loading ? "—" : streak}
-              unit="天"
-              iconClass="text-yellow-300"
-              description={
-                streak > 0
-                  ? "坚持得不错"
-                  : "今天开始学习"
-              }
-            />
-          </StaggerItem>
-
-          <StaggerItem>
-            <VocabularyStatCard
-              value={loading ? 0 : totalVocabulary}
-              total={TOTAL_WORDS}
-              percent={vocabularyPercent}
-            />
-          </StaggerItem>
-
-          <StaggerItem>
-            <StatCard
-              icon={Target}
-              title="平均正确率"
-              value={loading ? "—" : accuracy}
-              unit="%"
-              iconClass="text-teal-300"
-              description={
-                accuracy >= 90
-                  ? "表现非常好"
-                  : accuracy >= 70
-                  ? "继续保持"
-                  : "多练几次就好"
-              }
-            />
-          </StaggerItem>
-
-          <StaggerItem>
-            <StatCard
-              icon={CalendarDays}
-              title="本周学习"
-              value={loading ? "—" : weeklyWords}
-              unit="词"
-              iconClass="text-[#CB8DFF]"
-              description="最近 7 天"
-            />
-          </StaggerItem>
-
-            </StaggerGroup>
-
-          </motion.div>
-
-          {/* AI 老师（功能开关控制） */}
-
-          {aiTeacher && (
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15, duration: 0.5 }}
-              className="apple-surface relative overflow-hidden rounded-[28px] border border-[#CB8DFF]/10 bg-gradient-to-br from-[#CB8DFF]/[0.12] via-white/[0.04] to-[#CB8DFF]/[0.06] p-1 shadow-2xl shadow-purple-950/40 backdrop-blur-2xl"
-            >
-
-              <div className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full bg-yellow-300/10 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-20 -left-20 h-60 w-60 rounded-full bg-[#CB8DFF]/10 blur-3xl" />
-
-              <div className="relative h-full rounded-[24px] bg-black/60 p-2 sm:p-3">
-                <AITeacher />
-              </div>
-
-            </motion.div>
-          )}
-
-        </div>
-
-        {/* =====================================================
-            继续学习
-        ===================================================== */}
-
-        {continueCourses.length > 0 && (
-          <motion.section
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.5 }}
-            className="mb-6"
-          >
-
-            <div className="mb-4 flex items-end justify-between">
-
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#CB8DFF] shadow-[0_0_10px_rgba(203,141,255,.7)]" />
-                  <h2 className="text-lg font-bold text-white">
-                    继续学习
-                  </h2>
-                </div>
-                <p className="mt-1 text-xs text-white/30">
-                  从上次停下的地方继续
-                </p>
-              </div>
-
-            </div>
-
-            <div className="flex gap-4 overflow-x-auto pb-3">
-
-              {continueCourses.map((item, index) => (
-                <div key={item.course.id} className="min-w-[300px] max-w-[320px]">
-                  <ContinueCard
-                    course={item.course}
-                    stats={item.stats}
-                    index={index}
-                    onContinue={() => resumeCourse(item)}
-                  />
-                </div>
-              ))}
-
-            </div>
-
-          </motion.section>
-        )}
-
-        {/* =====================================================
-            推荐课程
-        ===================================================== */}
-
-        <motion.section
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className="mb-6"
-        >
-
-          <div className="mb-4 flex items-end justify-between">
-
-            <div>
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-yellow-300" />
-                <h2 className="text-lg font-bold text-white">
-                  推荐课程
-                </h2>
-              </div>
-              <p className="mt-1 text-xs text-white/30">
-                为你精选的泰语学习课程
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => navigate("/course")}
-              className="flex items-center gap-1 text-xs text-[#CB8DFF]/60 transition hover:text-emerald-200"
-            >
-              查看全部
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-
-          </div>
-
-          <div className="mobile-scroll-x flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 xl:grid-cols-3">
-
-            {recommendedCourses.map((course, index) => (
-              <RecommendCard
-                key={course.id}
-                course={course}
-                index={index}
-                onOpen={() => navigate(`/course/${course.id}`)}
-              />
-            ))}
-
-          </div>
-
-        </motion.section>
-
-        {/* =====================================================
-            今日词汇 + 学习进度
-        ===================================================== */}
-
-        <ThaiSectionDivider className="mt-10 mb-6" />
-
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-
-          <motion.div
-            initial={{
-              opacity: 0,
-              x: -20,
-            }}
-            animate={{
-              opacity: 1,
-              x: 0,
-            }}
-            transition={{
-              delay: 0.3,
-              duration: 0.5,
-            }}
-            className="lg:col-span-3"
-            id="vocab-card"
-          >
-
-            <DashboardCard
-              title="今日词汇"
-              subtitle="继续巩固你的泰语词汇"
-              icon={BookOpen}
-              onClick={() => navigate("/vocabulary")}
-            >
-              <VocabularyCard />
-            </DashboardCard>
-
-          </motion.div>
-
-          <motion.div
-            initial={{
-              opacity: 0,
-              x: 20,
-            }}
-            animate={{
-              opacity: 1,
-              x: 0,
-            }}
-            transition={{
-              delay: 0.35,
-              duration: 0.5,
-            }}
-            className="lg:col-span-2"
-            id="progress"
-          >
-
-            <DashboardCard
-              title="学习进度"
-              subtitle="看看今天完成了多少"
-              icon={Target}
-            >
-              <ProgressDashboard />
-            </DashboardCard>
-
-          </motion.div>
-
-        </div>
+        {/*
+         * 原来这里内嵌一整个「AI 泰语老师」聊天板块。它和 /conversation
+         * （AI 对话室）是同一件事的两个入口，而首页那尊佛像本身就是老师
+         * （点它进对话室），所以这一块撤掉了 —— 对话能力一点没少，只是不再
+         * 在首页重复开一个聊天窗。
+         * 组件本体（components/AITeacher.jsx 与它专用的 ai/ThaiContextTools.jsx）
+         * 已一并删除，不再是「只是没挂上」的悬空代码。
+         * 功能开关 aiTeacher 仍保留：快捷入口条与侧边栏的对话室入口都用它。
+         */}
 
         {/* =====================================================
             今日一句 + 泰语小知识
@@ -2051,7 +1261,7 @@ function LegacyHome() {
 
         <ThaiSectionDivider className="mt-10 mb-6" />
 
-        <div className="mobile-scroll-x flex gap-4 overflow-x-auto pb-2 lg:grid lg:grid-cols-3">
+        <div className="mobile-scroll-x flex gap-4 overflow-x-auto pb-2 lg:grid lg:grid-cols-2">
 
           <motion.div
             initial={{
@@ -2070,27 +1280,11 @@ function LegacyHome() {
           >
             <TodaySentenceCard
               sentence={todaySentence}
+              reason={daily.reason.sentence}
+              onNext={() => daily.reroll("sentence")}
               isSpeaking={isSpeaking}
               onSpeak={handleSpeakThai}
             />
-          </motion.div>
-
-          <motion.div
-            initial={{
-              opacity: 0,
-              y: 20,
-            }}
-            animate={{
-              opacity: 1,
-              y: 0,
-            }}
-            transition={{
-              delay: 0.45,
-              duration: 0.6,
-            }}
-            className="min-w-[calc(100vw-2rem)] snap-start lg:min-w-0 lg:col-span-1"
-          >
-            <HomePlanCard />
           </motion.div>
 
           <motion.div
@@ -2108,111 +1302,12 @@ function LegacyHome() {
             }}
             className="min-w-[calc(100vw-2rem)] snap-start lg:min-w-0 lg:col-span-1"
           >
-            <ThaiTipCard />
+            <ThaiTipCard daily={daily} />
           </motion.div>
 
         </div>
 
-        {/* =====================================================
-            口语练习入口（部分免费 · 部分 VIP）
-        ===================================================== */}
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, duration: 0.6 }}
-          className="mt-5"
-        >
-          <button
-            onClick={() => navigate("/speaking")}
-            className="group relative w-full overflow-hidden rounded-[24px] border border-[#CB8DFF]/10 bg-gradient-to-r from-[#CB8DFF]/[0.10] via-white/[0.03] to-[#CB8DFF]/[0.06] p-5 text-left shadow-2xl backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-[#CB8DFF]/20"
-          >
-            <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#CB8DFF]/[0.10] blur-3xl transition-all group-hover:bg-[#CB8DFF]/[0.16]" />
-
-            <div className="relative flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#CB8DFF]/20 bg-gradient-to-br from-[#CB8DFF]/[0.15] to-[#CB8DFF]/[0.08]">
-                <Mic className="h-5 w-5 text-[#CB8DFF] transition-transform group-hover:scale-110" />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-bold text-white">
-                    口语练习
-                  </p>
-
-                  <span className="rounded-full border border-yellow-300/25 bg-yellow-300/[0.08] px-2 py-0.5 text-[9px] font-semibold text-yellow-200/85">
-                    部分免费 · 部分 VIP
-                  </span>
-                </div>
-
-                <p className="mt-1 text-xs text-white/35">
-                  单词免费练习 · 句子 / 段落为 VIP 专属 · Azure 音素级评测
-                </p>
-              </div>
-
-              <ChevronRight className="h-5 w-5 shrink-0 text-white/20 transition-all group-hover:translate-x-0.5 group-hover:text-[#CB8DFF]" />
-            </div>
-          </button>
-        </motion.div>
-
       </div>
-
-      {/* =====================================================
-          浮动按钮
-      ===================================================== */}
-
-      <motion.button
-        onClick={() => navigate("/vocabulary")}
-        initial={{
-          scale: 0,
-          opacity: 0,
-        }}
-        animate={{
-          scale: 1,
-          opacity: 1,
-        }}
-        transition={{
-          delay: 0.6,
-          type: "spring",
-          stiffness: 200,
-          damping: 20,
-        }}
-        whileHover={{
-          scale: 1.1,
-          boxShadow:
-            "0 0 40px rgba(203, 141, 255, 0.3), 0 0 80px rgba(203, 141, 255, 0.1)",
-        }}
-        whileTap={{
-          scale: 0.9,
-        }}
-        className="
-          fixed
-          bottom-[calc(5.75rem+env(safe-area-inset-bottom))]
-          right-4
-          sm:bottom-7
-          sm:right-7
-          z-40
-          flex
-          h-14
-          w-14
-          items-center
-          justify-center
-          rounded-2xl
-          border
-          border-white/15
-          bg-gradient-to-br
-          from-[#CB8DFF]
-          via-[#CB8DFF]/90
-          to-teal-400
-          shadow-xl
-          shadow-[#CB8DFF]/25
-          backdrop-blur-sm
-          transition-all
-          duration-300
-        "
-      >
-        <Plus className="h-6 w-6 text-white" />
-      </motion.button>
 
       {/* =====================================================
           VIP 激活面板（续费提醒点击直达）
@@ -2237,21 +1332,13 @@ export default function Home() {
 }
 
 /* =========================================================
-   今日一句泰语
+   恢复：快捷入口 / 今日一句 / 泰语小知识
+   （这三个组件的 JSX 引用还在，定义在上一轮死代码清理中被连带删掉了，
+   导致首页 ReferenceError 白屏。按**当前** dailyContent 数据形状重建，
+   并支持调用处新传的 reason / onNext props。）
 ========================================================= */
 
-/* =========================================================
-   首页学习计划卡（读 Plan 页 localStorage 记录）
-========================================================= */
-
-const HOME_PLAN_TASKS = [
-  { id: "vocab", title: "学习 10 个单词", icon: BookOpen },
-  { id: "video", title: "观看 1 节视频", icon: Play },
-  { id: "speaking", title: "完成 5 分钟口语", icon: Mic },
-  { id: "chat", title: "进行 1 次 AI 对话", icon: MessageCircle },
-];
-
-function MobileQuickActions({ aiTeacher }) {
+function QuickActionBar({ aiTeacher }) {
   const navigate = useNavigate();
 
   const actions = [
@@ -2264,14 +1351,14 @@ function MobileQuickActions({ aiTeacher }) {
   ];
 
   const toneClasses = {
-    emerald: "border-emerald-300/15 bg-[#CB8DFF]/[0.08] text-emerald-200",
+    emerald: "border-emerald-300/15 bg-emerald-400/[0.08] text-emerald-200",
     teal: "border-teal-300/15 bg-teal-400/[0.08] text-teal-200",
     gold: "border-yellow-300/15 bg-yellow-300/[0.08] text-yellow-200",
     blue: "border-sky-300/15 bg-sky-400/[0.08] text-sky-200",
   };
 
   return (
-    <section className="mb-5 md:hidden" aria-label="学习快捷入口">
+    <section className="mb-5" aria-label="学习快捷入口">
       <div className="mb-3 flex items-center justify-between px-1">
         <div>
           <p className="text-sm font-bold text-white">现在开始</p>
@@ -2300,1416 +1387,174 @@ function MobileQuickActions({ aiTeacher }) {
   );
 }
 
-function HomePlanCard() {
-  const navigate = useNavigate();
-
-  const isLoggedIn = !!localStorage.getItem("token");
-
-  /* 服务端打卡概览（连续天数 / 本周 / 今日打卡状态，跨设备一致） */
-  const [planOverview, setPlanOverview] = useState(null);
-
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    let alive = true;
-    getPlanOverview()
-      .then((r) => {
-        if (alive) setPlanOverview(r.data || null);
-      })
-      .catch(() => {
-        /* 服务不可用时静默降级到本地记录 */
-      });
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const [records, setRecords] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("thai_ai_plan_v1")) || {};
-    } catch {
-      return {};
-    }
-  });
-
-  const today = new Date().toISOString().split("T")[0];
-  const todayDone = records[today] || {};
-
-  /* 服务端「今天」= week 末项（服务端按其本地日期生成，避免客户端时区差） */
-  const serverToday = planOverview?.week?.length
-    ? planOverview.week[planOverview.week.length - 1]
-    : null;
-  /* 服务端判定今日计划已全部完成（含自动完成/其他设备，权威状态） */
-  const serverDoneToday = !!serverToday?.completed;
-  /* 行完成数：本地勾选 ∪ 服务端判定今日已全部完成（打卡成功=全部完成，权威） */
-  const completed = serverDoneToday
-    ? HOME_PLAN_TASKS.length
-    : HOME_PLAN_TASKS.filter((task) => todayDone[task.id]).length;
-  const progress = Math.round(
-    (completed / HOME_PLAN_TASKS.length) * 100
-  );
-
-  /* 服务端本周已完成打卡的天数 */
-  const weekDoneCount =
-    planOverview?.week?.filter((d) => d.completed).length ?? null;
-
-  return (
-    <div className="relative flex h-full flex-col overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.03] p-5 backdrop-blur-xl sm:p-6">
-
-      <div className="pointer-events-none absolute -left-16 -top-16 h-40 w-40 rounded-full bg-[#CB8DFF]/[0.07] blur-3xl" />
-
-      <div className="relative flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-bold text-white">
-          <Target className="h-4 w-4 text-yellow-300" />
-          学习计划
-        </div>
-
-        <button
-          type="button"
-          onClick={() => navigate("/plan")}
-          className="flex items-center gap-1 text-[11px] text-white/35 transition hover:text-[#CB8DFF]"
-        >
-          查看全部
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {/* 服务端打卡状态行：连续天数 / 本周 / 今日打卡（登录且已同步时显示） */}
-      {isLoggedIn && planOverview && (
-        <div className="relative mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-1.5 text-[10px]">
-          <span className="flex items-center gap-1 font-medium text-orange-300/90">
-            <Flame className="h-3 w-3" />
-            连续打卡 {planOverview.streak ?? 0} 天
-          </span>
-          <span className="text-white/25">·</span>
-          <span className="text-white/50">本周 {weekDoneCount ?? 0}/7</span>
-          {serverDoneToday ? (
-            <span className="ml-auto flex items-center gap-0.5 font-medium text-emerald-300">
-              <Check className="h-3 w-3" />
-              今日已打卡
-            </span>
-          ) : (
-            <span className="ml-auto text-white/30">今日进行中</span>
-          )}
-        </div>
-      )}
-
-      <div className="relative mt-4 space-y-3">
-        {HOME_PLAN_TASKS.map((task) => {
-          /* 服务端判定今日全完成 → 行级同步为已完成（跨设备/自动完成权威） */
-          const done = !!todayDone[task.id] || serverDoneToday;
-          const Icon = task.icon;
-
-          return (
-            <div key={task.id} className="flex items-center gap-3">
-
-              <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
-                  done
-                    ? "border-emerald-300/25 bg-[#CB8DFF]/[0.12]"
-                    : "border-white/[0.08] bg-white/[0.04]"
-                }`}
-              >
-                <Icon
-                  className={`h-4 w-4 ${
-                    done ? "text-[#CB8DFF]" : "text-white/45"
-                  }`}
-                />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span
-                    className={`truncate text-xs ${
-                      done ? "text-white/50 line-through" : "text-white/80"
-                    }`}
-                  >
-                    {task.title}
-                  </span>
-
-                  <span
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-                      done
-                        ? "bg-[#CB8DFF]/20 text-[#CB8DFF]"
-                        : "border border-white/15 text-transparent"
-                    }`}
-                  >
-                    <Check className="h-3 w-3" />
-                  </span>
-                </div>
-              </div>
-
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="relative mt-auto pt-4">
-        <div className="mb-2 flex items-center justify-between text-[10px]">
-          <span className="text-white/30">今日完成</span>
-          <span className="font-semibold text-yellow-300">
-            {completed} / {HOME_PLAN_TASKS.length}
-          </span>
-        </div>
-
-        <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.8 }}
-            className="h-full rounded-full bg-gradient-to-r from-yellow-300 to-amber-400"
-          />
-        </div>
-      </div>
-
-    </div>
-  );
-}
-
 function TodaySentenceCard({
   sentence,
+  reason,
+  onNext,
   isSpeaking,
   onSpeak,
 }) {
+  if (!sentence) return null;
   return (
-    <div
-      className="
-        group
-        relative
-        h-full
-        overflow-hidden
-        rounded-[26px]
-        border
-        border-[#CB8DFF]/10
-        bg-gradient-to-br
-        from-[#CB8DFF]/[0.08]
-        via-white/[0.035]
-        to-yellow-300/[0.045]
-        p-[1px]
-        shadow-2xl
-        shadow-black/20
-        backdrop-blur-2xl
-      "
-    >
-
-      <div
-        className="
-          pointer-events-none
-          absolute
-          -right-24
-          -top-24
-          h-64
-          w-64
-          rounded-full
-          bg-[#CB8DFF]/10
-          blur-3xl
-        "
-      />
-
-      <div
-        className="
-          pointer-events-none
-          absolute
-          -bottom-24
-          left-1/3
-          h-56
-          w-56
-          rounded-full
-          bg-yellow-300/[0.06]
-          blur-3xl
-        "
-      />
-
-      {/* 寺庙剪影（原创 SVG，夜幕下若隐若现） */}
-
+    <div className="group relative h-full overflow-hidden rounded-[26px] border border-white/[0.08] bg-gradient-to-br from-white/[0.05] via-white/[0.02] to-yellow-300/[0.04] shadow-2xl shadow-black/20 backdrop-blur-2xl">
+      <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-white/[0.04] blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-yellow-300/[0.05] blur-3xl" />
       <BangkokSkyline
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-28 w-full opacity-[0.16]"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-28 w-full opacity-[0.14]"
         opacity={0.7}
       />
 
-      <div
-        className="
-          relative
-          flex
-          h-full
-          flex-col
-          rounded-[25px]
-          bg-[#071817]/80
-          px-5
-          py-5
-          sm:px-7
-          sm:py-6
-        "
-      >
-
+      <div className="relative flex h-full flex-col rounded-[25px] bg-[#071817]/75 px-5 py-5 sm:px-7 sm:py-6">
         <div className="flex items-center justify-between">
-
           <div className="flex items-center gap-3">
-
-            <div
-              className="
-                flex
-                h-10
-                w-10
-                items-center
-                justify-center
-                rounded-xl
-                border
-                border-yellow-300/15
-                bg-yellow-300/[0.08]
-              "
-            >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-yellow-300/15 bg-yellow-300/[0.08]">
               <Feather className="h-5 w-5 text-yellow-300" />
             </div>
-
             <div>
-
-              <h2 className="font-semibold text-white">
-                今日一句泰语
-              </h2>
-
-              <p className="mt-0.5 text-xs text-white/30">
-                每天一句泰语诗，感受语言之美
-              </p>
-
+              <h2 className="text-sm font-semibold text-white">今日一句</h2>
+              <p className="mt-0.5 text-xs text-white/30">{sentence.category}</p>
             </div>
-
           </div>
-
-          <span
-            className="
-              rounded-full
-              border
-              border-yellow-300/10
-              bg-yellow-300/[0.06]
-              px-3
-              py-1
-              text-[10px]
-              font-medium
-              text-yellow-300/70
-            "
-          >
-            {sentence.category}
-          </span>
-
-        </div>
-
-        <div className="mt-6 flex flex-1 flex-col justify-center">
-
-          {/* 诗题金饰：✦ + 两侧渐隐金线 */}
-
-          <div
-            className="
-              mb-5
-              flex
-              items-center
-              justify-center
-              gap-3
-            "
-          >
-
-            <span
-              className="
-                h-px
-                w-12
-                bg-gradient-to-r
-                from-transparent
-                to-yellow-300/40
-              "
-            />
-
-            <span className="text-sm text-yellow-300/70">
-              ✦
-            </span>
-
-            <span
-              className="
-                h-px
-                w-12
-                bg-gradient-to-l
-                from-transparent
-                to-yellow-300/40
-              "
-            />
-
-          </div>
-
-          {/* 泰语诗句：逐行呈现 */}
-
-          <div className="space-y-1.5 text-center">
-
-            {sentence.thai.split("\n").map((line, index) => (
-              <div
-                key={index}
-                className="
-                  font-thai-serif
-                  text-2xl
-                  font-semibold
-                  leading-relaxed
-                  tracking-[0.06em]
-                  text-white
-                  sm:text-[26px]
-                "
-              >
-                {line}
-              </div>
-            ))}
-
-          </div>
-
-          {/* 读音提示 */}
-
-          <div
-            className="
-              mt-4
-              text-center
-              text-[13px]
-              italic
-              tracking-wide
-              text-[#CB8DFF]/75
-            "
-          >
-            {sentence.pronunciation}
-          </div>
-
-          {/* 中文译文：细金分隔线 + 柔光字 */}
-
-          <div
-            className="
-              mt-5
-              border-t
-              border-white/[0.06]
-              pt-4
-            "
-          >
-
-            {sentence.chinese.split("\n").map((line, index) => (
-              <div
-                key={index}
-                className="
-                  text-center
-                  text-sm
-                  leading-6
-                  text-white/50
-                "
-              >
-                {line}
-              </div>
-            ))}
-
-          </div>
-
-        </div>
-
-        <div className="mt-6 flex justify-center">
-
-          <motion.button
+          <button
             type="button"
-            onClick={onSpeak}
-            whileHover={{
-              scale: 1.04,
-            }}
-            whileTap={{
-              scale: 0.96,
-            }}
-            className="
-              group/speak
-              flex
-              items-center
-              gap-2.5
-              rounded-full
-              border
-              border-[#CB8DFF]/20
-              bg-gradient-to-r
-              from-[#CB8DFF]/15
-              to-teal-400/10
-              px-5
-              py-2.5
-              text-sm
-              font-medium
-              text-emerald-200
-              shadow-lg
-              shadow-emerald-950/20
-              transition-all
-              hover:border-emerald-300/35
-              hover:bg-[#CB8DFF]/20
-            "
+            onClick={() => onSpeak?.(sentence.thai)}
+            disabled={isSpeaking}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.04] text-white/70 transition hover:border-white/25 hover:text-white disabled:opacity-50"
+            aria-label="朗读今日一句"
           >
-
-            {isSpeaking ? (
-              <div className="flex items-center gap-1">
-
-                <span className="flex items-end gap-[2px]">
-
-                  <span className="h-3 w-[2px] animate-pulse rounded-full bg-emerald-300" />
-
-                  <span
-                    className="h-5 w-[2px] animate-pulse rounded-full bg-emerald-300"
-                    style={{
-                      animationDelay: "120ms",
-                    }}
-                  />
-
-                  <span
-                    className="h-3.5 w-[2px] animate-pulse rounded-full bg-emerald-300"
-                    style={{
-                      animationDelay: "240ms",
-                    }}
-                  />
-
-                  <span
-                    className="h-4 w-[2px] animate-pulse rounded-full bg-emerald-300"
-                    style={{
-                      animationDelay: "360ms",
-                    }}
-                  />
-
-                </span>
-
-                <span className="ml-1">
-                  正在播放
-                </span>
-
-              </div>
-            ) : (
-              <>
-                <Volume2
-                  className="
-                    h-4
-                    w-4
-                    transition-transform
-                    group-hover/speak:scale-110
-                  "
-                />
-
-                <span>
-                  听发音
-                </span>
-              </>
-            )}
-
-          </motion.button>
-
+            <Volume2 className={`h-4 w-4 ${isSpeaking ? "animate-pulse" : ""}`} />
+          </button>
         </div>
 
-        <div className="mt-5 text-center text-[10px] text-white/20">
-          点击播放，聆听诗句的韵律
+        {reason ? (
+          <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[11px] leading-relaxed text-emerald-200/70">
+            💡 为什么给你看这句：{reason}
+          </p>
+        ) : null}
+
+        <div className="mt-5 flex-1 space-y-1.5 text-center">
+          {sentence.thai.split("\n").map((line, index) => (
+            <p key={index} className="font-viaoda text-2xl leading-snug text-white sm:text-[26px]">
+              {line}
+            </p>
+          ))}
         </div>
 
+        {sentence.pronunciation ? (
+          <p className="mt-3 text-center text-[13px] italic leading-relaxed text-emerald-200/60">
+            {sentence.pronunciation}
+          </p>
+        ) : null}
+
+        <div className="mt-5 flex items-center justify-between border-t border-white/[0.06] pt-4">
+          <div className="flex-1 space-y-1">
+            {sentence.chinese.split("\n").map((line, index) => (
+              <p key={index} className="text-center text-sm leading-6 text-white/50">
+                {line}
+              </p>
+            ))}
+          </div>
+          {onNext ? (
+            <button
+              type="button"
+              onClick={onNext}
+              className="ml-4 flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.1] bg-white/[0.04] px-3 py-1.5 text-[11px] font-bold text-white/60 transition hover:border-white/25 hover:text-white"
+              aria-label="换一句"
+            >
+              <RefreshCw className="h-3 w-3" />
+              换一句
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
 }
 
-/* =========================================================
-   泰语小知识
-========================================================= */
+function ThaiTipCard({ daily }) {
+  const navigate = useNavigate();
 
-function ThaiTipCard() {
-  const [tipIndex, setTipIndex] = useState(() => {
-    const today = new Date();
-
-    return (
-      (today.getFullYear() +
-        today.getMonth() +
-        today.getDate()) %
-      THAI_TIPS.length
-    );
-  });
+  /* 画像驱动版：优先用 daily（按等级/兴趣挑选），降级到按日期轮换的静态池 */
+  const tip = daily?.tip || THAI_TIPS[new Date().getDate() % THAI_TIPS.length];
+  const tipReason = daily?.reason?.tip || "";
+  const reroll = () => daily?.reroll?.("tip");
 
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // 谚语主题筛选：null = 全部（小知识 + 谚语），选中后只看该主题谚语
-  const [activeTheme, setActiveTheme] = useState(null);
-
-  const proverbThemes = useMemo(() => {
-    const themes = [];
-
-    THAI_TIPS.forEach((item) => {
-      if (
-        item.category === "民俗谚语" &&
-        item.theme &&
-        !themes.includes(item.theme)
-      ) {
-        themes.push(item.theme);
-      }
-    });
-
-    return themes;
-  }, []);
-
-  const filteredTips = useMemo(() => {
-    if (!activeTheme) return THAI_TIPS;
-
-    return THAI_TIPS.filter(
-      (item) => item.theme === activeTheme
-    );
-  }, [activeTheme]);
-
-  // 切换主题时回到该主题第一条
-  useEffect(() => {
-    setTipIndex(0);
-  }, [activeTheme]);
-
-  const safeIndex =
-    filteredTips.length > 0
-      ? tipIndex % filteredTips.length
-      : 0;
-
-  const tip = filteredTips[safeIndex];
-
-  const speakCancelRef = useRef(null);
-
-  const handleNextTip = () => {
-    speakCancelRef.current?.();
-    setIsSpeaking(false);
-
-    setTipIndex((current) => {
-      return (
-        (current + 1) %
-        (filteredTips.length || 1)
-      );
-    });
-  };
-
-  const handleThemeChange = (theme) => {
-    speakCancelRef.current?.();
-    setIsSpeaking(false);
-    setActiveTheme(theme);
-  };
-
-  const handleSpeak = () => {
+  const speak = () => {
     if (!tip?.thai) return;
-
-    if (isSpeaking) {
-      speakCancelRef.current?.();
-      setIsSpeaking(false);
-      return;
-    }
-
-    speakCancelRef.current = speakThai(tip.thai, {
+    setIsSpeaking(true);
+    speakThai(tip.thai, {
       rate: 0.78,
-      onStart: () => setIsSpeaking(true),
       onEnd: () => setIsSpeaking(false),
       onError: () => setIsSpeaking(false),
     });
-
-    setIsSpeaking(true);
   };
 
   return (
-    <motion.div
-      whileHover={{
-        y: -3,
-      }}
-      className="
-        group
-        relative
-        h-full
-        overflow-hidden
-        rounded-[26px]
-        border
-        border-yellow-300/10
-        bg-gradient-to-br
-        from-yellow-400/[0.08]
-        via-white/[0.035]
-        to-emerald-400/[0.06]
-        p-[1px]
-        shadow-2xl
-        shadow-black/20
-        backdrop-blur-2xl
-      "
-    >
+    <div className="relative h-full overflow-hidden rounded-[26px] border border-emerald-300/[0.08] bg-gradient-to-br from-emerald-400/[0.06] via-white/[0.02] to-transparent shadow-2xl shadow-black/20 backdrop-blur-2xl">
+      <div className="pointer-events-none absolute -left-20 -top-20 h-56 w-56 rounded-full bg-emerald-400/[0.07] blur-3xl" />
 
-      <div
-        className="
-          pointer-events-none
-          absolute
-          -right-20
-          -top-20
-          h-56
-          w-56
-          rounded-full
-          bg-yellow-300/10
-          blur-3xl
-        "
-      />
-
-      <div
-        className="
-          pointer-events-none
-          absolute
-          -bottom-20
-          -left-20
-          h-52
-          w-52
-          rounded-full
-          bg-[#CB8DFF]/10
-          blur-3xl
-        "
-      />
-
-      <div
-        className="
-          relative
-          flex
-          h-full
-          flex-col
-          rounded-[25px]
-          bg-[#071817]/85
-          p-5
-          sm:p-6
-        "
-      >
-
-        <div className="flex items-start justify-between gap-3">
-
+      <div className="relative flex h-full flex-col rounded-[25px] bg-[#071817]/75 px-5 py-5 sm:px-7 sm:py-6">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-
-            <div
-              className="
-                flex
-                h-10
-                w-10
-                shrink-0
-                items-center
-                justify-center
-                rounded-xl
-                border
-                border-yellow-300/10
-                bg-yellow-300/10
-                text-lg
-              "
-            >
-              🇹🇭
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-300/15 bg-emerald-400/[0.08]">
+              <span className="text-lg">{tip?.type || "💡"}</span>
             </div>
-
             <div>
-
-              <h2 className="font-semibold text-white">
-                泰语小知识
-              </h2>
-
-              <p className="mt-0.5 text-xs text-white/30">
-                每天了解一点泰语
-              </p>
-
+              <h2 className="text-sm font-semibold text-white">泰语小知识</h2>
+              <p className="mt-0.5 text-xs text-white/30">{tip?.category}</p>
             </div>
-
           </div>
-
-          <span
-            className="
-              shrink-0
-              rounded-full
-              border
-              border-yellow-300/10
-              bg-yellow-300/[0.06]
-              px-2.5
-              py-1
-              text-[10px]
-              font-medium
-              text-yellow-300/80
-            "
-          >
-            {tip.type} {tip.category}
-            {tip.theme ? ` · ${tip.theme}` : ""}
-          </span>
-
+          <div className="flex items-center gap-1.5">
+            {tip?.thai ? (
+              <button
+                type="button"
+                onClick={speak}
+                disabled={isSpeaking}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.04] text-white/70 transition hover:border-white/25 hover:text-white disabled:opacity-50"
+                aria-label="朗读例句"
+              >
+                <Volume2 className={`h-4 w-4 ${isSpeaking ? "animate-pulse" : ""}`} />
+              </button>
+            ) : null}
+            {reroll ? (
+              <button
+                type="button"
+                onClick={reroll}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.04] text-white/70 transition hover:border-white/25 hover:text-white"
+                aria-label="换一条小知识"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
         </div>
 
-        {/* 谚语主题筛选（横向滚动 chips） */}
-
-        <div
-          className="
-            mt-4
-            flex
-            items-center
-            gap-1.5
-            overflow-x-auto
-            pb-1
-            [scrollbar-width:none]
-          "
-        >
-
-          {["全部", ...proverbThemes].map(
-            (theme) => {
-              const active =
-                theme === "全部"
-                  ? activeTheme === null
-                  : activeTheme === theme;
-
-              const meta = THEME_META[theme] || {
-                icon: "✨",
-                active:
-                  "border-yellow-300/40 bg-yellow-300/15 text-yellow-200 shadow-[0_0_12px_rgba(250,204,21,0.15)]",
-              };
-
-              return (
-                <button
-                  key={theme}
-                  type="button"
-                  onClick={() =>
-                    handleThemeChange(
-                      theme === "全部" ? null : theme
-                    )
-                  }
-                  className={`
-                    flex
-                    shrink-0
-                    items-center
-                    gap-1
-                    rounded-full
-                    border
-                    px-2.5
-                    py-1
-                    text-[10px]
-                    font-medium
-                    transition-all
-                    ${
-                      active
-                        ? meta.active
-                        : "border-white/[0.08] bg-white/[0.03] text-white/40 hover:border-white/20 hover:text-white/70"
-                    }
-                  `}
-                >
-                  <span className="text-[11px] leading-none">
-                    {meta.icon}
-                  </span>
-                  {theme}
-                </button>
-              );
-            }
-          )}
-
-        </div>
-
-        <div className="mt-4 flex-1">
-
-          <h3 className="text-lg font-bold text-white">
-            {tip.title}
-          </h3>
-
-          <p className="mt-3 text-sm leading-6 text-white/50">
-            {tip.content}
+        {tipReason ? (
+          <p className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[11px] leading-relaxed text-emerald-200/70">
+            💡 为什么给你看这条：{tipReason}
           </p>
+        ) : null}
 
-          <div
-            className="
-              mt-4
-              rounded-2xl
-              border
-              border-white/[0.06]
-              bg-white/[0.035]
-              p-4
-            "
-          >
+        <h3 className="mt-4 text-[15px] font-bold leading-snug text-white">{tip?.title}</h3>
+        <p className="mt-2 flex-1 text-[12.5px] leading-relaxed text-white/60">{tip?.content}</p>
 
-            <div className="text-lg font-semibold tracking-wide text-emerald-200">
-              {tip.thai}
-            </div>
-
-            <div className="mt-1.5 text-xs text-white/40">
-              {tip.chinese}
-            </div>
-
+        {tip?.thai ? (
+          <div className="mt-4 rounded-2xl border border-white/[0.06] bg-black/30 px-4 py-3 text-center">
+            <p className="font-viaoda text-[16px] leading-relaxed text-white/90">{tip.thai}</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-white/45">{tip.chinese}</p>
           </div>
-
-        </div>
-
-        <div className="mt-5 flex items-center justify-between">
-
-          <button
-            type="button"
-            onClick={handleSpeak}
-            className="
-              flex
-              items-center
-              gap-2
-              rounded-full
-              border
-              border-emerald-300/15
-              bg-[#CB8DFF]/10
-              px-4
-              py-2
-              text-xs
-              text-emerald-200
-              transition
-              hover:border-[#CB8DFF]/30
-              hover:bg-[#CB8DFF]/20
-            "
-          >
-
-            <Volume2 className="h-4 w-4" />
-
-            {isSpeaking
-              ? "正在播放"
-              : "听例句"}
-
-          </button>
-
-          <button
-            type="button"
-            onClick={handleNextTip}
-            className="
-              flex
-              items-center
-              gap-1
-              text-xs
-              text-white/35
-              transition
-              hover:text-yellow-300
-            "
-          >
-            换一条
-
-            <ChevronRight className="h-4 w-4" />
-          </button>
-
-        </div>
-
-      </div>
-    </motion.div>
-  );
-}
-
-/* =========================================================
-   继续学习卡片
-========================================================= */
-
-function ContinueCard({
-  course,
-  stats,
-  index,
-  onContinue,
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.06 }}
-      className="apple-surface group relative overflow-hidden rounded-3xl border border-emerald-300/[0.10] bg-gradient-to-br from-[#CB8DFF]/[0.10] via-white/[0.035] to-teal-400/[0.06] p-5 backdrop-blur-xl"
-    >
-
-      {course.cover && (
-        <div className="relative -m-5 mb-4 h-24 overflow-hidden">
-          <img
-            src={course.cover}
-            alt={course.title}
-            loading="lazy"
-            className="h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.parentElement.style.display = "none";
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#071817]/90 via-[#071817]/20 to-transparent" />
-        </div>
-      )}
-
-      <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-300/[0.08] blur-3xl" />
-
-      <div className="relative min-w-[280px] sm:min-w-0">
-
-        <div className="flex items-start justify-between">
-
-          <div className="min-w-0">
-            <h3 className="truncate text-lg font-bold text-white">
-              {course.title}
-            </h3>
-            <p className="mt-1 text-xs text-white/35">
-              已完成 {stats.completedCount} / {course.lessons} 节
-            </p>
-          </div>
-
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#CB8DFF]/10">
-            <Video className="h-5 w-5 text-[#CB8DFF]" />
-          </div>
-
-        </div>
-
-        <div className="mt-5">
-
-          <div className="mb-2 flex items-center justify-between text-[10px]">
-            <span className="text-white/30">学习进度</span>
-            <span className="font-semibold text-[#CB8DFF]">
-              {stats.progressPercent}%
-            </span>
-          </div>
-
-          <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${stats.progressPercent}%` }}
-              transition={{ duration: 0.8 }}
-              className="h-full rounded-full bg-gradient-to-r from-[#CB8DFF] to-teal-300"
-            />
-          </div>
-
-        </div>
+        ) : null}
 
         <button
           type="button"
-          onClick={onContinue}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-emerald-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition-all hover:-translate-y-0.5 hover:shadow-emerald-400/20"
+          onClick={() => navigate("/vocabulary")}
+          className="mt-4 flex items-center justify-center gap-1.5 rounded-2xl border border-emerald-300/20 bg-emerald-400/[0.08] py-2.5 text-[12px] font-bold text-emerald-200 transition hover:bg-emerald-400/[0.16]"
         >
-          <Play className="h-4 w-4 fill-current" />
-          继续学习
+          去词汇星球巩固 <ChevronRight className="h-3.5 w-3.5" />
         </button>
-
       </div>
-
-    </motion.div>
-  );
-}
-
-
-/* =========================================================
-   推荐课程卡片
-========================================================= */
-
-function RecommendCard({
-  course,
-  index,
-  onOpen,
-}) {
-  const isVip = course.isVip === true;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.06 }}
-      whileHover={{ y: -4 }}
-      className="apple-surface group relative min-w-[280px] overflow-hidden rounded-3xl border p-5 backdrop-blur-xl transition-all sm:min-w-0"
-    >
-
-      {course.cover && (
-        <div className="relative -m-5 mb-4 h-24 overflow-hidden">
-          <img
-            src={course.cover}
-            alt={course.title}
-            loading="lazy"
-            className="h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.parentElement.style.display = "none";
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#071817]/90 via-[#071817]/20 to-transparent" />
-        </div>
-      )}
-
-      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[#CB8DFF]/[0.06] blur-3xl" />
-
-      <div className="relative">
-
-        <div className="flex items-center justify-between">
-
-          <div className="flex items-center gap-2">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
-              isVip
-                ? "border-yellow-300/10 bg-yellow-300/[0.06]"
-                : "border-[#CB8DFF]/10 bg-[#CB8DFF]/[0.08]"
-            }`}>
-              {isVip ? (
-                <Crown className="h-4 w-4 text-yellow-300/70" />
-              ) : (
-                <Video className="h-4 w-4 text-[#CB8DFF]" />
-              )}
-            </div>
-            <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[10px] text-white/40">
-              {course.category}
-            </span>
-          </div>
-
-          <span className="text-[10px] text-white/25">
-            {course.level}
-          </span>
-
-        </div>
-
-        <h3 className="mt-5 text-lg font-bold text-white">
-          {course.title}
-        </h3>
-
-        <p className="mt-2 line-clamp-2 min-h-[40px] text-sm leading-5 text-white/35">
-          {course.description}
-        </p>
-
-        <div className="mt-5 flex items-center gap-4 text-xs text-white/25">
-          <span className="flex items-center gap-1.5">
-            <Video className="h-3.5 w-3.5" />
-            {course.lessons} 节视频
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Clock3 className="h-3.5 w-3.5" />
-            {course.duration}
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={onOpen}
-          className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-medium transition-all ${
-            isVip
-              ? "border-yellow-300/10 bg-yellow-300/[0.05] text-yellow-100/60 hover:bg-yellow-300/[0.09] hover:text-yellow-100"
-              : "border-white/[0.08] bg-white/[0.05] text-white/55 hover:bg-white/[0.09] hover:text-white"
-          }`}
-        >
-          <Play className="h-3.5 w-3.5 fill-current" />
-          {isVip ? "查看 VIP 课程" : "进入课程"}
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-
-      </div>
-
-    </motion.div>
-  );
-}
-
-/* =========================================================
-   普通数据卡片
-========================================================= */
-
-function StatCard({
-  icon: Icon,
-  title,
-  value,
-  unit,
-  iconClass,
-  description,
-}) {
-  return (
-    <motion.div
-      whileHover={{
-        y: -4,
-      }}
-      transition={{
-        duration: 0.25,
-      }}
-      className="
-        group
-        relative
-        overflow-hidden
-        rounded-2xl
-        border
-        border-white/10
-        bg-white/[0.045]
-        p-4
-        shadow-xl
-        shadow-black/10
-        backdrop-blur-xl
-        transition-all
-        duration-300
-        hover:border-[#CB8DFF]/20
-        hover:bg-white/[0.07]
-      "
-    >
-
-      <div
-        className="
-          pointer-events-none
-          absolute
-          -right-10
-          -top-10
-          h-24
-          w-24
-          rounded-full
-          bg-[#CB8DFF]/10
-          blur-2xl
-          opacity-0
-          transition-opacity
-          duration-300
-          group-hover:opacity-100
-        "
-      />
-
-      <div className="relative">
-
-        <div className="flex items-center justify-between">
-
-          <div
-            className="
-              rounded-xl
-              border
-              border-white/[0.06]
-              bg-white/[0.06]
-              p-2
-            "
-          >
-            <Icon
-              className={`h-5 w-5 ${iconClass}`}
-            />
-          </div>
-
-          <span className="text-[11px] text-white/30">
-            学习数据
-          </span>
-
-        </div>
-
-        <div className="mt-4">
-
-          <div className="text-xs text-white/45">
-            {title}
-          </div>
-
-          <div className="mt-1 flex items-baseline gap-1">
-
-            <span className="text-2xl font-bold tracking-tight">
-              {typeof value === "number" ? (
-                <AnimatedNumber value={value} />
-              ) : (
-                value
-              )}
-            </span>
-
-            <span className="text-xs text-white/40">
-              {unit}
-            </span>
-
-          </div>
-
-          <div className="mt-1.5 text-[11px] text-white/30">
-            {description}
-          </div>
-
-        </div>
-
-      </div>
-    </motion.div>
-  );
-}
-
-/* =========================================================
-   词汇统计卡片
-========================================================= */
-
-function VocabularyStatCard({
-  value,
-  total,
-  percent,
-}) {
-  return (
-    <motion.div
-      whileHover={{
-        y: -4,
-      }}
-      transition={{
-        duration: 0.25,
-      }}
-      className="
-        group
-        relative
-        overflow-hidden
-        rounded-2xl
-        border
-        border-white/10
-        bg-white/[0.045]
-        p-4
-        shadow-xl
-        shadow-black/10
-        backdrop-blur-xl
-        transition-all
-        duration-300
-        hover:border-[#CB8DFF]/20
-        hover:bg-white/[0.07]
-      "
-    >
-
-      <div
-        className="
-          pointer-events-none
-          absolute
-          -right-10
-          -top-10
-          h-24
-          w-24
-          rounded-full
-          bg-[#CB8DFF]/10
-          blur-2xl
-          opacity-0
-          transition-opacity
-          duration-300
-          group-hover:opacity-100
-        "
-      />
-
-      <div className="relative">
-
-        <div className="flex items-center justify-between">
-
-          <div
-            className="
-              rounded-xl
-              border
-              border-white/[0.06]
-              bg-white/[0.06]
-              p-2
-            "
-          >
-            <BookOpen className="h-5 w-5 text-[#CB8DFF]" />
-          </div>
-
-          <span className="text-[11px] text-white/30">
-            {percent}%
-          </span>
-
-        </div>
-
-        <div className="mt-4">
-
-          <div className="text-xs text-white/45">
-            已掌握词汇
-          </div>
-
-          <div className="mt-1 flex items-baseline gap-1">
-
-            <span className="text-2xl font-bold tracking-tight">
-              <AnimatedNumber value={value} />
-            </span>
-
-            <span className="text-xs text-white/40">
-              / {total}
-            </span>
-
-          </div>
-
-          <div
-            className="
-              mt-3
-              h-1.5
-              overflow-hidden
-              rounded-full
-              bg-white/[0.07]
-            "
-          >
-
-            <motion.div
-              initial={{
-                width: 0,
-              }}
-              animate={{
-                width: `${percent}%`,
-              }}
-              transition={{
-                duration: 0.8,
-                ease: "easeOut",
-              }}
-              className="
-                h-full
-                rounded-full
-                bg-gradient-to-r
-                from-[#CB8DFF]
-                via-teal-300
-                to-yellow-300
-              "
-            />
-
-          </div>
-
-          <div
-            className="
-              mt-1.5
-              flex
-              items-center
-              gap-1
-              text-[11px]
-              text-white/30
-            "
-          >
-
-            <Zap className="h-3 w-3 text-yellow-300/70" />
-
-            目标：500 词
-
-          </div>
-
-        </div>
-
-      </div>
-    </motion.div>
-  );
-}
-
-/* =========================================================
-   Dashboard 卡片
-========================================================= */
-
-function DashboardCard({
-  title,
-  subtitle,
-  icon: Icon,
-  children,
-  onClick = () => {},
-}) {
-  return (
-    <div
-      className="apple-surface relative h-full overflow-hidden rounded-[26px] border border-white/10 bg-white/[0.045] shadow-2xl shadow-black/20 backdrop-blur-2xl"
-    >
-
-      <div
-        className="
-          flex
-          items-center
-          justify-between
-          border-b
-          border-white/[0.08]
-          px-5
-          py-4
-        "
-      >
-
-        <div className="flex items-center gap-3">
-
-          <div
-            className="
-              rounded-xl
-              bg-[#CB8DFF]/10
-              p-2
-            "
-          >
-            <Icon className="h-5 w-5 text-[#CB8DFF]" />
-          </div>
-
-          <div>
-
-            <h2 className="font-semibold text-white">
-              {title}
-            </h2>
-
-            <p className="text-xs text-white/35">
-              {subtitle}
-            </p>
-
-          </div>
-
-        </div>
-
-        {onClick && (
-          <button
-            onClick={onClick}
-            className="
-              flex
-              items-center
-              gap-1
-              text-xs
-              text-[#CB8DFF]/80
-              transition
-              hover:text-yellow-300
-            "
-          >
-            查看全部
-
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        )}
-
-      </div>
-
-      <div className="p-4">
-        {children}
-      </div>
-
     </div>
   );
 }

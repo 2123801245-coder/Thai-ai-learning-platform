@@ -45,13 +45,28 @@ export const getAiTeacherPlan = (profile) =>
   );
 
 
-// 学生长期记忆摘要（「老师记得你」）
+// 学生长期记忆（「老师记得你」）
+// 返回 { memory(旧结构), items, groups, summary, hasMemory }
+//   items  分类条目 [{ id, type, content, importance, source, hits, ... }]
+//   groups 按类型分组，前端直接渲染
+//   memory 旧版扁平结构，兼容仍在用它的老组件
+// 读取时会顺带把入学测试画像同步成记忆（幂等）
 export const getAiTeacherMemory = () =>
   api.get("/ai/teacher/memory");
 
-// 手动修正 AI 老师记住的学生画像（个人中心编辑）
+// 手动修正 AI 老师记住的学生画像（个人中心旧表单，仍按扁平字段提交）
 export const updateAiTeacherMemory = (memory) =>
   api.put("/ai/teacher/memory", { memory });
+
+// 直接告诉老师要记住的一件事（分类记忆条目）
+// data: { type, content, importance? }
+//   type: profile | goal | habit | weakness | error | interest | preference
+export const addAiTeacherMemoryItem = (data) =>
+  api.post("/ai/teacher/memory/items", data);
+
+// 删除一条记忆（记错了 / 不想让它记）
+export const deleteAiTeacherMemoryItem = (id) =>
+  api.delete(`/ai/teacher/memory/items/${id}`);
 
 
 // ============================================================
@@ -70,6 +85,8 @@ export default {
   getAiTeacherPlan,
   getAiTeacherMemory,
   updateAiTeacherMemory,
+  addAiTeacherMemoryItem,
+  deleteAiTeacherMemoryItem,
   transcribeSpeech,
 };
 

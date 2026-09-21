@@ -2,32 +2,59 @@
 //
 // AI 泰语老师（本地后端版）
 //   POST /api/ai/teacher —— 聊天 / 发音 / 口语三种模式
-//   使用 DeepSeek（OpenAI 兼容接口），复用与 translate.js 相同的环境变量：
-//     DEEPSEEK_API_KEY   必填
-//     DEEPSEEK_BASE_URL  可选，默认 https://api.deepseek.com
-//     DEEPSEEK_MODEL     可选，默认 deepseek-chat
+//   GET  /api/ai/status  —— 所有 AI 服务配置自检（?probe=1 做真实连通性探测）
 //
-// 未配置 API Key 时返回 503 + 明确提示，前端展示引导信息。
+// 模型调用不再写死 DeepSeek：统一走 backend/aiProvider.js，
+// 由它挑选可用提供方（DeepSeek / Agnes 网关 / 任何 OpenAI 兼容网关）：
+//
+//   AI_PROVIDER=auto|deepseek|agnes     默认 auto（有可用 key 的第一个）
+//   DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL / DEEPSEEK_MODEL
+//   AGNES_API_KEY（别名 AI_API_KEY）/ AGNES_BASE_URL（别名 AI_BASE_URL）
+//
+// 占位符 key（如「你的xxxKEY」）会被识别为「未配置」，直接返回 503 +
+// 具体原因，而不是等上游 401。
 
 import express from "express";
-import dotenv from "dotenv";
+import "../env.js";
 import db from "../database.js";
 import { authenticate } from "./auth.js";
 import { getQuotaSetting } from "./features.js";
 import { createNotification } from "./notifications.js";
 import { buildContextSystemPrompt } from "../contextPrompts.js";
+import {
+  buildLearnerGuidance,
+  getUserProfile,
+  mergeProfileForPrompt,
+} from "../learnerProfile.js";
 
-dotenv.config();
+import {
+  aiServicesStatus,
+  chatCompletion,
+  probeAiServices,
+  resolveChatProvider,
+} from "../aiProvider.js";
+
+import {
+  MANUAL_IMPORTANCE,
+  applyMemoryExtract,
+  buildMemoryPrompt,
+  deleteMemoryItem,
+  groupMemoryItems,
+  legacyToMemoryItems,
+  listMemoryItems,
+  loadMemoryForPrompt,
+  memorySummary,
+  replaceMemoryType,
+  toLegacyMemory,
+  upsertMemoryItem,
+} from "../aiMemory.js";
 
 const router = express.Router();
 
-const API_KEY = process.env.DEEPSEEK_API_KEY || "";
-const BASE_URL = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/+$/, "");
-const MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-const TIMEOUT_MS = 45000;
+const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS) || 45000;
 
 export function isAiTeacherEnabled() {
-  return !!API_KEY;
+  return Boolean(resolveChatProvider());
 }
 
 /* ============================================================
@@ -106,39 +133,72 @@ async function quotaPayload(userId) {
    记住学生名字/水平/兴趣/常见错误，每次对话注入 system prompt
 ============================================================ */
 
-function getAiMemory(userId) {
-  return new Promise((resolve) => {
-    db.get(
-      "SELECT memory FROM ai_teacher_memory WHERE user_id = ?",
-      [userId],
-      (err, row) => {
-        if (err || !row) return resolve(null);
-        try {
-          const m = JSON.parse(row.memory);
-          resolve(m && typeof m === "object" ? m : null);
-        } catch {
-          resolve(null);
-        }
-      }
-    );
-  });
+/*
+ * 长期记忆已升级为「分类条目」（见 backend/aiMemory.js）：
+ *   一条记忆一行，带 memory_type / importance / hits。
+ * 这里保留两个兼容函数，让旧的调用点（plan / recommend / 个人中心）
+ * 不用一次性改完：
+ *   - getAiMemory(userId)      → 旧的扁平结构（由分类记忆推导）
+ *   - saveAiMemory(userId, m)  → 把旧结构写回分类记忆
+ * 新代码请直接用 loadAiMemory(userId) 拿到「条目 + 注入提示词」。
+ */
+
+async function getAiMemory(userId) {
+  const { legacy } = await loadMemoryForPrompt(userId);
+  return legacy && Object.keys(legacy).length ? legacy : null;
 }
 
-function saveAiMemory(userId, memory) {
-  return new Promise((resolve) => {
-    db.run(
-      `INSERT INTO ai_teacher_memory (user_id, memory, updated_at)
-       VALUES (?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE
-         SET memory = excluded.memory, updated_at = excluded.updated_at`,
-      [userId, JSON.stringify(memory || {}), new Date().toISOString()],
-      () => resolve()
-    );
-  });
+/** 读记忆（含入学画像同步）：条目 / 分组 / 提示词 / 旧结构 / 摘要 */
+async function loadAiMemory(userId) {
+  return loadMemoryForPrompt(userId);
 }
 
-/* 构建带学生画像 + 长期记忆的 system prompt */
-function buildTeacherSystemPrompt(action, profile, memory) {
+/* 旧字段 → 分类类型（个人中心表单仍用旧字段名） */
+const FIELD_TO_TYPE = {
+  studentName: "profile",
+  genderHint: "profile",
+  level: "profile",
+  goals: "goal",
+  interests: "interest",
+  weaknesses: "weakness",
+  mistakes: "error",
+  habits: "habit",
+  preferences: "preference",
+};
+
+/**
+ * 用旧的扁平结构写入分类记忆。
+ * 只替换「本次请求真正动过的那几类」——用户没改的类型保持原样
+ * （与升级前「只更新传进来的字段」语义一致）。
+ */
+async function saveAiMemory(userId, memory = {}, touchedTypes = null) {
+  const items = legacyToMemoryItems(memory);
+  const byType = new Map();
+  for (const item of items) {
+    if (!byType.has(item.type)) byType.set(item.type, []);
+    byType.get(item.type).push(item.content);
+  }
+
+  const targetTypes = touchedTypes ? [...touchedTypes] : [...byType.keys()];
+
+  for (const type of targetTypes) {
+    await replaceMemoryType(userId, type, byType.get(type) || [], {
+      source: "manual",
+      importance: MANUAL_IMPORTANCE[type] || 3,
+    });
+  }
+
+  const saved = await listMemoryItems(userId);
+  return toLegacyMemory(saved);
+}
+
+/**
+ * 构建带学生画像 + 长期记忆的 system prompt。
+ *
+ * memory 既可以是 loadAiMemory() 返回的记忆上下文（推荐，含分类提示词），
+ * 也可以是一块旧的扁平对象（向后兼容，自动转成分类提示词）。
+ */
+function buildTeacherSystemPrompt(action, profile, memory, learnerGuidance = "") {
   const base = SYSTEM_PROMPTS[action] || SYSTEM_PROMPTS.chat;
   const parts = [base];
 
@@ -153,45 +213,65 @@ function buildTeacherSystemPrompt(action, profile, memory) {
     );
   }
 
-  if (memory && Object.keys(memory).length > 0) {
-    const lines = [];
-    if (memory.studentName) lines.push(`学生名字：${memory.studentName}`);
-    if (memory.genderHint) lines.push(`性别线索：${memory.genderHint}（影响句尾礼貌词 ครับ/ค่ะ 的选择）`);
-    if (memory.level) lines.push(`学生水平评估：${memory.level}`);
-    if (memory.interests?.length) lines.push(`学生兴趣：${memory.interests.slice(0, 4).join("、")}`);
-    if (memory.goals?.length) lines.push(`学生学习目标：${memory.goals.slice(0, 3).join("、")}`);
-    if (memory.mistakes?.length) lines.push(`学生常见错误：${memory.mistakes.slice(0, 4).join("；")}（纠正时先肯定再温柔提示）`);
-    if (memory.preferences?.length) lines.push(`学生偏好：${memory.preferences.slice(0, 4).join("、")}`);
-    if (lines.length > 0) {
-      parts.push(
-        `【长期记忆（跨会话）】\n${lines.join("\n")}\n请自然地使用这些记忆：用学生熟悉的话题举例、避免重复解释已掌握的内容、纠正已知错误时说鼓励的话。不要向学生提及「记忆」这个词。`
-      );
-    }
+  /* 长期记忆（分类条目，按重要度排序后注入） */
+  const memoryPrompt = memory?.prompt
+    ? memory.prompt
+    : buildMemoryPrompt(legacyToMemoryItems(memory || {}).map((item, i) => ({
+        ...item,
+        id: `legacy-${i}`,
+        importance: MANUAL_IMPORTANCE[item.type] || 3,
+        hits: 1,
+        updatedAt: null,
+      })));
+  if (memoryPrompt) parts.push(memoryPrompt);
+
+  /* 入学测评画像 → 教学指令（等级难度上限 / 目标场景 / 纠错重点 / 学习方式）。
+     放在画像与长期记忆之后、最接近 user 消息的位置：指令优先级最高 */
+  if (learnerGuidance) {
+    parts.push(learnerGuidance);
   }
 
   return parts.join("\n\n");
 }
 
-/* 每 5 轮对话后，用 DeepSeek 总结并更新学生长期记忆（异步，失败不影响主对话） */
+/*
+ * 每 5 轮对话后，用 DeepSeek 提取「分类记忆条目」入库（异步，失败不影响主对话）。
+ *
+ * 五类内容对应产品要求：目标 / 习惯 / 薄弱点 / 错误记录 / 兴趣内容，
+ * 身份信息（名字、性别线索、水平）单独归到 profile 类。
+ * 重要度由模型给（1~5），没给就用该类型的默认值；同一条重复出现时
+ * 命中次数 +1，排序会自动上浮（见 aiMemory.upsertMemoryItem）。
+ */
 async function summarizeAndSaveMemory(userId, history) {
   try {
-    const current = (await getAiMemory(userId)) || {};
-    const system = `你是 AI 泰语老师的记忆系统。下面是学生说过的话，请提取学生的长期记忆信息。
+    const existing = await listMemoryItems(userId);
+    const system = `你是 AI 泰语老师「阿泰」的记忆系统。下面是学生说过的话，请提取值得长期记住的信息。
 
-必须只返回一个 JSON 对象（不要输出任何其他文字），结构如下：
+必须只返回一个 JSON 对象（不要输出任何其他文字，不要 markdown 围栏），结构如下：
 {
   "studentName": "学生名字（未提到则 null）",
-  "genderHint": "性别线索：男生写\"男性（用ครับ）\"，女生写\"女性（用ค่ะ）\"，未知 null",
+  "genderHint": "性别线索：男写\"男性（用ครับ）\"，女写\"女性（用ค่ะ）\"，未知 null",
   "level": "水平评估：beginner / elementary / intermediate / advanced",
-  "interests": ["兴趣主题"],
-  "goals": ["学习目标"],
-  "mistakes": ["最近反复出现的泰语错误"],
-  "preferences": ["表达偏好"]
+  "goals": ["学习目标，如：准备去清迈交换、想看懂泰剧不生词"],
+  "interests": ["兴趣内容，如：泰剧、泰国美食、拍短视频"],
+  "habits": ["学习习惯，如：习惯晚上学、喜欢用追剧素材练听力"],
+  "weaknesses": ["薄弱点，如：声调容易混乱、长句听不懂"],
+  "errors": ["反复出现的具体错误，如：把 ครับ 用在句末无论性别"],
+  "preferences": ["讲解偏好，如：希望先给例句再讲语法"]
 }
-示例输出：{"studentName":"李明","genderHint":"男性（用ครับ）","level":"beginner","interests":["美食","旅游"],"goals":["去泰国自由行"],"mistakes":[],"preferences":[]}
 
-已有记忆：${JSON.stringify(current)}
-规则：只保留长期有效的重要信息；与已有记忆冲突时以新信息为准；没有新信息就保持原值；interests/goals/mistakes 可以合并新旧值并去重。`;
+重要度规则（想强调的就写成对象，其余写成字符串即可）：
+- 影响教学方向的信息（目标、薄弱点）用 {"content":"...","importance":5}
+- 一般偏好与兴趣用字符串即可（默认 3 分）
+
+示例输出（只示例，实际按对话内容）：
+{"studentName":"李明","genderHint":"男性（用ครับ）","level":"beginner","goals":[{"content":"准备泰国交换","importance":5}],"interests":["泰剧","泰国美食"],"habits":["喜欢晚上学习"],"weaknesses":[{"content":"声调容易混淆","importance":5}],"errors":[],"preferences":[]}
+
+已有记忆（避免重复，只输出新增或需要更正的）：${JSON.stringify(
+      existing.map((i) => ({ type: i.type, content: i.content }))
+    )}
+规则：只保留长期有效的重要信息；与已有记忆冲突时以新信息为准；没有新信息就全部输出空值。`;
+
     // 只传学生消息（assistant 回复不参与记忆提取，避免格式干扰）
     const userOnly = history
       .filter((h) => h?.role === "user")
@@ -200,22 +280,15 @@ async function summarizeAndSaveMemory(userId, history) {
         role: "user",
         content: String(h?.content || "").slice(0, 500),
       }));
-    const messages = [
-      { role: "system", content: system },
-      ...userOnly,
-    ];
+    const messages = [{ role: "system", content: system }, ...userOnly];
     // 不用 json_object（历史是纯文本，模型更容易模仿输出格式），靠 few-shot + 宽容解析
-    const raw = await callDeepSeekMessages(messages, 0.2, 600);
+    const raw = await callDeepSeekMessages(messages, 0.2, 700);
     const parsed = parseRawJson(raw);
     if (parsed && typeof parsed === "object") {
-      const merged = { ...current };
-      for (const key of Object.keys(parsed)) {
-        const v = parsed[key];
-        if (v === null || v === undefined || v === "") continue;
-        if (Array.isArray(v) && v.length === 0) continue;
-        merged[key] = v;
+      const added = await applyMemoryExtract(userId, parsed, { source: "ai" });
+      if (added > 0) {
+        console.log(`[aiTeacher] 记忆更新：user ${userId} +${added} 条`);
       }
-      await saveAiMemory(userId, merged);
     }
   } catch (e) {
     // 记忆总结失败不影响主对话（打日志便于排查）
@@ -327,6 +400,8 @@ function buildRecommendSystemPrompt(profile, memory) {
   if (memory?.interests?.length) lines.push(`兴趣：${memory.interests.slice(0, 5).join("、")}`);
   if (memory?.goals?.length) lines.push(`目标：${memory.goals.slice(0, 3).join("、")}`);
   if (memory?.mistakes?.length) lines.push(`常见错误：${memory.mistakes.slice(0, 4).join("；")}`);
+  if (memory?.weaknesses?.length) lines.push(`薄弱点：${memory.weaknesses.slice(0, 4).join("；")}`);
+  if (memory?.habits?.length) lines.push(`学习习惯：${memory.habits.slice(0, 3).join("、")}`);
   const profileDesc = lines.length ? lines.join("\n") : "新学生，暂无画像（请按初学者对待）";
   return `你是 ThaiAI 的 AI 泰语老师「阿泰」。请根据学生的画像和学习档案，生成一份贴合其兴趣、匹配其水平的泰语定制课程与配套练习。
 
@@ -378,6 +453,8 @@ function buildPlanSystemPrompt(profile, memory) {
   if (memory?.goals?.length) lines.push(`目标：${memory.goals.slice(0, 3).join("、")}`);
   if (memory?.mistakes?.length) lines.push(`常见错误：${memory.mistakes.slice(0, 4).join("；")}`);
   if (memory?.preferences?.length) lines.push(`偏好：${memory.preferences.slice(0, 4).join("、")}`);
+  if (memory?.weaknesses?.length) lines.push(`薄弱点：${memory.weaknesses.slice(0, 3).join("；")}`);
+  if (memory?.habits?.length) lines.push(`学习习惯：${memory.habits.slice(0, 3).join("、")}`);
   const profileDesc = lines.length ? lines.join("\n") : "新学生，尚无画像（请按初学者、对泰语文化和美食旅行感兴趣对待）";
   return `你是 ThaiAI 的 AI 泰语老师「阿泰」。请根据学生的画像、常见错误与学习进度，生成一份贴合其兴趣、匹配其水平的「今日学习计划」，作为学生每天的练习清单。
 
@@ -451,88 +528,52 @@ function parseJsonResponse(content) {
   };
 }
 
-/* DeepSeek 调用（支持完整 messages 数组） */
+/* 模型调用（支持完整 messages 数组）—— 统一走 aiProvider，
+   自动挑选可用提供方、识别占位符 key、把上游错误说得能定位 */
 async function callDeepSeekMessages(messages, temperature = 0.8, maxTokens = 1200, jsonMode = false) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  try {
-    const res = await fetch(`${BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
-        stream: false,
-        ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
-      }),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`DeepSeek HTTP ${res.status}: ${body.slice(0, 200)}`);
-    }
-
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("DeepSeek 返回内容为空");
-    return content.trim();
-  } finally {
-    clearTimeout(timer);
-  }
+  return chatCompletion(messages, {
+    temperature,
+    maxTokens,
+    jsonMode,
+    timeoutMs: TIMEOUT_MS,
+  });
 }
 
 /* ============================================================
-   DeepSeek 调用（OpenAI 兼容 chat completions）
+   单轮对话调用（OpenAI 兼容 chat completions）
 ============================================================ */
 
 async function callDeepSeek(systemPrompt, userMessage) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  try {
-    const res = await fetch(`${BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0.7,
-        max_tokens: 1200,
-        stream: false,
-      }),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      throw new Error(`DeepSeek HTTP ${res.status}: ${body.slice(0, 200)}`);
-    }
-
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("DeepSeek 返回内容为空");
-    }
-
-    return content.trim();
-  } finally {
-    clearTimeout(timer);
-  }
+  return chatCompletion(
+    [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage },
+    ],
+    { temperature: 0.7, maxTokens: 1200, timeoutMs: TIMEOUT_MS }
+  );
 }
+
+/* ============================================================
+   GET /api/ai/status
+   所有 AI 服务的配置自检（不返回任何密钥，只报「配没配 / 用哪个模型」）。
+   ?probe=1 会真实发一次极小请求，验证上游能不能连通。
+   前端「AI 服务状态」面板与运维排查都用这个。
+============================================================ */
+
+router.get("/status", async (req, res) => {
+  try {
+    const wantProbe = ["1", "true", "yes"].includes(
+      String(req.query.probe || "").toLowerCase()
+    );
+    const status = wantProbe ? await probeAiServices() : aiServicesStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({
+      error: "AI 服务自检失败",
+      message: err?.message || String(err),
+    });
+  }
+});
 
 /* ============================================================
    POST /api/ai/teacher
@@ -556,11 +597,12 @@ router.post("/teacher", authenticate, async (req, res) => {
       });
     }
 
-    if (!API_KEY) {
+    if (!resolveChatProvider()) {
       return res.status(503).json({
         error: "AI 老师未配置",
         message:
-          "管理员尚未配置 DEEPSEEK_API_KEY，AI 老师暂时不可用。",
+          "AI 服务未配置：请设置 DEEPSEEK_API_KEY（或 AI_PROVIDER=agnes + AGNES_API_KEY）。",
+        ai: aiServicesStatus().chat,
       });
     }
 
@@ -592,9 +634,16 @@ router.post("/teacher", authenticate, async (req, res) => {
 
     // ── plan：按学生画像 + 记忆生成个性化今日学习计划（轻量免费，不消耗配额）──
     if (action === "plan") {
-      const profile = req.body?.profile || {};
-      const memory = (await getAiMemory(req.userId)) || {};
-      const systemPrompt = buildPlanSystemPrompt(profile, memory);
+      const frontProfile = req.body?.profile || {};
+      const placement = await getUserProfile(req.userId);
+      const profile = mergeProfileForPrompt(frontProfile, placement);
+      const memory = (await loadAiMemory(req.userId)).legacy;
+      const systemPrompt = [
+        buildPlanSystemPrompt(profile, memory),
+        buildLearnerGuidance(placement),
+      ]
+        .filter(Boolean)
+        .join("\n\n");
       const messages = [
         { role: "system", content: systemPrompt },
         { role: "user", content: "请为我生成一份今日学习计划。" },
@@ -619,9 +668,16 @@ router.post("/teacher", authenticate, async (req, res) => {
 
     // ── recommend：根据学生画像定制推荐课程与练习（轻量免费，不消耗配额）──
     if (action === "recommend") {
-      const profile = req.body?.profile || {};
-      const memory = (await getAiMemory(req.userId)) || {};
-      const systemPrompt = buildRecommendSystemPrompt(profile, memory);
+      const frontProfile = req.body?.profile || {};
+      const placement = await getUserProfile(req.userId);
+      const profile = mergeProfileForPrompt(frontProfile, placement);
+      const memory = (await loadAiMemory(req.userId)).legacy;
+      const systemPrompt = [
+        buildRecommendSystemPrompt(profile, memory),
+        buildLearnerGuidance(placement),
+      ]
+        .filter(Boolean)
+        .join("\n\n");
       const messages = [
         { role: "system", content: systemPrompt },
         { role: "user", content: "请为我生成一份定制课程。" },
@@ -651,7 +707,14 @@ router.post("/teacher", authenticate, async (req, res) => {
         ? req.body.history.slice(-8)
         : [];
 
-      const systemPrompt = buildConversationSystemPrompt(scene, stage);
+      /* 入学画像 → 对话难度与纠错重点（老师只说学生等级内的话） */
+      const placement = await getUserProfile(req.userId);
+      const systemPrompt = [
+        buildConversationSystemPrompt(scene, stage),
+        buildLearnerGuidance(placement),
+      ]
+        .filter(Boolean)
+        .join("\n\n");
       const messages = [
         { role: "system", content: systemPrompt },
         ...history.map((h) => ({
@@ -710,11 +773,11 @@ router.post("/teacher", authenticate, async (req, res) => {
       const history = Array.isArray(req.body?.history)
         ? req.body.history.slice(-12)
         : [];
-      const memory = await getAiMemory(req.userId);
+      const memory = await loadAiMemory(req.userId);
 
-      const systemPrompt = `${buildContextSystemPrompt(options)}\n\n学生画像：${JSON.stringify(profile)}${
-        memory ? `\n长期记忆：${JSON.stringify(memory)}` : ""
-      }`;
+      const systemPrompt = `${buildContextSystemPrompt(options)}\n\n学生画像：${JSON.stringify(
+        profile
+      )}${memory.prompt ? `\n\n${memory.prompt}` : ""}`;
 
       const messages = [
         { role: "system", content: systemPrompt },
@@ -736,13 +799,22 @@ router.post("/teacher", authenticate, async (req, res) => {
     }
 
     // ── chat / pronunciation / speaking：注入学生画像 + 长期记忆 + 多轮历史 ──
-    const profile = req.body?.profile || {};
+    const frontProfile = req.body?.profile || {};
     const history = Array.isArray(req.body?.history)
       ? req.body.history.slice(-12)
       : [];
 
-    const memory = await getAiMemory(req.userId);
-    const systemPrompt = buildTeacherSystemPrompt(action, profile, memory);
+    /* 入学测评画像（后端 SQLite）+ 前端运行时画像合并：等级/场景/方式以后端为准 */
+    const placement = await getUserProfile(req.userId);
+    const profile = mergeProfileForPrompt(frontProfile, placement);
+    // 分类长期记忆（顺带把入学画像同步进来）→ 注入 system prompt
+    const memory = await loadAiMemory(req.userId);
+    const systemPrompt = buildTeacherSystemPrompt(
+      action,
+      profile,
+      memory,
+      buildLearnerGuidance(placement)
+    );
 
     const messages = [
       { role: "system", content: systemPrompt },
@@ -799,35 +871,98 @@ router.post("/teacher", authenticate, async (req, res) => {
 
 /* ============================================================
    GET /api/ai/teacher/memory
-   学生长期记忆摘要（前端展示「老师记得你」）
+   分类长期记忆（「老师记得你」面板）
+
+   返回：
+     items    分类条目 [{ id, type, content, importance, source, hits, ... }]
+     groups   按类型分组（前端直接渲染）
+     memory   旧版扁平结构（向后兼容老组件）
+     summary  一句话摘要
+     顺便把入学测试画像同步成记忆（幂等，测试刚做完就生效）
 ============================================================ */
 
 router.get("/teacher/memory", authenticate, async (req, res) => {
   try {
-    const memory = (await getAiMemory(req.userId)) || {};
-    const hasMemory = Object.keys(memory).length > 0;
+    const memory = await loadAiMemory(req.userId);
     res.json({
       success: true,
-      memory,
-      hasMemory,
-      summary: hasMemory
-        ? [
-            memory.studentName ? `名字：${memory.studentName}` : null,
-            memory.level ? `水平：${memory.level}` : null,
-            memory.interests?.length
-              ? `兴趣：${memory.interests.slice(0, 3).join("、")}`
-              : null,
-            memory.goals?.length
-              ? `目标：${memory.goals.slice(0, 2).join("、")}`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")
-        : "",
+      memory: memory.legacy,
+      items: memory.items,
+      groups: memory.grouped,
+      hasMemory: memory.hasMemory,
+      summary: memory.summary,
     });
   } catch (error) {
     console.error("[aiTeacher] memory error:", error);
     res.status(500).json({ message: "查询记忆失败" });
+  }
+});
+
+/* ============================================================
+   POST /api/ai/teacher/memory/items
+   新增/更新一条分类记忆（用户直接告诉老师要记住的事）
+   body: { type, content, importance? }
+============================================================ */
+
+router.post("/teacher/memory/items", authenticate, async (req, res) => {
+  try {
+    const type = String(req.body?.type || "").trim();
+    const content = String(req.body?.content || "").trim();
+
+    if (!content) {
+      return res.status(400).json({ message: "请填写要记住的内容" });
+    }
+
+    const item = await upsertMemoryItem(req.userId, {
+      type,
+      content,
+      // 没指定重要度时用手写默认值（与旧表单保存同一张表），
+      // 否则会落到该类型的 AI 默认值（goal 会被压低一档）。
+      importance: req.body?.importance ?? MANUAL_IMPORTANCE[type],
+      source: "manual",
+    });
+
+    if (!item) {
+      return res.status(400).json({ message: "记忆类型无效或内容为空" });
+    }
+
+    const items = await listMemoryItems(req.userId);
+    res.json({
+      success: true,
+      item,
+      items,
+      groups: groupMemoryItems(items),
+      summary: memorySummary(items),
+      hasMemory: items.length > 0,
+      memory: toLegacyMemory(items),
+    });
+  } catch (error) {
+    console.error("[aiTeacher] 新增记忆失败:", error);
+    res.status(500).json({ message: "保存记忆失败" });
+  }
+});
+
+/* ============================================================
+   DELETE /api/ai/teacher/memory/items/:id
+   删除一条记忆（用户觉得记错了/不该记）
+============================================================ */
+
+router.delete("/teacher/memory/items/:id", authenticate, async (req, res) => {
+  try {
+    const removed = await deleteMemoryItem(req.userId, req.params.id);
+    const items = await listMemoryItems(req.userId);
+    res.json({
+      success: true,
+      removed,
+      items,
+      groups: groupMemoryItems(items),
+      summary: memorySummary(items),
+      hasMemory: items.length > 0,
+      memory: toLegacyMemory(items),
+    });
+  } catch (error) {
+    console.error("[aiTeacher] 删除记忆失败:", error);
+    res.status(500).json({ message: "删除记忆失败" });
   }
 });
 
@@ -889,12 +1024,27 @@ router.put("/teacher/memory", authenticate, async (req, res) => {
       final[key] = v;
     }
 
-    await saveAiMemory(req.userId, final);
+    /* 只替换「本次表单真正提交过的类型」——没改的类型保持原样 */
+    const touchedTypes = new Set();
+    for (const key of Object.keys(update)) {
+      const type = FIELD_TO_TYPE[key];
+      if (type) touchedTypes.add(type);
+    }
+
+    const memory = await saveAiMemory(
+      req.userId,
+      final,
+      touchedTypes.size ? touchedTypes : null
+    );
+    const items = await listMemoryItems(req.userId);
 
     res.json({
       success: true,
-      memory: final,
-      hasMemory: Object.keys(final).length > 0,
+      memory,
+      items,
+      groups: groupMemoryItems(items),
+      summary: memorySummary(items),
+      hasMemory: items.length > 0,
     });
   } catch (error) {
     console.error("[aiTeacher] 保存记忆失败:", error);

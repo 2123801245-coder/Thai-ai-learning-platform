@@ -35,9 +35,10 @@
 import { useEffect, useState } from "react";
 
 import api from "@/api/auth";
+import { PROGRESS_EVENT_NAMES } from "@/lib/progressEvents";
 
 const STORAGE_KEY = "thai_ai_course_progress_v1";
-const CHANGE_EVENT = "thai-ai-course-progress-change";
+const CHANGE_EVENT = PROGRESS_EVENT_NAMES.course;
 const AUTO_COMPLETE_THRESHOLD = 90; // 播放到 90% 自动完成
 
 // 进度变化事件名（供外部组件订阅，例如水合完成后刷新 UI）
@@ -187,6 +188,17 @@ function syncLessonToServer(courseId, lessonId, payload) {
 }
 
 // =========================================================
+// 读取全部课程的原始进度快照
+// =========================================================
+// 「今天做过什么」需要按 updatedAt 逐节比对，而不是只看某一门课；
+// 这里把 readAll() 暴露出去，避免调用方自己再解析一遍 localStorage。
+
+export function readAllCourseProgress() {
+  ensureHydrated();
+  return readAll();
+}
+
+// =========================================================
 // 获取某门课程的进度
 // =========================================================
 
@@ -331,6 +343,93 @@ export function getCourseStats(courseId, lessons = []) {
     progressPercent,
     lastLessonId: entry.lastLessonId || null,
   };
+}
+
+// =========================================================
+// 读取结业证书（通过结业测试后写入）
+// =========================================================
+//
+// entry.certificate = {
+//   score, total, percent,        // 结业测试得分
+//   vocabTotal,                   // 课程覆盖词条数（证书展示）
+//   issuedAt, updatedAt           // 首次取得 / 最近刷新时间
+// }
+// 服务端目前没有课程级字段，证书存 localStorage；课时完成状态仍按节同步。
+
+export function getCourseCertificate(courseId) {
+  if (!courseId) return null;
+  return getCourseProgress(courseId).certificate || null;
+}
+
+// =========================================================
+// 结业：写入证书 + 点全部课时完成（课程状态点亮）
+// =========================================================
+//
+// 语义：通过结业测试即认定该课程已学完 —— 学习路径全绿、进度 100%。
+// 证书保留最高分：重考更低分不覆盖，同分不刷新颁发日期。
+
+export function markCourseCompleted(courseId, meta = {}) {
+  if (!courseId) return null;
+
+  ensureHydrated();
+
+  const all = readAll();
+  const entry = all[courseId] || {
+    completed: {},
+    lessonProgress: {},
+    lastLessonId: null,
+    updatedAt: null,
+  };
+
+  all[courseId] = entry;
+  entry.completed = entry.completed || {};
+
+  // 1) 点亮全部课时
+  const lessonIds = Array.isArray(meta.lessonIds) ? meta.lessonIds : [];
+  const newlyCompleted = [];
+
+  lessonIds.forEach((lessonId) => {
+    if (lessonId && !entry.completed[lessonId]) {
+      entry.completed[lessonId] = true;
+      newlyCompleted.push(lessonId);
+    }
+  });
+
+  // 2) 写证书（保留更高分）
+  const now = new Date().toISOString();
+  const percent = Number(meta.percent) || 0;
+  const previous = entry.certificate || null;
+
+  if (!previous || percent > (Number(previous.percent) || 0)) {
+    entry.certificate = {
+      score: Number(meta.score) || 0,
+      total: Number(meta.total) || 0,
+      percent,
+      vocabTotal: Number(meta.vocabTotal) || 0,
+      issuedAt: now,
+      updatedAt: now,
+    };
+  } else if (percent === (Number(previous.percent) || 0)) {
+    entry.certificate = {
+      ...previous,
+      score: Number(meta.score) || previous.score,
+      total: Number(meta.total) || previous.total,
+      updatedAt: now,
+    };
+  }
+
+  entry.updatedAt = now;
+  writeAll(all);
+
+  // 3) 新完成的课时按节同步后端（已有记录的无需重复同步）
+  newlyCompleted.forEach((lessonId) => {
+    syncLessonToServer(courseId, lessonId, {
+      completed: true,
+      progress: 100,
+    });
+  });
+
+  return entry.certificate;
 }
 
 // =========================================================

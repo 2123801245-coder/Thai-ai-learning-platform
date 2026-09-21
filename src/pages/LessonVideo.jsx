@@ -23,9 +23,10 @@ import {
   Video,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useEffect as useEffectRoute } from "react";
 
-import { getCourseById } from "@/data/courses";
-import { getLessonsByCourseId, DEFAULT_VIDEO } from "@/data/lessons";
+import { getCourseById, getCourseLessons } from "@/data/courses";
+import { DEFAULT_VIDEO } from "@/data/lessons";
 import {
   isLessonCompleted,
   markLessonComplete,
@@ -152,7 +153,7 @@ export default function LessonVideo() {
   // =======================================================
 
   const lessons = useMemo(
-    () => getLessonsByCourseId(courseId),
+    () => getCourseLessons(courseId),
     [courseId]
   );
 
@@ -160,6 +161,13 @@ export default function LessonVideo() {
   // =======================================================
   // 当前课程
   // =======================================================
+
+  // 音频图文课的课时不在本页播放：重定向到课文精读页
+  useEffectRoute(() => {
+    if (lessons[0]?.audio) {
+      navigate(`/lessons/${lessonId}`, { replace: true });
+    }
+  }, [lessons, lessonId, navigate]);
 
   const currentIndex = lessons.findIndex(
     (lesson) => lesson.id === lessonId

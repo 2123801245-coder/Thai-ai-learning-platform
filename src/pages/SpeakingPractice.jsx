@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Mic,
@@ -14,12 +13,11 @@ import {
   X,
 } from "lucide-react";
 
-import Navbar from "@/components/Navbar";
 import SpeakingRecorder from "@/components/speaking/SpeakingRecorder";
 import SpeakingTrendChart from "@/components/charts/SpeakingTrendChart";
 import VipPanel from "@/components/common/VipPanel";
-import { base44 } from "@/api/base44Client";
 import { localVocabulary } from "@/data/vocabulary";
+import { getVocabulary } from "@/api/vocabulary";
 import {
   speakingSentences,
   speakingParagraphs,
@@ -56,12 +54,10 @@ const MODES = [
 ];
 
 export default function SpeakingPractice() {
-  const location = useLocation();
 
-  /* 旧版独立路由 /speaking-practice 保留顶部 Navbar；
-     MainLayout 内的 /speaking 由侧边栏+底部导航接管 */
-
-  const isStandalone = location.pathname === "/speaking-practice";
+  /* 口语练习只有 /speaking 一个入口：旧路径 /speaking-practice 已在
+     路由层重定向到此（见 App.jsx）。此前同一个组件有两种外观
+     （独立页自带 Navbar / MainLayout 自带侧边栏），用户会以为是两个功能。 */
 
   const { user } = useAuth();
   const isVip = !!user?.isVip;
@@ -122,13 +118,13 @@ export default function SpeakingPractice() {
         /* 单词模式：优先云端词库；失败或为空时用本地内置词库（离线可用） */
 
         try {
-          const remote =
-            await base44.entities.Vocabulary.list(
-              "-created_date",
-              50
-            );
+          /* 走本项目后端（Express）的词库接口。
+             此前用 base44 平台实体，那是另一条数据通道：接口不存在时
+             静默失败，单词模式只能落回本地内置词库。 */
+          const res = await getVocabulary({ limit: 50 });
+          const remote = res?.data?.data || res?.data;
 
-          if (remote && remote.length > 0) {
+          if (Array.isArray(remote) && remote.length > 0) {
             data = remote;
           }
         } catch (error) {
@@ -154,19 +150,7 @@ export default function SpeakingPractice() {
   return (
     <div className="relative min-h-screen text-white">
 
-      {/* 独立路由自带背景氛围 + 顶部导航 */}
-
-      {isStandalone && (
-        <>
-          <div className="pointer-events-none fixed inset-0 overflow-hidden">
-            <div className="absolute -left-40 -top-40 h-[520px] w-[520px] rounded-full bg-emerald-500/[0.09] blur-[130px]" />
-            <div className="absolute right-[-180px] top-[8%] h-[500px] w-[500px] rounded-full bg-yellow-400/[0.055] blur-[130px]" />
-            <div className="absolute bottom-[-240px] left-[35%] h-[520px] w-[520px] rounded-full bg-teal-400/[0.06] blur-[130px]" />
-          </div>
-
-          <Navbar />
-        </>
-      )}
+      {/* 背景氛围由 MainLayout 的全站背板承担，这里不再自建一层 */}
 
       <main className="relative z-10 mx-auto max-w-[1200px] px-4 py-6 pb-28 sm:px-6 lg:px-8">
         {/* =========================

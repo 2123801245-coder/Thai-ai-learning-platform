@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 
 import { warmUpSpeech } from "@/lib/thaiSpeech";
@@ -24,6 +25,9 @@ import { AIOrb } from "@/components/ui/premium";
 ========================================================= */
 
 const Home = lazy(() => import("@/pages/Home"));
+const AssetPreview = lazy(() => import("@/pages/__AssetPreview"));
+const LearningUniverse = lazy(() => import("@/pages/LearningUniverse"));
+const CultureUniverse = lazy(() => import("@/pages/CultureUniverse"));
 const LessonVideo = lazy(() => import("@/pages/LessonVideo"));
 const Course = lazy(() => import("@/pages/Course"));
 const SpeakingPractice = lazy(() =>
@@ -41,26 +45,50 @@ const Settings = lazy(() => import("@/pages/Settings"));
 const Profile = lazy(() => import("@/pages/Profile"));
 const AdminCodes = lazy(() => import("@/pages/AdminCodes"));
 const CourseDetail = lazy(() => import("@/pages/CourseDetail"));
+const BasicReaderExam = lazy(() => import("@/pages/BasicReaderExam"));
+const PlacementTest = lazy(() => import("@/pages/PlacementTest"));
+const ThaiProfessionalHub = lazy(() => import("@/pages/ThaiProfessionalHub"));
 const Login = lazy(() => import("@/pages/Login"));
 const ThaiLanding = lazy(() => import("@/pages/ThaiLanding"));
 const Register = lazy(() => import("@/pages/Register"));
 const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
-const Challenges = lazy(() => import("@/pages/Challenges"));
 const WrongNotebook = lazy(() => import("@/pages/WrongNotebook"));
 const OAuthConsent = lazy(() => import("@/pages/OAuthConsent"));
 const ThaiAlphabet = lazy(() => import("@/pages/ThaiAlphabet"));
-const VocabMatch = lazy(() => import("@/pages/VocabMatch"));
-const SentenceFill = lazy(() => import("@/pages/SentenceFill"));
-const WordSegment = lazy(() => import("@/pages/WordSegment"));
+/* 词汇配对 / 句子填空 / 分词练习已并入词汇星球（见 Vocabulary.jsx 的模式切换）。
+   旧路径 /vocab-match、/sentence-fill、/word-segment 统一重定向到
+   /vocabulary?mode=xxx：模式只有一个真源（URL），组件不再有 initialMode 。 */
 const LearnLoop = lazy(() => import("@/pages/LearnLoop"));
 const Practice = lazy(() => import("@/pages/Practice"));
 const Culture = lazy(() => import("@/pages/Culture"));
+const MediaLearning = lazy(() => import("@/pages/MediaLearning"));
 
 
 /* =========================================================
    品牌化加载占位（Suspense fallback）
 ========================================================= */
+
+/* 老链接迁移：保留 query（例如 /ai-room?scene=airport → /conversation?scene=airport）
+   ---------------------------------------------------------
+   注意：`to` 自己带 query 时（/vocabulary?mode=match）要做**合并**。
+   早期的字符串拼接会产出 `?mode=match?mode=fill` 这种畸形地址，
+   所以这里用 URLSearchParams 真正合并，目标 query 优先。 */
+
+function RedirectKeepingQuery({ to }) {
+  const location = useLocation();
+
+  const [path, targetQuery = ""] = to.split("?");
+  const merged = new URLSearchParams(targetQuery);
+
+  new URLSearchParams(location.search).forEach((value, key) => {
+    if (!merged.has(key)) merged.set(key, value);
+  });
+
+  const query = merged.toString();
+
+  return <Navigate to={query ? `${path}?${query}` : path} replace />;
+}
 
 function PageLoading() {
   return (
@@ -237,6 +265,9 @@ export default function App() {
           element={<ThaiLanding />}
         />
 
+        {/* TEMP: 素材对照页（选完图删除） */}
+        <Route path="/__assets" element={<AssetPreview />} />
+
 
         {/* =================================================
             注册
@@ -306,6 +337,41 @@ export default function App() {
     </MainLayout>
   }
 />
+<Route
+  path="/course/:courseId/exam"
+  element={
+    <MainLayout>
+      <BasicReaderExam />
+    </MainLayout>
+  }
+/>
+
+        {/* =================================================
+             AI 入学测试（注册后 → 画像 → 学习路线）
+        ================================================= */}
+
+<Route
+  path="/placement-test"
+  element={
+    <MainLayout>
+      <PlacementTest />
+    </MainLayout>
+  }
+/>
+
+        {/* =================================================
+             Thai Professional Hub（专业泰语方向选择）
+             选择即自动并入学习路线
+        ================================================= */}
+
+<Route
+  path="/professional"
+  element={
+    <MainLayout>
+      <ThaiProfessionalHub />
+    </MainLayout>
+  }
+/>
 
         {/* =================================================
             口语练习
@@ -344,6 +410,46 @@ export default function App() {
           element={
             <MainLayout>
               <Culture />
+            </MainLayout>
+          }
+        />
+
+        {/* =================================================
+            媒体学习（泰剧 / 歌曲 / 综艺 / 新闻 / 社交 / 文学）
+        ================================================= */}
+
+        <Route
+          path="/media"
+          element={
+            <MainLayout>
+              <MediaLearning />
+            </MainLayout>
+          }
+        />
+
+
+        {/* =================================================
+            学习宇宙（学习星系/技能树/博物馆/成就卡/能力雷达的归宿）
+        ================================================= */}
+
+        <Route
+          path="/universe"
+          element={
+            <MainLayout>
+              <LearningUniverse />
+            </MainLayout>
+          }
+        />
+
+        {/* =================================================
+            泰语文化宇宙（泰剧/音乐/新闻/探索 + 情景特训入口）
+        ================================================= */}
+
+        <Route
+          path="/culture-universe"
+          element={
+            <MainLayout>
+              <CultureUniverse />
             </MainLayout>
           }
         />
@@ -419,6 +525,20 @@ export default function App() {
 
 
         {/* =================================================
+            AI Speaking Room 已并入 AI 对话室（老链接 301 到新家）
+        ================================================= */}
+
+        <Route
+          path="/ai-room"
+          element={
+            <MainLayout>
+              <RedirectKeepingQuery to="/conversation" />
+            </MainLayout>
+          }
+        />
+
+
+        {/* =================================================
             泰语字母表
         ================================================= */}
 
@@ -436,13 +556,11 @@ export default function App() {
             词汇配对练习
         ================================================= */}
 
+        {/* 旧练习路径：直接渲染词汇星球并把模式预置好（内容优先），
+            挂载后 URL 会被规范化成 /vocabulary?mode=xxx */}
         <Route
           path="/vocab-match"
-          element={
-            <MainLayout>
-              <VocabMatch />
-            </MainLayout>
-          }
+          element={<RedirectKeepingQuery to="/vocabulary?mode=match" />}
         />
 
 
@@ -452,11 +570,7 @@ export default function App() {
 
         <Route
           path="/sentence-fill"
-          element={
-            <MainLayout>
-              <SentenceFill />
-            </MainLayout>
-          }
+          element={<RedirectKeepingQuery to="/vocabulary?mode=fill" />}
         />
 
 
@@ -466,11 +580,7 @@ export default function App() {
 
         <Route
           path="/word-segment"
-          element={
-            <MainLayout>
-              <WordSegment />
-            </MainLayout>
-          }
+          element={<RedirectKeepingQuery to="/vocabulary?mode=segment" />}
         />
 
 
@@ -534,9 +644,15 @@ export default function App() {
             学习挑战赛（自带顶部导航）
         ================================================= */}
 
+        {/* /challenges → /ranking
+            挑战赛原本自己拉一份外部（base44）排行榜，与 /ranking 的榜单是
+            两套互相矛盾的"我排第几"；而本项目后端并没有排行榜接口，
+            那次外部调用失败被静默吞掉，页面实际永远空榜。
+            同一能力收敛到 /ranking（真实连续天数与打卡），旧路径保留重定向。
+            页面源码保留在 src/pages/Challenges.jsx，后端提供排行榜接口后可直接复活。 */}
         <Route
           path="/challenges"
-          element={<Challenges />}
+          element={<RedirectKeepingQuery to="/ranking" />}
         />
 
 
@@ -546,7 +662,11 @@ export default function App() {
 
         <Route
           path="/wrong-notebook"
-          element={<WrongNotebook />}
+          element={
+            <MainLayout>
+              <WrongNotebook />
+            </MainLayout>
+          }
         />
 
 
@@ -554,9 +674,13 @@ export default function App() {
             口语练习（顶部导航版）
         ================================================= */}
 
+        {/* 旧路径 /speaking-practice → /speaking。
+            重构前它渲染的是同一个组件但**不带 MainLayout**，于是同一个口语
+            练习有两个外观（一个带侧边栏、一个带自家 Navbar），用户以为
+            是两个功能。现在保留路径，统一落到带布局的那个。 */}
         <Route
           path="/speaking-practice"
-          element={<SpeakingPractice />}
+          element={<RedirectKeepingQuery to="/speaking" />}
         />
 
 

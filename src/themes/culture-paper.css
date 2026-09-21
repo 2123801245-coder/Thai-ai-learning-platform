@@ -1,0 +1,448 @@
+/* src/themes/culture-paper.css
+   =========================================================
+   PAPER 世界 · 文化页版式层（“博物馆展览目录 / 展品图录”）
+   =========================================================
+
+   这一层解决什么问题
+   ------------------
+   颜色层已经完工：world-shim.css 把 text-white/40、bg-white/[0.04] 这类
+   “只在深色底成立”的工具类按世界重映射，四个世界都读得清。所以本文件
+   **一条 text-* / background-* 的“配色”都不写**，只重排“形”：
+   间距 / 字号 / 字距 / 行高 / 圆角 / 细线 / 伪元素 / 编号。
+   要画“墨色细线”时用两个已经有了的东西，不做新的配色决定：
+     · 纸面（浅底）：var(--tp-border) / var(--tp-border-subtle)
+       —— 这两个是 worldTokens() 里 PAPER 自己的边框 token（ink @ .26 / .13），
+          “边框”属于形不属于配色，用它等于沿用世界已有的描边，不是新调色。
+     · 探险者面板（深底）：rgba(232,198,132,*) —— 探险者那套 .exp-* 本身
+       就写死了这套金色细线（.exp-seal / .exp-tag / .exp-rail-thumb 都在用），
+       深底上 var(--tp-border) 是深墨色，画出来看不见，只能沿用面板自己的金线。
+
+   关于 theme.css 里那 4 条 !important（别照着旧注释走错路）
+   --------------------------------------------------------
+   theme.css 有 4 条 `html.theme-custom[data-mode="light"] [class*=text-white]`
+   之类的 !important 规则。它们的限定条件是 **data-mode="light"**。
+   实测（src/lib/ThemeContext.jsx:150-176 的实测注释 + 本文件复核）：
+   THEMES 里没有 paper 这个 id → forceLight=false → PAPER 下 data-mode 是
+   "dark" → 那 4 条规则**处于休眠**。
+   所以：① 本文件写的任何颜色声明都生效，不存在“被 !important 抢走”；
+        ② 但也别因此去删别人写好的声明——本层压根不写配色，绕开这个坑。
+   （course-paper.css 的头注释基于“那 4 条生效”的误判删过 23 条颜色声明，
+     那是错的；本文件的判断以 ThemeContext 源码为准。）
+
+   已发现但**故意不在本层修**的颜色层缺口（留证，别以为本层没做完）
+   --------------------------------------------------------------
+   world-shim.css 只覆盖了带透明度的 text-white/40 这类写法，
+   **裸 `.text-white`（不带斜杠）一条都没覆盖**（全文件 0 条，已用脚本核过），
+   而唯一会兜住 `[class*=text-white]` 的规则是 theme.css:339-342 的
+   `html.theme-custom[data-mode="light"] … !important` —— 如前所述 PAPER 下
+   data-mode 是 dark，**它们处于休眠**。
+   后果：PAPER 下 `text-white` 仍是 #fff，而页面底色是 --tp-bg=#F6F1E6（米白，
+   见 theme.css 的 `[data-mode="dark"] .theme-site-backdrop::after{background:var(--tp-bg)}`）
+   → 文化页的 H1「泰国文化」(Culture.jsx 的 `text-white`) 与搜索框输入文字
+     是白字压米白，基本看不见。Course.jsx 的 h1 同理（course-paper.css 也没兜）。
+   同理未被覆盖的还有 `placeholder:text-white/25` 这类变体类。
+   这是**颜色层（world-shim）的缺口，属于全站级修复**，落在别人负责的层里，
+   所以本层不写颜色去抢——只在报告里点名。修法是一行全局规则：
+     html[data-visual-mode="paper"] .text-white { color: rgb(36 31 23) }
+
+   硬约束（自检口径）
+   ------------------
+   1. 本文件**每一条规则**都带 `html[data-visual-mode="paper"]` 前缀。
+      类名无条件挂在组件上，另外三个世界匹配不到任何声明 = 惰性，版式不动。
+   2. 不改 theme.css / world-shim.css / index.css 里的既有规则；只在本文件
+      追加新类。
+   3. 不碰业务逻辑（数据/API/路由/state/localStorage），不删功能，不加数据。
+   4. 新增 DOM（页眉、展签编号、展区编号）一律用 hidden **属性**：
+      父级若挂 space-y-*，`> :not([hidden]) ~ :not([hidden])` 只认属性不认类，
+      用 hidden 类会让另外三个世界凭空多出间距。paper 下由本文件把
+      `[hidden]` 特异性抬起来重新显示（Tailwind 3 的 preflight 是
+      `[hidden]:where(...){display:none}`(0,1,0)，抬到 (0,2,1) 以上即可赢）。
+
+   特异性备忘（这里踩过坑）
+   ------------------------
+   `html[data-visual-mode="paper"] .culp-x` = (0,2,1)：
+     · 赢 Tailwind 工具类 (0,1,0) 与 hover 变体 (0,2,0) ✓
+     · 赢主题色重映射 `.theme-custom .bg-emerald-400\/[0.07]` (0,2,0) ✓
+     · **打平** world-shim.css 的重映射 (0,2,1)。同属性相遇只能靠加载顺序，
+       而本文件是从页面 chunk import 的、与垫片加载顺序不保证 —— 所以凡是
+       覆盖 shim 管过的属性（background-color / border-color）的规则，
+       把类名**写两遍**抬到 (0,3,1)。下面所有 `.x.x` 都是这个原因，不是手滑。
+     · 写 `background-color: transparent` 一类“退掉旧底”的地方也走双写，
+       否则纸面上会随机残留一层奶油色卡片底。
+   ========================================================= */
+
+
+/* =========================================================
+   A. /culture（Culture.jsx）· 博物馆展览目录
+   ========================================================= */
+
+/* ---------- A1 页面骨架：行宽收窄成印刷品 ---------- */
+html[data-visual-mode="paper"] .culp-page {
+  /* max-w-6xl 是 72rem，一行太宽，不像图录的“栏宽”；收到 62rem 更像版心 */
+  max-width: 62rem;
+  padding-bottom: 3rem;
+}
+
+/* ---------- A2 展册页眉（paper 专属 DOM；hidden 属性控制显隐） ---------- */
+html[data-visual-mode="paper"] .culp-masthead[hidden] {
+  /* 只覆盖 preflight 的 [hidden]{display:none}(0,1,0)，本选择器 (0,3,1) 稳赢 */
+  display: block;
+  margin-bottom: 2.25rem;
+  padding-bottom: 0.7rem;
+  /* 馆名下的“双细线”：目录页的经典记号，比任何圆角卡片都更像展册 */
+  border-bottom: 3px double var(--tp-border);
+}
+html[data-visual-mode="paper"] .culp-masthead-en {
+  font-size: 0.625rem;
+  font-weight: 700;
+  /* 大字距小标题：克制装饰的主要手段 */
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+}
+html[data-visual-mode="paper"] .culp-masthead-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  /* 颜色不写：继承纸面墨色，交给既有两层 */
+}
+
+/* ---------- A3 页头：章节化 + 正文测量 ---------- */
+html[data-visual-mode="paper"] .culp-head { margin-bottom: 2.25rem; }
+
+html[data-visual-mode="paper"] .culp-eyebrow {
+  letter-spacing: 0.34em;
+  /* 左侧一道墨线当“栏目居左的索引记号”，替掉装饰性的事（Sparkles 图标保留） */
+  padding-left: 0.8rem;
+  border-left: 2px solid var(--tp-border);
+}
+
+html[data-visual-mode="paper"] .culp-title {
+  /* theme.css 只给 h2/h3 挂了展示字体，h1 没有 → 这里补上，让书名走衬线 */
+  font-family: var(--tp-font-display);
+  font-size: clamp(1.9rem, 4.2vw, 2.5rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  padding-bottom: 0.7rem;
+  /* 书名与导言之间一条极淡的分隔线 */
+  border-bottom: 1px solid var(--tp-border-subtle);
+}
+
+html[data-visual-mode="paper"] .culp-lede {
+  max-width: 44rem;
+  font-size: 0.9375rem;
+  /* 印刷品行高：比 theme.css 给 p 的 1.85 再宽一点 */
+  line-height: 2;
+  letter-spacing: 0.005em;
+  margin-top: 1rem;
+}
+
+/* 统计栏：一排小字格 + 竖细线分隔，不做一排彩色药丸 */
+html[data-visual-mode="paper"] .culp-stats {
+  gap: 0;
+  margin-top: 1.35rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--tp-border-subtle);
+}
+html[data-visual-mode="paper"] .culp-stats.culp-stats > * {
+  /* 双写类名 → (0,3,1)，压掉 shim 对 bg-white/[0.04] 的重映射 */
+  background-color: transparent;
+  border-width: 0 0 0 1px;
+  border-left-color: var(--tp-border-subtle);
+  border-radius: 0;
+  padding: 0 0.9rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+}
+html[data-visual-mode="paper"] .culp-stats.culp-stats > :first-child {
+  border-left-width: 0;
+  padding-left: 0;
+}
+
+/* ---------- A4 检索 + 展区目录（分类条） ---------- */
+html[data-visual-mode="paper"] .culp-index { margin-bottom: 2.5rem; }
+
+html[data-visual-mode="paper"] .culp-search { max-width: 26rem; }
+
+html[data-visual-mode="paper"] .culp-input {
+  border-radius: var(--tp-radius-sm);
+  letter-spacing: 0.02em;
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+html[data-visual-mode="paper"] .culp-input.culp-input {
+  background-color: transparent;
+  border-color: var(--tp-border);
+}
+
+html[data-visual-mode="paper"] .culp-areas {
+  gap: 0.4rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--tp-border-subtle);
+}
+
+html[data-visual-mode="paper"] .culp-area {
+  /* 展区标签：方角 + 大字距，替掉胶囊感 */
+  border-radius: var(--tp-radius-sm);
+  padding: 0.4rem 0.72rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  /* ⚠️ 故意不动 background/border-color：选中态是 bg-emerald-400 实心填充，
+     同一个元素上覆盖底色会把“当前展区”的反馈一起抹掉（功能性的视觉状态）。 */
+}
+
+/* ---------- A5 展签条目 ---------- */
+html[data-visual-mode="paper"] .culp-list {
+  /* 条目之间不用卡片间距，靠“顶线 + 大留白”分节；列间距单独给 */
+  gap: 0;
+  column-gap: 2.75rem;
+}
+
+html[data-visual-mode="paper"] .culp-entry {
+  /* 一条展签：左栏是编号，右栏是展品信息（目录页的栏格） */
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  column-gap: 1.25rem;
+  align-content: start;
+  padding: 1.5rem 0 1.75rem;
+  border-radius: var(--tp-radius-sm);
+}
+html[data-visual-mode="paper"] .culp-entry.culp-entry {
+  /* 双写抬到 (0,3,1)：退掉玻璃卡底、把四边描边改成“只有顶线” */
+  background-color: transparent;
+  border-width: 0;
+  border-top-width: 1px;
+  border-top-color: var(--tp-border);
+}
+/* 所有内容落到右栏；编号单独留在左栏 */
+html[data-visual-mode="paper"] .culp-entry > * { grid-column: 2; }
+
+html[data-visual-mode="paper"] .culp-entry > .culp-entry-no {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: start;
+  /* display 必须显式写：元素带 hidden 属性，preflight 的 display:none 不写就赢不了 */
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+/* 编号上方的“展签”二字与下方一小段墨线：纯装饰，用 content + currentColor，
+   不引入任何新颜色 */
+html[data-visual-mode="paper"] .culp-entry > .culp-entry-no::before {
+  content: "展签";
+  display: block;
+  margin-bottom: 0.15rem;
+  font-size: 0.5625rem;
+  letter-spacing: 0.3em;
+  opacity: 0.6;
+}
+html[data-visual-mode="paper"] .culp-entry > .culp-entry-no::after {
+  content: "";
+  display: block;
+  width: 1.1rem;
+  height: 1px;
+  margin-top: 0.4rem;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+/* 分类小签：从药丸变成一行大字距索引字 */
+html[data-visual-mode="paper"] .culp-tag {
+  border-radius: 0;
+  border-width: 0;
+  padding: 0;
+  font-size: 0.5625rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+html[data-visual-mode="paper"] .culp-tag.culp-tag {
+  background-color: transparent;
+}
+
+/* 表情方框：退掉绿底，只留一圈细线（图录里的“符号栏”） */
+html[data-visual-mode="paper"] .culp-emoji {
+  border-radius: var(--tp-radius-sm);
+}
+html[data-visual-mode="paper"] .culp-emoji.culp-emoji {
+  background-color: transparent;
+  border-color: var(--tp-border);
+}
+
+/* 泰语主表达与三行释义：印刷品节奏 */
+html[data-visual-mode="paper"] .culp-thai {
+  font-family: var(--tp-font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+html[data-visual-mode="paper"] .culp-roman {
+  font-size: 0.75rem;
+  line-height: 1.8;
+  letter-spacing: 0.08em;
+}
+html[data-visual-mode="paper"] .culp-cn {
+  line-height: 1.85;
+  letter-spacing: 0.01em;
+}
+
+/* 朗读按钮只改方圆，不动底色：说话中态是 emerald 填充，覆盖底色会丢状态 */
+html[data-visual-mode="paper"] .culp-speak,
+html[data-visual-mode="paper"] .culp-ex-speak {
+  border-radius: var(--tp-radius-sm);
+}
+
+html[data-visual-mode="paper"] .culp-vocab {
+  gap: 0.3rem;
+}
+/* 词汇条同理：只方角 + 字距，保住“正在朗读”的高亮态 */
+html[data-visual-mode="paper"] .culp-vocab-chip {
+  border-radius: var(--tp-radius-sm);
+  letter-spacing: 0.04em;
+}
+
+/* ---------- A6 条目内的注释块（注释段，不是圆角盒子） ---------- */
+html[data-visual-mode="paper"] .culp-note,
+html[data-visual-mode="paper"] .culp-analysis,
+html[data-visual-mode="paper"] .culp-example {
+  border-radius: 0;
+  /* 左细线 + 缩进 = 图录里的注释段 */
+  padding: 0.15rem 0 0.15rem 0.9rem;
+}
+html[data-visual-mode="paper"] .culp-note.culp-note,
+html[data-visual-mode="paper"] .culp-analysis.culp-analysis,
+html[data-visual-mode="paper"] .culp-example.culp-example {
+  background-color: transparent;
+  border-width: 0 0 0 1px;
+  border-left-color: var(--tp-border);
+}
+
+/* 三个小标题（为什么这么说 / 文化解析 / 例句）统一成“下划线式栏目名” */
+html[data-visual-mode="paper"] .culp-anno-label {
+  display: inline-block;
+  margin-bottom: 0.45rem;
+  padding-bottom: 0.3rem;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  border-bottom: 1px solid var(--tp-border-subtle);
+}
+
+html[data-visual-mode="paper"] .culp-note-body,
+html[data-visual-mode="paper"] .culp-analysis-body {
+  font-size: 0.8125rem;
+  line-height: 1.95;
+  letter-spacing: 0.005em;
+}
+html[data-visual-mode="paper"] .culp-ex-thai {
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+}
+html[data-visual-mode="paper"] .culp-ex-roman {
+  line-height: 1.8;
+  letter-spacing: 0.06em;
+}
+html[data-visual-mode="paper"] .culp-ex-cn { line-height: 1.85; }
+
+/* ---------- A7 空态 ---------- */
+html[data-visual-mode="paper"] .culp-empty {
+  border-radius: var(--tp-radius-sm);
+  padding: 3.5rem 1.5rem;
+}
+html[data-visual-mode="paper"] .culp-empty.culp-empty {
+  background-color: transparent;
+  border-color: var(--tp-border);
+}
+
+
+/* =========================================================
+   B. /culture-universe（ThailandExplorer）· 展区目录 + 图录面板
+   ---------------------------------------------------------
+   探险者的地图板 / 轨道 / 面板本身是一块“深色展柜”（.exp-board 底 #040706、
+   .exp-rail / .exp-panel 都是深玻璃，文字硬编码白色）——那是它的设计，
+   四个世界共用，**不属于本次版式改造**，所以下面一律不碰板的底色和文字色，
+   只把“展柜外围的目录与图录”做成纸本目录的语言：
+   方角（世界 token）、金细线分节、大字距栏目名、展区编号。
+   尺寸继续沿用 .exp-* 的 `calc(var(--exp-u) * x)` 约定（整块板随容器等比缩放），
+   不复用 rem，否则缩放比例会断。
+   ========================================================= */
+
+/* ---------- B1 展区目录（探索路线栏） ---------- */
+html[data-visual-mode="paper"] .culp-exp .exp-rail {
+  border-radius: var(--tp-radius-sm);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-head {
+  letter-spacing: 0.3em;
+  padding-bottom: calc(var(--exp-u) * 0.005);
+  border-bottom: 1px solid rgba(232, 198, 132, 0.28);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-row {
+  /* 方角 + 行底线：目录里一行一座城的读法 */
+  border-radius: var(--tp-radius-sm);
+  letter-spacing: 0.04em;
+  border-bottom-color: rgba(232, 198, 132, 0.16);
+}
+/* 缩略图 → 图版：细金框 + 白纸边（padding 由 border-box 收窄图片本身，形成卡纸边） */
+html[data-visual-mode="paper"] .culp-exp .exp-rail-thumb {
+  border-radius: var(--tp-radius-sm);
+  padding: 3px;
+  background: #fffdf7; /* 与 theme.css 给 article img 的纸白一致，不引入新色 */
+}
+/* 展区编号：hidden 属性 → 另外三个世界不参与盒模型；paper 下抬特异性显示 */
+html[data-visual-mode="paper"] .culp-exp .exp-rail-index[hidden] {
+  display: inline-block;
+  flex: none;
+  font-size: calc(var(--exp-u) * 0.0085);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  opacity: 0.72;
+}
+html[data-visual-mode="paper"] .culp-exp .exp-progress {
+  border-radius: var(--tp-radius-sm);
+}
+
+/* ---------- B2 图录面板（城市志） ---------- */
+html[data-visual-mode="paper"] .culp-exp .exp-panel {
+  border-radius: var(--tp-radius-sm);
+}
+/* 每个栏目变成“上细线分节”的图录段 */
+html[data-visual-mode="paper"] .culp-exp .exp-panel-block {
+  padding-top: calc(var(--exp-u) * 0.009);
+  border-top: 1px solid rgba(232, 198, 132, 0.18);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-panel-label {
+  letter-spacing: 0.3em;
+  padding-bottom: calc(var(--exp-u) * 0.003);
+  border-bottom: 1px solid rgba(232, 198, 132, 0.22);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-tag,
+html[data-visual-mode="paper"] .culp-exp .exp-scene {
+  border-radius: var(--tp-radius-sm);
+  letter-spacing: 0.08em;
+}
+html[data-visual-mode="paper"] .culp-exp .exp-line {
+  border-radius: var(--tp-radius-sm);
+  border-bottom-color: rgba(232, 198, 132, 0.16);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-volumes {
+  border-radius: var(--tp-radius-sm);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-volume {
+  border-radius: var(--tp-radius-sm);
+  letter-spacing: 0.06em;
+}
+html[data-visual-mode="paper"] .culp-exp .exp-seal {
+  border-radius: var(--tp-radius-sm);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-era-head {
+  letter-spacing: 0.06em;
+}
+html[data-visual-mode="paper"] .culp-exp .exp-panel-foot {
+  border-top-color: rgba(232, 198, 132, 0.2);
+}

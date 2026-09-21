@@ -6,6 +6,10 @@ import {
   culturePoints,
   getCultureStats,
 } from "@/data/thaiCulture";
+/* PAPER 世界的文化页版式层（博物馆展册 / 图录）。随本页 chunk 单独加载；
+   文件内每条规则都带 html[data-visual-mode="paper"] 前缀，
+   另外三个世界一条都匹配不到 → 版式与改造前一致。 */
+import "@/themes/culture-paper.css";
 
 /* =========================================================
    泰国文化 · Culture
@@ -64,22 +68,33 @@ export default function Culture() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="culp-page mx-auto max-w-6xl">
+      {/* PAPER 专属展册页眉。用 hidden **属性**（不是 hidden 类）：
+          另外三个世界 display:none 零占位；若改用类名，父级一旦有 space-y-*，
+          `> :not([hidden]) ~ :not([hidden])` 只认属性不认类，就会凭空多出间距。 */}
+      <header className="culp-masthead" hidden>
+        <p className="culp-masthead-en">Thailand · Culture Gallery</p>
+        <div className="culp-masthead-meta">
+          <span>展区 {cultureCategories.length} · 展签 {total}</span>
+          <span>Catalogue</span>
+        </div>
+      </header>
+
       {/* 页头 */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300/60">
+      <div className="culp-head mb-6">
+        <div className="culp-eyebrow flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300/60">
           <Sparkles className="h-3.5 w-3.5" />
           Thailand Culture · วัฒนธรรมไทย
         </div>
-        <h1 className="mt-1.5 text-2xl font-black tracking-tight text-white sm:text-3xl">
+        <h1 className="culp-title mt-1.5 text-2xl font-black tracking-tight text-white sm:text-3xl">
           泰国文化
         </h1>
-        <p className="mt-1.5 max-w-2xl text-sm leading-6 text-white/45">
+        <p className="culp-lede mt-1.5 max-w-2xl text-sm leading-6 text-white/45">
           学语言，更懂泰国。每个文化知识点都连接到地道泰语表达——点击即可听发音。
         </p>
 
         {/* 统计 */}
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="culp-stats mt-4 flex flex-wrap gap-2">
           <div className="flex items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-400/[0.07] px-3 py-1 text-xs text-emerald-200/90">
             <BookHeart className="h-3.5 w-3.5" />
             {total} 个知识点 · {cultureCategories.length} 大分类
@@ -97,22 +112,22 @@ export default function Culture() {
       </div>
 
       {/* 搜索 + 分类 */}
-      <div className="mb-6 space-y-3">
-        <div className="relative max-w-md">
+      <div className="culp-index mb-6 space-y-3">
+        <div className="culp-search relative max-w-md">
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索：泼水节 / สงกรานต์ / 冬阴功…"
-            className="w-full rounded-xl border border-white/[0.1] bg-white/[0.04] py-2.5 pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/40"
+            className="culp-input w-full rounded-xl border border-white/[0.1] bg-white/[0.04] py-2.5 pl-10 pr-4 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-emerald-300/40"
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="culp-areas flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setActiveCategory("all")}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+            className={`culp-area rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
               activeCategory === "all"
                 ? "bg-emerald-400 text-[#061513]"
                 : "border border-white/[0.1] bg-white/[0.03] text-white/60 hover:bg-white/[0.08]"
@@ -126,7 +141,7 @@ export default function Culture() {
               type="button"
               onClick={() => setActiveCategory(c.id)}
               title={c.desc}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+              className={`culp-area rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
                 activeCategory === c.id
                   ? "bg-emerald-400 text-[#061513]"
                   : "border border-white/[0.1] bg-white/[0.03] text-white/60 hover:bg-white/[0.08]"
@@ -140,30 +155,37 @@ export default function Culture() {
 
       {/* 知识点卡片 */}
       {filtered.length === 0 ? (
-        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-6 py-14 text-center">
+        <div className="culp-empty rounded-2xl border border-white/[0.08] bg-white/[0.03] px-6 py-14 text-center">
           <div className="text-3xl">🌴</div>
           <p className="mt-3 text-sm text-white/50">没有找到相关知识点，换个关键词试试</p>
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {filtered.map((p) => {
+        <div className="culp-list grid gap-4 lg:grid-cols-2">
+          {filtered.map((p, idx) => {
             const cat = cultureCategories.find((c) => c.id === p.category);
             const isSpeaking = speakingKey === `main-${p.id}`;
 
             return (
               <article
                 key={p.id}
-                className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4 transition hover:border-emerald-300/25 hover:bg-white/[0.06] sm:p-5"
+                className="culp-entry group relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.04] p-4 transition hover:border-emerald-300/25 hover:bg-white/[0.06] sm:p-5"
               >
+                {/* PAPER 展签编号（目录左栏）。hidden **属性** → 另外三个世界不参与
+                    盒模型（article 是 flex 列，display:none 的子项不占位），
+                    paper 下由 culture-paper.css 抬特异性显示。 */}
+                <span className="culp-entry-no" hidden>
+                  {String(idx + 1).padStart(2, "0")}
+                </span>
+
                 {/* 顶部分类 + 标题 */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-300/15 bg-emerald-400/[0.08] text-lg">
+                    <span className="culp-emoji flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-300/15 bg-emerald-400/[0.08] text-lg">
                       {p.emoji}
                     </span>
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="rounded-full border border-white/[0.1] bg-white/[0.05] px-2 py-px text-[9px] font-bold text-white/45">
+                        <span className="culp-tag rounded-full border border-white/[0.1] bg-white/[0.05] px-2 py-px text-[9px] font-bold text-white/45">
                           {cat?.emoji} {cat?.label}
                         </span>
                       </div>
@@ -178,7 +200,7 @@ export default function Culture() {
                     type="button"
                     onClick={() => speak(`main-${p.id}`, p.thai)}
                     aria-label={`朗读 ${p.thai}`}
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition ${
+                    className={`culp-speak flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition ${
                       isSpeaking
                         ? "border-emerald-300/40 bg-emerald-400/20 text-emerald-300"
                         : "border-white/[0.1] bg-white/[0.04] text-white/40 hover:border-emerald-300/30 hover:text-emerald-300"
@@ -198,47 +220,47 @@ export default function Culture() {
                   onClick={() => speak(`main-${p.id}`, p.thai)}
                   className="mt-4 flex items-center gap-2 text-left"
                 >
-                  <span className="text-xl font-black tracking-wide text-emerald-200 sm:text-2xl">
+                  <span className="culp-thai text-xl font-black tracking-wide text-emerald-200 sm:text-2xl">
                     {p.thai}
                   </span>
                   <Volume2
                     className={`h-4 w-4 shrink-0 ${isSpeaking ? "animate-pulse text-emerald-300" : "text-emerald-300/40 group-hover:text-emerald-300/80"}`}
                   />
                 </button>
-                <p className="mt-1 text-xs italic text-white/35">
+                <p className="culp-roman mt-1 text-xs italic text-white/35">
                   {p.roman}
                 </p>
-                <p className="mt-1 text-sm font-medium text-white/75">
+                <p className="culp-cn mt-1 text-sm font-medium text-white/75">
                   {p.chinese}
                 </p>
 
                 {/* 为什么这么说 */}
-                <div className="mt-3 rounded-xl border border-emerald-300/[0.12] bg-emerald-400/[0.05] px-3 py-2.5">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/60">
+                <div className="culp-note mt-3 rounded-xl border border-emerald-300/[0.12] bg-emerald-400/[0.05] px-3 py-2.5">
+                  <div className="culp-anno-label text-[10px] font-bold uppercase tracking-wider text-emerald-300/60">
                     为什么这么说
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-white/65">
+                  <p className="culp-note-body mt-1 text-xs leading-5 text-white/65">
                     {p.meaning}
                   </p>
                 </div>
 
                 {/* 文化解析 */}
-                <div className="mt-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                <div className="culp-analysis mt-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+                  <div className="culp-anno-label text-[10px] font-bold uppercase tracking-wider text-white/35">
                     🏛️ 文化解析
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-white/60">
+                  <p className="culp-analysis-body mt-1 text-xs leading-5 text-white/60">
                     {p.culture}
                   </p>
                 </div>
 
                 {/* 例句 */}
-                <div className="mt-2.5 flex items-start gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
+                <div className="culp-example mt-2.5 flex items-start gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
                   <button
                     type="button"
                     onClick={() => speak(`ex-${p.id}`, p.example.thai)}
                     aria-label={`朗读例句 ${p.example.thai}`}
-                    className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition ${
+                    className={`culp-ex-speak mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition ${
                       speakingKey === `ex-${p.id}`
                         ? "border-emerald-300/40 bg-emerald-400/20 text-emerald-300"
                         : "border-white/[0.1] bg-white/[0.04] text-white/40 hover:text-emerald-300"
@@ -251,29 +273,29 @@ export default function Culture() {
                     )}
                   </button>
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                    <div className="culp-anno-label text-[10px] font-bold uppercase tracking-wider text-white/35">
                       例句
                     </div>
-                    <p className="mt-1 text-xs font-semibold text-white/80">
+                    <p className="culp-ex-thai mt-1 text-xs font-semibold text-white/80">
                       {p.example.thai}
                     </p>
-                    <p className="mt-0.5 text-[11px] italic text-white/35">
+                    <p className="culp-ex-roman mt-0.5 text-[11px] italic text-white/35">
                       {p.example.roman}
                     </p>
-                    <p className="mt-0.5 text-xs text-white/60">
+                    <p className="culp-ex-cn mt-0.5 text-xs text-white/60">
                       {p.example.chinese}
                     </p>
                   </div>
                 </div>
 
                 {/* 相关词汇 */}
-                <div className="mt-3 flex flex-wrap gap-1.5">
+                <div className="culp-vocab mt-3 flex flex-wrap gap-1.5">
                   {p.vocab.map((v) => (
                     <button
                       key={v.th}
                       type="button"
                       onClick={() => speak(`v-${p.id}-${v.th}`, v.th)}
-                      className={`group/chip flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition ${
+                      className={`culp-vocab-chip group/chip flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition ${
                         speakingKey === `v-${p.id}-${v.th}`
                           ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-200"
                           : "border-white/[0.1] bg-white/[0.03] text-white/55 hover:border-emerald-300/30 hover:text-emerald-200"

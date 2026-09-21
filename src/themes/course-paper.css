@@ -1,0 +1,497 @@
+/* src/themes/course-paper.css
+   =========================================================
+   PAPER 世界 · 课程页版式层（“高级泰语教材”）
+   =========================================================
+
+   为什么单独开一个文件
+   --------------------
+   world-shim.css 只解决**颜色**：把 text-white/40、bg-white/[0.04] 这类
+   “只有深色底才成立”的工具类按世界重映射，所以四个世界都能读了。
+   但四个世界的**版式**还是一模一样 —— 同样的 28px 圆角、同样的玻璃卡、
+   同样的渐变光晕。PAPER 要讲的是“纸本教材”：书页、分栏、章节编号、
+   页眉页脚、正文测量（measure）。这些属于版式不属于颜色，所以留在色彩
+   垫片之外，单独成层，并且**只写版式**。
+
+   这一层只管“形”，不管“色”（重要，别回头看错方向）
+   --------------------------------------------------
+   theme.css 里那一段浅色重映射用的是 `!important`：
+
+     html.theme-custom[data-mode="light"] [class*="text-white"] { color: #161616 !important }
+     html.theme-custom[data-mode="light"] [class*="bg-white"]  { background-color: … !important }
+     html.theme-custom[data-mode="light"] [class*="bg-black"]  { background-color: … !important }
+     html.theme-custom[data-mode="light"] [class*="border-white"] { border-color: … !important }
+
+   而 ThemeContext 里 `const custom = true`（永远开）+ PAPER 是浅色世界，
+   所以 <html> 恒为 `class="theme-custom" data-mode="light" data-visual-mode="paper"`。
+   结论：**凡是元素 class 里带 bg-white/bg-black/text-white/border-white 的属性，
+   本文件写多少 specificity 都抢不过 !important**（写 !important 去抢会变成
+   层与层的军备竞赛，不能干）。实测过一次：这样写出来的 23 条颜色声明在真实
+   页面上一条都不会生效 —— 与其留着骗人，不如全部删掉，颜色交给既有的两层
+   （world-shim + theme-custom 浅色重映射），本文件只保留能生效的版式属性。
+   需要“墨色细线”这类版式信号时，改用不被那四条 !important 覆盖的属性
+   （border / box-shadow / 伪元素 / 字号字距），所以你会看到下面：
+     · 书名页顶部的双线用 ::before 画，不用 border-top（border-color 会被抢）
+     · 进度条用“墨色细边框”当刻度尺，不用 background-color（会被抢）
+
+   规则边界（硬约束）
+   ------------------
+   1. 只**追加**新类，且全部带 `html[data-visual-mode="paper"]` 前缀。
+      类名在另外三个世界里匹配不到任何声明 → 版式与改造前一致。
+   2. 不改 theme.css / world-shim.css / index.css 里的既有规则。
+   3. 随版式新增的 DOM（页眉 / 页脚 / 图版号 / 章节号）默认隐藏：顶层兄弟
+      用 `hidden` **属性**、行内元素用 `hidden` 类，原因见 Course.jsx 注释。
+
+   特异性备忘（踩坑）
+   ------------------
+   `html[data-visual-mode="paper"] .tp-x` = (0,2,1)：
+     · 赢 Tailwind 工具类 (0,1,0) 与 hover 变体 (0,2,0) ✓
+     · 打平 world-shim.css 的重映射规则（也是 0,2,1）。同属性相遇只能靠加载
+       顺序，而本文件是从 Course.jsx import 的、跟课程页 CSS chunk 单独加载，
+       顺序不保证 → 凡是覆盖 shim 管过的属性（background-color / border-color）
+       的地方，选择器把类名写两遍抬到 (0,3,1)。用 `!important` 也能赢，但会
+       连带压掉同页面以后写的样式，不划算。
+     · 输给 space-y-6 的 `> :not([hidden]) ~ :not([hidden])` (0,3,0)，
+       所以“章节间距”那条同样要写两遍类名。
+   ========================================================= */
+
+
+/* =========================================================
+   1. 页面骨架：书页宽度 + 章节间距
+   ---------------------------------------------------------
+   屏幕版原本铺满整行，读起来像仪表盘；这里收窄到正文可读宽度。
+   章节间距 1.5rem → 2.9rem：书的“翻页感”来自空白，不是饰品。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tp-paper-page {
+  max-width: 1120px;
+  margin-inline: auto;
+  padding-bottom: 3rem;
+}
+
+/* 两遍类名：(0,3,1) > space-y-6 的 (0,3,0) */
+html[data-visual-mode="paper"] .tp-paper-page.tp-paper-page > * + * {
+  margin-top: 2.9rem;
+}
+
+
+/* =========================================================
+   2. 页眉 / 页脚（running head & colophon）
+   ---------------------------------------------------------
+   教材每页上方有书名，末尾有版权式信息栏。这两块只在 PAPER 出现
+   （其他世界靠 hidden 属性隐藏，同时被 space-y 排除，不占位）。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tp-paper-runhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 2px solid color-mix(in srgb, var(--tp-text) 30%, transparent);
+  font-size: 10px;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tp-text) 55%, transparent);
+  /* 页眉带 [hidden] 属性 → 后面的 hero 拿不到 space-y 上边距，
+     这里自己把间距交出来，否则书名页会贴着页眉。 */
+  margin-bottom: 2.9rem;
+}
+
+html[data-visual-mode="paper"] .tp-paper-runhead > :last-child {
+  font-family: var(--tp-font-display);
+  letter-spacing: 0.16em;
+}
+
+html[data-visual-mode="paper"] .tp-paper-colophon {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  /* 上边距不在这里写：它是页面的直接子元素，会被上面那条
+     `.tp-paper-page > * + *`（0,3,1）盖掉，写了也是死代码 —— 统一用 2.9rem 章节间距。 */
+  padding-top: 0.85rem;
+  border-top: 1px solid color-mix(in srgb, var(--tp-text) 26%, transparent);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: color-mix(in srgb, var(--tp-text) 50%, transparent);
+}
+
+
+/* =========================================================
+   3. 书名页（Hero）
+   ---------------------------------------------------------
+   原版是“发光渐变 + 天际线 + 角饰”的暗色海报；纸本教材的封面是
+   暖白纸 + 双细线 + 大留白。装饰层直接关掉，不去逐个调透明度。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tp-paper-ornament {
+  display: none;
+}
+
+html[data-visual-mode="paper"] .tp-paper-hero.tp-paper-hero {
+  background-image: none;
+  background-color: #FFFCF5;
+  border-radius: var(--tp-radius-sm);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 2.4rem 2.2rem 2.6rem;
+}
+
+@media (min-width: 640px) {
+  html[data-visual-mode="paper"] .tp-paper-hero.tp-paper-hero {
+    padding: 2.8rem 2.8rem 3rem;
+  }
+}
+
+/* 封面顶部的“双线”：border-color 会被浅色层的 !important 抢走，
+   所以用伪元素自己画一条粗+细的墨线（伪元素不受 [class*=border-white] 影响）。 */
+html[data-visual-mode="paper"] .tp-paper-hero.tp-paper-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 6px;
+  border-top: 2px solid color-mix(in srgb, var(--tp-text) 52%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 26%, transparent);
+  pointer-events: none;
+}
+
+/* 封面两栏：左边书名 + 提要，右边藏书信息。栏间距比屏幕版更大 */
+html[data-visual-mode="paper"] .tp-paper-hero-row {
+  gap: 2.2rem;
+  align-items: flex-start;
+}
+
+@media (min-width: 1024px) {
+  html[data-visual-mode="paper"] .tp-paper-hero-row {
+    gap: 3.4rem;
+  }
+}
+
+/* 眉题（THAI VIDEO LIBRARY）：字距拉开，像版权页的书系名 */
+html[data-visual-mode="paper"] .tp-paper-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.42em;
+  /* emerald-300/70 不在浅色层那四条 !important 覆盖里，纸上对比度不足，
+     这里必须自己给墨色（这条是实测有效的，别删） */
+  color: color-mix(in srgb, var(--tp-text) 58%, transparent);
+}
+
+html[data-visual-mode="paper"] .tp-paper-eyebrow > svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.5;
+}
+
+/* 书名：衬线来自 --tp-font-display，这里只定字号/字重/字距/下划线 */
+html[data-visual-mode="paper"] .tp-paper-title {
+  font-size: clamp(1.9rem, 1.35rem + 1.5vw, 2.7rem);
+  line-height: 1.18;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 20%, transparent);
+}
+
+/* 提要：一行字数限制在 34em，行高 2（书稿比屏幕版疏） */
+html[data-visual-mode="paper"] .tp-paper-lede {
+  max-width: 34em;
+  margin-top: 1.15rem;
+  font-size: 0.95rem;
+  line-height: 2;
+}
+
+/* 关键词：胶囊 → 方角细框（书里没有药丸）。
+   background/border 的颜色归浅色层，这里只改“形”。 */
+html[data-visual-mode="paper"] .tp-paper-chip.tp-paper-chip {
+  border-radius: 2px;
+  letter-spacing: 0.08em;
+}
+
+/* 第一个 chip 保留世界强调色的边与字（它不带 white 系类名，抢得过） */
+html[data-visual-mode="paper"] .tp-paper-chip-accent {
+  border-color: color-mix(in srgb, var(--tp-accent) 48%, transparent);
+  color: color-mix(in srgb, var(--tp-accent) 88%, var(--tp-text));
+}
+
+/* 藏书信息栏（原“学习进度”卡）：去掉卡片盒子，只留一道粗左线 */
+html[data-visual-mode="paper"] .tp-paper-bookstat.tp-paper-bookstat {
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--tp-text) 26%, transparent);
+  border-radius: 0;
+  padding: 0.15rem 0 0.15rem 1.35rem;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+/* 进度条：不用圆头、不做渐变。底色会被浅色层抢走，
+   所以改用“墨色细边框”当刻度尺 —— border-color 不在那四条 !important 里。 */
+html[data-visual-mode="paper"] .tp-paper-track.tp-paper-track {
+  height: 5px;
+  border-radius: 0;
+  border: 1px solid color-mix(in srgb, var(--tp-text) 30%, transparent);
+}
+
+html[data-visual-mode="paper"] .tp-paper-track-fill {
+  border-radius: 0;
+  background-image: none;
+  background-color: var(--tp-accent);
+}
+
+
+/* =========================================================
+   4. 台账式的数据行（原四张统计卡）
+   ---------------------------------------------------------
+   教材里没有四张彩色卡片，只有一条数据行：上下细线 + 每列一道竖线，
+   数字用衬线。卡片的彩色底归浅色层管，这里只改形态与排版。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tp-paper-stats {
+  gap: 1.6rem 2.2rem;
+  padding: 1.3rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--tp-text) 26%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 14%, transparent);
+}
+
+html[data-visual-mode="paper"] .tp-paper-statcard.tp-paper-statcard {
+  background-color: transparent;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0.35rem 0 0.35rem 1.05rem;
+}
+
+html[data-visual-mode="paper"] .tp-paper-statcard-icon {
+  border: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+  border-radius: 2px;
+  color: var(--tp-accent);
+}
+
+html[data-visual-mode="paper"] .tp-paper-statcard-label {
+  letter-spacing: 0.26em;
+  opacity: 1;
+  color: color-mix(in srgb, var(--tp-text) 52%, transparent);
+}
+
+html[data-visual-mode="paper"] .tp-paper-statcard-value {
+  font-family: var(--tp-font-display);
+  font-size: 1.5rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--tp-text);
+}
+
+
+/* =========================================================
+   5. 章标题与目录条
+   ---------------------------------------------------------
+   每个板块前一条通栏细线 + 一个章节号（序号沿用 videoCategories 的
+   既有顺序，不新增数据），这是“教材”最省事也最有效的版式信号。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tp-paper-section-head {
+  align-items: flex-end;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 26%, transparent);
+  margin-bottom: 1.6rem;
+}
+
+html[data-visual-mode="paper"] .tp-paper-h2 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+html[data-visual-mode="paper"] .tp-paper-ordinal {
+  display: inline-block;
+  font-family: var(--tp-font-display);
+  font-size: 1.45rem;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--tp-accent);
+  margin-right: 0.8rem;
+  padding-right: 0.8rem;
+  border-right: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+}
+
+html[data-visual-mode="paper"] .tp-paper-sub.tp-paper-sub {
+  margin-top: 0.45rem;
+  letter-spacing: 0.1em;
+}
+
+/* 分类条：胶囊 → 下划线制表（书里的章目录就是这么排的），
+   选中项靠一道赭金下划线说话，不靠底色。 */
+html[data-visual-mode="paper"] .tp-paper-tabs {
+  gap: 2rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 26%, transparent);
+  padding-bottom: 0;
+}
+
+html[data-visual-mode="paper"] .tp-paper-tab.tp-paper-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.55rem 0 0.65rem;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  box-shadow: none;
+}
+
+/* 必须排在基础规则之后：两者特异性相同，靠文件内顺序决定 */
+html[data-visual-mode="paper"] .tp-paper-tab.tp-paper-tab-active {
+  background-color: transparent;
+  border-bottom-color: var(--tp-accent);
+  box-shadow: none;
+}
+
+/* 排序：小一号的方角切换块 */
+html[data-visual-mode="paper"] .tp-paper-sortgroup.tp-paper-sortgroup {
+  border: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+  border-radius: 2px;
+  padding: 0;
+}
+
+html[data-visual-mode="paper"] .tp-paper-sort.tp-paper-sort {
+  border-radius: 0;
+  padding: 0.45rem 0.85rem;
+  letter-spacing: 0.14em;
+}
+
+html[data-visual-mode="paper"] .tp-paper-sort.tp-paper-sort-on {
+  /* 文字色被 .theme-custom .text-emerald-300 的 !important 接管（结果是 --tp-primary，
+     纸上读得清），这里只留一层极淡的赭金底 */
+  background-color: color-mix(in srgb, var(--tp-accent) 16%, transparent);
+}
+
+
+/* =========================================================
+   6. 书页卡片（原玻璃视频卡）
+   ---------------------------------------------------------
+   玻璃 → 纸：不透明暖白底（底色仍是 world-shim / 浅色层的职责）、
+   1px 细边、纸的轻投影、小圆角；缩略图四周留纸边（像图版），
+   文字前加“图版 NN”编号；取消悬浮位移 —— 纸不会浮起来。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tp-paper-grid {
+  gap: 1.9rem;
+}
+
+/* 教材是双栏读的：宽屏下也压回两栏，让每张图版有足够大的版面 */
+@media (min-width: 1280px) {
+  html[data-visual-mode="paper"] .tp-paper-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2.1rem 2.4rem;
+  }
+}
+
+html[data-visual-mode="paper"] .tp-paper-card.tp-paper-card {
+  background-image: none;
+  border-radius: var(--tp-radius-sm);
+  border-color: color-mix(in srgb, var(--tp-text) 24%, transparent);
+  box-shadow: var(--tp-shadow-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-visual-mode="paper"] .tp-paper-card.tp-paper-card:hover {
+  /* (0,3,1) > .apple-course-card:hover 的 (0,2,0)：纸不做悬浮位移 */
+  transform: none;
+  border-color: color-mix(in srgb, var(--tp-accent) 55%, transparent);
+  box-shadow: var(--tp-shadow);
+}
+
+/* 图版：缩略图外垫一圈“纸边”，下缘一道细线 */
+html[data-visual-mode="paper"] .tp-paper-plate-frame {
+  padding: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-text) 18%, transparent);
+}
+
+html[data-visual-mode="paper"] .tp-paper-card-body {
+  padding: 1rem 1.15rem 1.2rem;
+}
+
+html[data-visual-mode="paper"] .tp-paper-plate {
+  display: inline-block;
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.15rem;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tp-accent) 90%, var(--tp-text));
+  border-bottom: 1px solid color-mix(in srgb, var(--tp-accent) 40%, transparent);
+}
+
+html[data-visual-mode="paper"] .tp-paper-card-title {
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+html[data-visual-mode="paper"] .tp-paper-card-desc {
+  margin-top: 0.6rem;
+  line-height: 1.85;
+}
+
+html[data-visual-mode="paper"] .tp-paper-card-meta {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid color-mix(in srgb, var(--tp-text) 16%, transparent);
+}
+
+
+/* =========================================================
+   7. 播放区（正在播放）
+   ---------------------------------------------------------
+   播放器在纸上应该像一页插图：外框收到 2px 圆角 + 纸的轻投影。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tp-paper-player.tp-paper-player {
+  border-radius: 2px;
+  box-shadow: var(--tp-shadow-soft);
+}
+
+
+/* =========================================================
+   8. 附注（原 VIP 提示条）
+   ---------------------------------------------------------
+   彩色提示条 → 页边注：左侧一道赭金竖线，方角，比纸略深的底色。
+   这一段整体用黄色系，不在浅色层的 !important 覆盖范围里，
+   所以颜色声明是有效的。
+   ========================================================= */
+
+html[data-visual-mode="paper"] .tp-paper-note.tp-paper-note {
+  background-color: #F8F2E4;
+  background-image: none;
+  border: 0;
+  border-left: 2px solid var(--tp-accent);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 1.05rem 1.25rem;
+}
+
+html[data-visual-mode="paper"] .tp-paper-iconbox {
+  background-color: transparent;
+  border: 1px solid color-mix(in srgb, var(--tp-text) 22%, transparent);
+  border-radius: 2px;
+}
+
+html[data-visual-mode="paper"] .tp-paper-note .tp-paper-note-title {
+  color: color-mix(in srgb, var(--tp-accent) 88%, var(--tp-text));
+}
+
+html[data-visual-mode="paper"] .tp-paper-note .tp-paper-note-body {
+  color: color-mix(in srgb, var(--tp-text) 68%, transparent);
+}
+
+html[data-visual-mode="paper"] .tp-paper-note button {
+  border-radius: 2px;
+  border-color: color-mix(in srgb, var(--tp-accent) 55%, transparent);
+  background-color: transparent;
+  color: color-mix(in srgb, var(--tp-accent) 92%, var(--tp-text));
+}

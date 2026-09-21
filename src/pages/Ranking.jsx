@@ -1,376 +1,206 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import React from "react";
+import { Link } from "react-router-dom";
 import {
   Trophy,
   Flame,
-  Crown,
-  Clock3,
-  Sparkles,
+  Zap,
+  Target,
+  CalendarCheck,
+  ArrowRight,
+  Check,
   Info,
 } from "lucide-react";
 
-import {
-  ThaiCorner,
-  ThaiSectionDivider,
-} from "@/components/common/ThaiDecor";
+import { useLearningProgress } from "@/hooks/useLearningProgress";
+import { getPlanOverview } from "@/api/plan";
+import { getLevelInfo } from "@/lib/level";
+import { PageShell } from "@/components/common/PageShell";
+import { Section, SectionGrid, StatTile } from "@/components/common/Section";
+import { useAsyncData } from "@/hooks/useAsyncData";
 
 /* =========================================================
-   Demo 排行榜数据
-   =========================================================
-   说明：
-   1. 当前排行榜服务尚未接入（不伪造真实数据）。
-   2. 每位用户包含周榜 / 月榜 / 总榜的积分，
-      页面按当前标签页选择对应的积分排序。
-   3. 未来接入后端后，只需把这里换成 API 返回的数据
-      （字段结构保持一致即可），页面代码无需改动。
+   学习排行榜 → 实际职责：**个人学习战绩**（Streak & 战绩中枢）
+   ---------------------------------------------------------
+   为什么改这一页
+   --------------
+   重构前站里有两套并行的「排行榜」，而且互相矛盾：
+     • /ranking      —— 硬编码 demoUsers 数组，连"你"都是假数据
+                        （第 6 名、连续 12 天、96 小时），页面自己标注
+                        "排行榜服务准备中"，但假数据照常展示；
+     • /challenges   —— 走 base44 外部 functions 拉真榜单，而本项目的
+                        排行榜后端（Express）**根本没有这个接口**，
+                        失败被 catch 吞掉 → 实际永远空榜。
+   两页都在回答"我排第几"，而两页都给不出真话。
+
+   现在这一页只做**能算准的事**：你的连续天数、XP、本周打卡、下一个
+   奖励里程碑。这些都来自真实数据源——
+     • useLearningProgress（本地学习进度，XP 唯一事实来源）
+     • GET /api/plan/overview（服务端连续打卡与本周记录）
+   公开排行榜等后端提供接口后再恢复，届时不改本页结构，只把数据源
+   从「未开放」换成接口返回。
 ========================================================= */
 
-const demoUsers = [
-  {
-    name: "Somchai",
-    isMe: false,
-    color: "bg-yellow-400/15 text-yellow-300",
-    weekly: 1860,
-    monthly: 7420,
-    total: 28950,
-    words: 2890,
-    streak: 45,
-    hours: 316,
-  },
-  {
-    name: "Nok",
-    isMe: false,
-    color: "bg-emerald-400/15 text-emerald-300",
-    weekly: 1640,
-    monthly: 6850,
-    total: 24300,
-    words: 2430,
-    streak: 38,
-    hours: 274,
-  },
-  {
-    name: "Pong",
-    isMe: false,
-    color: "bg-teal-400/15 text-teal-300",
-    weekly: 1420,
-    monthly: 5980,
-    total: 21750,
-    words: 2175,
-    streak: 31,
-    hours: 241,
-  },
-  {
-    name: "Mei",
-    isMe: false,
-    color: "bg-sky-400/15 text-sky-300",
-    weekly: 1280,
-    monthly: 5340,
-    total: 19200,
-    words: 1920,
-    streak: 26,
-    hours: 208,
-  },
-  {
-    name: "你",
-    isMe: true,
-    color: "bg-yellow-300/20 text-yellow-200",
-    weekly: 980,
-    monthly: 4120,
-    total: 12600,
-    words: 1260,
-    streak: 12,
-    hours: 96,
-  },
-  {
-    name: "Yuki",
-    isMe: false,
-    color: "bg-purple-400/15 text-purple-300",
-    weekly: 940,
-    monthly: 3980,
-    total: 11800,
-    words: 1180,
-    streak: 9,
-    hours: 87,
-  },
-  {
-    name: "Chen",
-    isMe: false,
-    color: "bg-rose-400/15 text-rose-300",
-    weekly: 820,
-    monthly: 3510,
-    total: 10400,
-    words: 1040,
-    streak: 8,
-    hours: 79,
-  },
-  {
-    name: "Aom",
-    isMe: false,
-    color: "bg-emerald-400/15 text-emerald-300",
-    weekly: 760,
-    monthly: 3240,
-    total: 9600,
-    words: 960,
-    streak: 6,
-    hours: 71,
-  },
-  {
-    name: "Dan",
-    isMe: false,
-    color: "bg-amber-400/15 text-amber-300",
-    weekly: 640,
-    monthly: 2780,
-    total: 8200,
-    words: 820,
-    streak: 5,
-    hours: 62,
-  },
-];
+const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
-/* 榜单标签页 */
-const tabs = [
-  { key: "weekly", label: "周榜" },
-  { key: "monthly", label: "月榜" },
-  { key: "total", label: "总榜" },
-];
-
-const formatPoints = (n) =>
-  n >= 1000
-    ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`
-    : String(n);
-
-/* =========================================================
-   Ranking
-========================================================= */
+/** 服务端返回的是 YYYY-MM-DD，这里只做展示用的星期缩写 */
+function weekdayOf(date) {
+  const d = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return date;
+  return `周${WEEKDAYS[d.getDay()]}`;
+}
 
 export default function Ranking() {
-  const [activeTab, setActiveTab] = useState("weekly");
-  const navigate = useNavigate();
+  const { progress, loading } = useLearningProgress();
 
-  const sorted = [...demoUsers].sort(
-    (a, b) => b[activeTab] - a[activeTab]
-  );
+  const { data: overview } = useAsyncData(getPlanOverview, []);
 
-  const podium = sorted.slice(0, 3);
-  const rest = sorted.slice(3);
+  const xp = progress?.xp || 0;
+  const level = getLevelInfo(xp);
+  const streak = progress?.learning_streak || 0;
+  const todayWords = progress?.today_words || 0;
+
+  /* 服务端的连续天数与本周记录优先（服务端按真实打卡算） */
+  const serverStreak = overview?.streak;
+  const displayStreak = serverStreak != null ? serverStreak : streak;
+  const week = overview?.week || [];
+  const reward = overview?.reward || null;
+  const checkedDays = week.filter((day) => day.completed).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.05] bg-white/[0.018] px-4 py-3">
-        <span className="text-[11px] text-white/35">排行榜 · 和同学一起保持学习节奏</span>
-        <button type="button" onClick={() => navigate("/plan")} className="rounded-lg border border-emerald-300/15 px-3 py-1.5 text-[11px] text-emerald-200/75 transition hover:bg-emerald-300/[0.08]">回到学习计划 →</button>
-      </div>
-      <motion.div
-        initial={{ opacity: 0, y: -12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative"
+    <PageShell
+      width="default"
+      title="学习战绩"
+      subtitle="连续天数、经验值与本周打卡都来自你的真实记录。公开排行榜待后端接口就绪后开放。"
+      icon={Trophy}
+      badge="Ranking"
+    >
+      {/* ── 战绩总览 ── */}
+      <Section
+        title="我的战绩"
+        desc={loading ? "正在读取学习记录…" : "以下数字均来自真实学习记录，不是示例数据"}
+        divider={false}
       >
-        {/* 荣誉金角饰 */}
+        <SectionGrid cols={4}>
+          <StatTile
+            icon={Flame}
+            tone="orange"
+            value={displayStreak}
+            unit="天"
+            label="连续学习"
+            hint={serverStreak != null ? "服务端打卡记录" : "本地学习记录"}
+          />
+          <StatTile
+            icon={Zap}
+            tone="gold"
+            value={xp.toLocaleString("en-US")}
+            label={`学习经验 · Lv.${level.level}`}
+            hint={level.next != null ? `距下一级还差 ${Math.max(0, level.next - xp)} XP` : "已达最高等级"}
+          />
+          <StatTile
+            icon={Target}
+            tone="emerald"
+            value={todayWords}
+            unit="词"
+            label="今日学习词汇"
+          />
+          <StatTile
+            icon={CalendarCheck}
+            tone="sky"
+            value={`${checkedDays}/7`}
+            label="本周完成打卡"
+          />
+        </SectionGrid>
+      </Section>
 
-        <ThaiCorner
-          corners={["tr"]}
-          size={22}
-          className="hidden sm:block"
-        />
-
-        <div className="flex items-center gap-2 text-xs font-semibold tracking-[0.2em] text-yellow-300/70">
-          <Trophy className="h-4 w-4" />
-          THAI LEARNING RANKING
-        </div>
-
-        <h1 className="mt-3 text-3xl font-black text-white">
-          学习排行榜
-        </h1>
-
-        <p className="mt-2 text-sm text-white/40">
-          和其他学习者一起保持学习动力
-        </p>
-      </motion.div>
-
-      {/* Demo 说明 */}
-
-      <div className="premium-glass card-lift flex items-start gap-3 rounded-2xl p-4">
-        <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-300/70" />
-
-        <p className="text-xs leading-relaxed text-white/40">
-          <span className="font-semibold text-white/70">
-            Demo 数据
-          </span>
-          {" · "}
-          排行榜服务准备中，当前展示示例数据用于体验。接入后端后将自动显示真实学习数据。
-        </p>
-      </div>
-
-      {/* 标签页 */}
-
-      <div className="flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-1.5 backdrop-blur-xl">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-              activeTab === tab.key
-                ? "bg-gradient-to-r from-emerald-400/20 to-teal-400/15 text-emerald-200 shadow-inner"
-                : "text-white/40 hover:text-white/70"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* 前三名领奖台 */}
-
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.25 }}
-          className="grid gap-4 md:grid-cols-3"
-        >
-          {podium.map((user, index) => (
-            <motion.div
-              key={user.name}
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.08 }}
-              className={`premium-glass card-lift relative overflow-hidden rounded-3xl p-6 text-center backdrop-blur-xl ${
-                index === 0
-                  ? "border-yellow-300/15 bg-gradient-to-br from-yellow-300/[0.10] to-white/[0.02]"
-                  : "border-white/[0.08] bg-white/[0.035]"
-              }`}
-            >
-              <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-yellow-400/[0.06] blur-2xl" />
-
-              <div className="relative">
-                <div
-                  className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/10 ${user.color}`}
-                >
-                  {index === 0 ? (
-                    <Crown className="h-7 w-7" />
-                  ) : (
-                    <Trophy className="h-6 w-6 opacity-70" />
-                  )}
-                </div>
-
-                <p className="mt-4 font-bold text-white">
-                  {user.name}
-                </p>
-
-                <p className="mt-1 text-xs text-white/30">
-                  第 {index + 1} 名
-                </p>
-
-                <p className="mt-5 text-2xl font-black text-yellow-200">
-                  {formatPoints(user[activeTab])}
-                </p>
-
-                <p className="text-xs text-white/30">
-                  {tabs.find((t) => t.key === activeTab).label}积分
-                </p>
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
-      </AnimatePresence>
-
-      {/* 泰式装饰分隔线 */}
-
-      <ThaiSectionDivider
-        className="mx-auto max-w-2xl"
-        compact
-      />
-
-      {/* 完整榜单 */}
-
-      <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.035] backdrop-blur-xl">
-        <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-3.5">
-          <span className="text-xs font-semibold text-white/40">
-            完整榜单
-          </span>
-
-          <span className="text-[10px] text-white/25">
-            按{tabs.find((t) => t.key === activeTab).label}积分排序
-          </span>
-        </div>
-
-        {rest.map((user, listIndex) => {
-          const rank = listIndex + 4;
-
-          return (
-            <div
-              key={user.name}
-              className={`flex items-center gap-4 border-b border-white/[0.05] px-5 py-4 last:border-0 ${
-                user.isMe
-                  ? "bg-emerald-400/[0.07]"
-                  : "hover:bg-white/[0.02]"
-              }`}
-            >
+      {/* ── 本周打卡 ── */}
+      <Section
+        title="本周打卡"
+        desc="每天完成学习计划即自动打卡，连续 7 天可领取 3 天 VIP"
+      >
+        {week.length ? (
+          <div className="flex flex-wrap gap-2">
+            {week.map((day) => (
               <div
-                className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-black ${
-                  rank <= 3
-                    ? "bg-yellow-300/10 text-yellow-300"
-                    : "bg-white/[0.05] text-white/30"
+                key={day.date}
+                className={`flex min-w-[64px] flex-1 flex-col items-center gap-1.5 rounded-2xl border px-3 py-3 ${
+                  day.completed
+                    ? "border-emerald-300/30 bg-emerald-400/[0.1]"
+                    : "border-white/[0.07] bg-white/[0.02]"
                 }`}
               >
-                {rank}
+                <span className="text-[11px] font-semibold text-white/50">
+                  {weekdayOf(day.date)}
+                </span>
+                {day.completed ? (
+                  <Check className="h-4 w-4 text-emerald-300" />
+                ) : (
+                  <span className="h-4 w-4 rounded-full border border-white/15" />
+                )}
+                <span className="text-[10px] tabular-nums text-white/30">
+                  {day.totalTasks ? `${day.completedTasks}/${day.totalTasks}` : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3.5">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+            <p className="text-[12px] leading-relaxed text-white/45">
+              还没有本周打卡记录。去「我的旅程」完成今天的任务就会开始记录连续天数。
+            </p>
+          </div>
+        )}
+      </Section>
+
+      {/* ── 里程碑奖励 ── */}
+      <Section title="里程碑奖励" desc="连续打卡达到里程碑，自动发放 VIP 天数">
+        {reward ? (
+          <div className="rounded-2xl border border-yellow-300/15 bg-gradient-to-br from-yellow-300/[0.08] via-transparent to-transparent p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Trophy className="h-5 w-5 text-yellow-300/80" />
+                <div>
+                  <p className="text-[13px] font-bold text-white/90">
+                    连续 {reward.milestone || 7} 天 · 送 {reward.rewardDays || 3} 天 VIP
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-white/45">
+                    还差 {reward.daysToNext ?? "—"} 天到达下一个里程碑
+                  </p>
+                </div>
               </div>
 
-              {/* 头像（首字母） */}
-
-              <div
-                className={`flex h-10 w-10 items-center justify-center rounded-full border border-white/10 text-sm font-bold ${user.color}`}
+              <Link
+                to="/plan"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300/25 bg-emerald-400/[0.12] px-3.5 py-2 text-[12px] font-bold text-emerald-100 transition hover:bg-emerald-400/[0.2]"
               >
-                {user.name.slice(0, 1)}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-white">
-                  {user.name}
-                  {user.isMe && (
-                    <span className="ml-2 rounded-full bg-emerald-400/15 px-2 py-0.5 text-[9px] font-bold text-emerald-300">
-                      我
-                    </span>
-                  )}
-                </p>
-
-                <p className="mt-1 flex items-center gap-3 text-[10px] text-white/25">
-                  <span className="flex items-center gap-1">
-                    <Flame className="h-3 w-3 text-orange-300" />
-                    连续 {user.streak} 天
-                  </span>
-
-                  <span className="flex items-center gap-1">
-                    <Clock3 className="h-3 w-3 text-emerald-300/60" />
-                    {user.hours} 小时
-                  </span>
-                </p>
-              </div>
-
-              <div className="text-right">
-                <p className="text-sm font-bold text-white">
-                  {formatPoints(user[activeTab])}
-                </p>
-
-                <p className="text-[10px] text-white/25">
-                  {tabs.find((t) => t.key === activeTab).label}积分
-                </p>
-              </div>
+                去打卡 <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
-          );
-        })}
+          </div>
+        ) : (
+          <div className="flex items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3.5">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-white/30" />
+            <p className="text-[12px] leading-relaxed text-white/45">
+              连续打卡 7 天可领取 3 天 VIP，奖励自动发放到账户。
+            </p>
+          </div>
+        )}
+      </Section>
 
-        <div className="flex items-center justify-center gap-2 border-t border-white/[0.05] px-5 py-4">
-          <Sparkles className="h-3.5 w-3.5 text-yellow-300/60" />
-
-          <p className="text-[10px] text-white/25">
-            完成更多学习任务，提升你的排名！
-          </p>
+      {/* ── 公开排行榜（未开放，明确说明而不是放假数据） ── */}
+      <Section title="公开排行榜" desc="和其他学习者比较进度">
+        <div className="flex items-start gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3.5">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-yellow-300/60" />
+          <div className="text-[12px] leading-relaxed text-white/45">
+            <p className="font-semibold text-white/60">排行榜尚未开放</p>
+            <p className="mt-0.5">
+              后端还没有提供排行榜接口，所以这里**不展示任何虚构排名**。
+              此前的页面上出现过一份示例榜单（含一个假的"你"），已下线，
+              以免和你的真实连续天数冲突。
+            </p>
+          </div>
         </div>
-      </div>
-    </div>
+      </Section>
+    </PageShell>
   );
 }

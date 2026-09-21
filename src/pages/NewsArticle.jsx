@@ -355,13 +355,28 @@ export default function NewsArticle() {
       <div className="page-enter mx-auto max-w-3xl px-4 py-20 text-center">
         <AlertTriangle className="mx-auto h-8 w-8 text-yellow-300/70" />
         <p className="mt-4 text-sm text-white/60">{error}</p>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-5 py-2.5 text-sm text-white/80 transition hover:bg-white/[0.12]"
-        >
-          <ArrowLeft className="h-4 w-4" /> 返回语料库
-        </button>
+        {/* 每日新闻按天更新，旧链接/分享出去的链接点进来常常已经过期。
+            以前这里只说"加载失败"，用户会以为是网络问题；现在给一句可执行的说明。 */}
+        <p className="mx-auto mt-2 max-w-md text-[12px] leading-6 text-white/35">
+          每日新闻按天更新，这篇可能已不在今日列表中（旧链接或分享链接常见）。
+          可以返回语料库查看今天的内容，或改用本地语料库阅读。
+        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate("/corpus")}
+            className="inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-400/[0.12] px-5 py-2.5 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-400/[0.2]"
+          >
+            <BookOpenText className="h-4 w-4" /> 看今日新闻
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-5 py-2.5 text-sm text-white/80 transition hover:bg-white/[0.12]"
+          >
+            <ArrowLeft className="h-4 w-4" /> 返回上一页
+          </button>
+        </div>
       </div>
     );
   }

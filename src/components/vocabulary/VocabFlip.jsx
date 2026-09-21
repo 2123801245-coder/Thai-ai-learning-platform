@@ -150,9 +150,9 @@ export default function VocabFlip({ words, onExit }) {
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: "spring", stiffness: 120 }}
-          className="relative w-full max-w-md overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.045] p-8 text-center shadow-2xl backdrop-blur-2xl"
+          className="tv-flip-endscreen relative w-full max-w-md overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.045] p-8 text-center shadow-2xl backdrop-blur-2xl"
         >
-          <ThaiPatternOverlay patternId="flip-result" opacity={0.04} />
+          <ThaiPatternOverlay patternId="flip-result" opacity={0.04} className="tv-ornament" />
 
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-yellow-400/[0.06] via-transparent to-emerald-400/[0.05]" />
 
@@ -186,7 +186,7 @@ export default function VocabFlip({ words, onExit }) {
               <div className="mt-2 text-sm text-white/40">记住了 {pct}%</div>
             </div>
 
-            <div className="mt-7 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+            <div className="tv-flip-endtrack mt-7 h-2 overflow-hidden rounded-full bg-white/[0.06]">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
@@ -195,7 +195,7 @@ export default function VocabFlip({ words, onExit }) {
               />
             </div>
 
-            <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="tv-flip-endgrid mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <button
                 onClick={() => restart(true)}
                 className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:-translate-y-0.5"
@@ -256,23 +256,23 @@ export default function VocabFlip({ words, onExit }) {
   const isKnown = known.has(cardId);
 
   return (
-    <div className="relative mx-auto max-w-3xl px-4 py-6 sm:px-6">
-      <div className="pointer-events-none absolute -left-32 top-20 h-64 w-64 rounded-full bg-emerald-400/10 blur-[100px]" />
-      <div className="pointer-events-none absolute -right-32 bottom-20 h-64 w-64 rounded-full bg-yellow-400/10 blur-[100px]" />
+    <div className="tv-flip-root relative mx-auto max-w-3xl px-4 py-6 sm:px-6">
+      <div className="tv-ornament pointer-events-none absolute -left-32 top-20 h-64 w-64 rounded-full bg-emerald-400/10 blur-[100px]" />
+      <div className="tv-ornament pointer-events-none absolute -right-32 bottom-20 h-64 w-64 rounded-full bg-yellow-400/10 blur-[100px]" />
 
       {/* 顶部 */}
-      <div className="relative mb-5 flex items-center justify-between">
+      <div className="tv-flip-head relative mb-5 flex items-center justify-between">
         <button
           onClick={onExit}
-          className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/50 transition hover:bg-white/[0.08] hover:text-white"
+          className="tv-flip-exit flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/50 transition hover:bg-white/[0.08] hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
           退出背词
         </button>
 
         <div className="text-right">
-          <div className="text-xs text-white/30">当前进度</div>
-          <div className="mt-0.5 text-sm font-semibold text-white">
+          <div className="tv-flip-counter-label text-xs text-white/30">当前进度</div>
+          <div className="tv-flip-counter-value mt-0.5 text-sm font-semibold text-white">
             {index + 1}
             <span className="text-white/25"> / {total}</span>
           </div>
@@ -280,7 +280,7 @@ export default function VocabFlip({ words, onExit }) {
       </div>
 
       {/* 进度条 */}
-      <div className="relative mb-7 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+      <div className="tv-flip-progress relative mb-7 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
         <motion.div
           className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-400 to-yellow-300"
           animate={{ width: `${progress}%` }}
@@ -292,7 +292,7 @@ export default function VocabFlip({ words, onExit }) {
           翻转卡片
       ========================= */}
 
-      <div className="relative [perspective:1400px]">
+      <div className="tv-flip-stage relative [perspective:1400px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={cardId}
@@ -310,18 +310,21 @@ export default function VocabFlip({ words, onExit }) {
             className="relative h-[400px] cursor-pointer sm:h-[440px]"
           >
             {/* ======= 正面：泰语 ======= */}
+            {/* 注意：这里的 inline style（backfaceVisibility）与 motion 的
+                rotateY 是翻面交互本体，PAPER 的 CSS 一律不碰这两个属性，
+                只改排版（见 vocab-paper.css 第 10 节）。 */}
             <div
               style={{ backfaceVisibility: "hidden" }}
-              className="premium-glass card-lift absolute inset-0 flex flex-col items-center justify-center overflow-hidden rounded-[30px] p-8"
+              className="tv-flip-face tv-flip-front premium-glass card-lift absolute inset-0 flex flex-col items-center justify-center overflow-hidden rounded-[30px] p-8"
             >
-              <ThaiPatternOverlay patternId={`flip-front-${cardId}`} opacity={0.05} />
+              <ThaiPatternOverlay patternId={`flip-front-${cardId}`} opacity={0.05} className="tv-ornament" />
 
-              <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-400/[0.09] blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-yellow-300/[0.06] blur-3xl" />
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+              <div className="tv-ornament pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-emerald-400/[0.09] blur-3xl" />
+              <div className="tv-ornament pointer-events-none absolute -bottom-20 -left-20 h-56 w-56 rounded-full bg-yellow-300/[0.06] blur-3xl" />
+              <div className="tv-ornament pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
               <div className="relative flex flex-col items-center">
-                <div className="mb-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-yellow-300/60">
+                <div className="tv-flip-kicker mb-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-yellow-300/60">
                   <Sparkles className="h-3.5 w-3.5" />
                   Thai Word
                 </div>
@@ -334,7 +337,7 @@ export default function VocabFlip({ words, onExit }) {
                 </h2>
 
                 {current.pronunciation && (
-                  <p className="mt-4 text-base font-medium text-emerald-300/70">
+                  <p className="tv-flip-pron mt-4 text-base font-medium text-emerald-300/70">
                     [{current.pronunciation}]
                   </p>
                 )}
@@ -355,7 +358,7 @@ export default function VocabFlip({ words, onExit }) {
                   <Volume2 className={`h-5 w-5 ${speaking ? "animate-pulse" : ""}`} />
                 </RippleButton>
 
-                <div className="mt-8 flex items-center gap-2 text-xs text-white/25">
+                <div className="tv-flip-hint mt-8 flex items-center gap-2 text-xs text-white/25">
                   <MousePointerClick className="h-3.5 w-3.5" />
                   点击卡片查看释义
                 </div>
@@ -368,15 +371,15 @@ export default function VocabFlip({ words, onExit }) {
                 backfaceVisibility: "hidden",
                 transform: "rotateY(180deg)",
               }}
-              className="premium-glass absolute inset-0 flex flex-col items-center justify-center overflow-hidden rounded-[30px] p-8"
+              className="tv-flip-face premium-glass absolute inset-0 flex flex-col items-center justify-center overflow-hidden rounded-[30px] p-8"
             >
-              <ThaiPatternOverlay patternId={`flip-back-${cardId}`} opacity={0.04} />
+              <ThaiPatternOverlay patternId={`flip-back-${cardId}`} opacity={0.04} className="tv-ornament" />
 
-              <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-yellow-300/[0.07] blur-3xl" />
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-yellow-300/15 to-transparent" />
+              <div className="tv-ornament pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-yellow-300/[0.07] blur-3xl" />
+              <div className="tv-ornament pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-yellow-300/15 to-transparent" />
 
               <div className="relative flex w-full flex-col items-center">
-                <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-300/60">
+                <div className="tv-flip-kicker mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-300/60">
                   <Sparkles className="h-3.5 w-3.5" />
                   Meaning
                 </div>
@@ -386,13 +389,13 @@ export default function VocabFlip({ words, onExit }) {
                 </h3>
 
                 {current.pronunciation && (
-                  <p className="mt-3 text-sm font-medium text-emerald-300/60">
+                  <p className="tv-flip-pron mt-3 text-sm font-medium text-emerald-300/60">
                     [{current.pronunciation}]
                   </p>
                 )}
 
                 {current.example_thai && (
-                  <div className="mt-6 w-full rounded-2xl border border-white/[0.07] bg-black/[0.16] px-5 py-4">
+                  <div className="tv-flip-example mt-6 w-full rounded-2xl border border-white/[0.07] bg-black/[0.16] px-5 py-4">
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/25">
                         Example
@@ -420,7 +423,7 @@ export default function VocabFlip({ words, onExit }) {
                   </div>
                 )}
 
-                <div className="mt-6 flex items-center gap-2 text-xs text-white/25">
+                <div className="tv-flip-hint mt-6 flex items-center gap-2 text-xs text-white/25">
                   <MousePointerClick className="h-3.5 w-3.5" />
                   点击卡片回到泰语
                 </div>
@@ -441,7 +444,7 @@ export default function VocabFlip({ words, onExit }) {
           whileHover={flipped ? { y: -2 } : {}}
           whileTap={flipped ? { scale: 0.96 } : {}}
           onClick={() => goNext(false)}
-          className={`flex items-center gap-2 rounded-2xl border px-6 py-3 text-sm font-semibold transition-all ${
+          className={`tv-flip-judge flex items-center gap-2 rounded-2xl border px-6 py-3 text-sm font-semibold transition-all ${
             !flipped
               ? "cursor-not-allowed border-white/[0.06] bg-white/[0.02] text-white/20"
               : isKnown
@@ -459,7 +462,7 @@ export default function VocabFlip({ words, onExit }) {
           whileHover={flipped ? { y: -2 } : {}}
           whileTap={flipped ? { scale: 0.96 } : {}}
           onClick={() => goNext(true)}
-          className={`flex items-center gap-2 rounded-2xl border px-6 py-3 text-sm font-semibold transition-all ${
+          className={`tv-flip-judge flex items-center gap-2 rounded-2xl border px-6 py-3 text-sm font-semibold transition-all ${
             !flipped
               ? "cursor-not-allowed border-white/[0.06] bg-white/[0.02] text-white/20"
               : "border-emerald-300/25 bg-gradient-to-r from-emerald-400/15 to-teal-400/10 text-emerald-200 hover:shadow-[0_0_24px_rgba(52,211,153,0.18)]"
@@ -477,7 +480,7 @@ export default function VocabFlip({ words, onExit }) {
       )}
 
       {/* 底部状态 */}
-      <div className="mt-5 flex items-center justify-center gap-3">
+      <div className="tv-flip-status mt-5 flex items-center justify-center gap-3">
         <div className="rounded-full border border-white/[0.06] bg-white/[0.025] px-4 py-2 text-xs text-white/35 backdrop-blur-xl">
           已记住{" "}
           <span className="font-bold text-emerald-300">{known.size}</span>

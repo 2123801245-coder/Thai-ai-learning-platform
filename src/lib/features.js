@@ -72,6 +72,48 @@ export function useFeatureFlag(name) {
 }
 
 /* =========================================================
+   批量订阅：一次拿到多个开关（导航这类「一起决定显隐」的地方用）
+   ---------------------------------------------------------
+   useFeatureFlag 只能拿一个；导航树要同时判 aiTeacher 等若干个，
+   若逐项调用会注册 N 个订阅、N 次 setState。这里返回稳定快照。
+========================================================= */
+
+export function useFeatureFlags(names = []) {
+  const key = names.join("|");
+
+  const [snapshot, setSnapshot] = useState(() =>
+    names.reduce((acc, name) => {
+      acc[name] = getFlag(name);
+      return acc;
+    }, {})
+  );
+
+  useEffect(() => {
+    const list = key ? key.split("|") : [];
+
+    const update = () => {
+      setSnapshot((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        list.forEach((name) => {
+          const value = getFlag(name);
+          if (next[name] !== value) {
+            next[name] = value;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    };
+
+    update();
+    return subscribe(update);
+  }, [key]);
+
+  return snapshot;
+}
+
+/* =========================================================
    实时同步：SSE 订阅开关变更（多端自动刷新）
    EventSource 断线后由浏览器自动重连。
 ========================================================= */

@@ -25,6 +25,60 @@
     />
 
 
+    <!--
+      主题引导（阻塞式，必须在 React 挂载前跑）
+      ------------------------------------------------------------
+      问题：主题变量是 React 的 useEffect 里写上去的，所以刷新页面时
+      会先按默认世界绘一帧，再跳到用户真正选的世界 —— 明显的白闪/黑闪。
+      实测过：PAPER 用户每次刷新都会看到一瞬深色。
+
+      这里在 <head> 里同步读 localStorage，把 data-visual-mode 和底色
+      在**首次绘制之前**就定下来。只设背景色与一个标记，不写整套变量
+      （完整变量仍由 ThemeContext 负责，避免两处定义漂移）。
+
+      用 try/catch 包住：localStorage 在隐私模式/禁用 Cookie 时会抛异常，
+      不能因为读主题失败就让整个应用白屏。
+    -->
+    <script>
+      (function () {
+        try {
+          var id = localStorage.getItem("thaiAI_theme") || "midnight";
+          /*
+           * 老 id → 世界 的映射。
+           *
+           * ⚠️ 这里和 `src/themes/worlds.js` 的 LEGACY_WORLD_MAP 是**两份重复定义**。
+           * 必须同步：这段在 React 挂载前跑（防首屏闪烁），所以没法 import 模块。
+           * 一旦漂移，老用户会看到"首屏一个世界、挂载后另一个世界"的闪一下。
+           * 改任意一边，务必同时改另一边。当前两份已核对一致。
+           */
+          var legacy = {
+            emerald: "midnight", ocean: "midnight",
+            cyber: "modern", bangkok: "modern",
+            chiangmai: "forest", royal: "paper",
+          };
+          var known = { midnight: 1, paper: 1, forest: 1, modern: 1 };
+          var world = known[id] ? id : legacy[id] || "midnight";
+
+          var BG = {
+            midnight: "#050807",
+            paper: "#F6F1E6",
+            forest: "#0C1613",
+            modern: "#0E1114",
+          };
+
+          var root = document.documentElement;
+          root.setAttribute("data-visual-mode", world);
+          root.style.backgroundColor = BG[world] || BG.midnight;
+
+          /* 让浏览器 UI（地址栏）也跟着变 */
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", BG[world] || BG.midnight);
+        } catch (e) {
+          /* 读不到就用默认世界，不影响任何功能 */
+        }
+      })();
+    </script>
+
     <link rel="preload" href="/fonts/fonts.css" as="style">
     <link rel="stylesheet" href="/fonts/fonts.css">
     <title>ThaiAI · AI泰语学习平台</title>

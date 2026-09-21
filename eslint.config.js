@@ -12,6 +12,12 @@ export default [
       "src/Layout.jsx",
     ],
     ignores: ["src/lib/**/*", "src/components/ui/**/*"],
+    /* ⚠️ 这里的展开顺序很重要：
+       早先写成 `...pluginJs.configs.recommended` 在 `rules` **之前**，
+       而 configs 里自带 `rules`，于是后面的 `rules: {...}` 把
+       `no-undef` 等基础规则整块覆盖掉了 —— 结果「用了未定义的变量」
+       这类错误（例如结果页引用父组件才有的 appliedBook）永远不会被
+       lint 报出来，只能在浏览器里炸。基础规则放到 rules 之后展开。 */
     ...pluginJs.configs.recommended,
     ...pluginReact.configs.flat.recommended,
     languageOptions: {
@@ -53,6 +59,23 @@ export default [
         { ignore: ["cmdk-input-wrapper", "toast-close"] },
       ],
       "react-hooks/rules-of-hooks": "error",
+    },
+  },
+
+  /* =======================================================
+     React Three Fiber 场景文件
+     -------------------------------------------------------
+     R3F 的 JSX 内建元素（<mesh>/<meshStandardMaterial>/<pointLight>…）
+     用的是 three.js 的属性名，eslint-plugin-react 的静态白名单里没有，
+     会全部报 no-unknown-property。官方做法就是在这类文件里关掉这条规则。
+  ======================================================= */
+  {
+    files: [
+      "src/components/world/**/*.{js,jsx}",
+      "src/lib/worldData.js",
+    ],
+    rules: {
+      "react/no-unknown-property": "off",
     },
   },
 ];

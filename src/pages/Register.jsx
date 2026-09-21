@@ -95,7 +95,8 @@ export default function Register() {
     try {
       const res = await api.post("/auth/register", { nickname, email, password });
       login(res.data);
-      window.location.href = "/";
+      // 注册后直接进入 AI 入学测试：先定级出画像，再进学习主页
+      window.location.href = "/placement-test";
     } catch (err) {
       setError(err.response?.data?.message || "注册失败，请稍后重试");
     } finally {

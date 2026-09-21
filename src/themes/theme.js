@@ -183,6 +183,8 @@ export const THEME_ORDER = [
 
 // 字体选项
 export const FONT_OPTIONS = [
+  /* 默认：字体跟随视觉世界（PAPER 走衬线、MODERN 走 Inter…） */
+  { id: "auto", label: "跟随主题", family: null },
   { id: "ui-sans-serif", label: "Inter / 系统默认", family: "ui-sans-serif, system-ui, -apple-system, sans-serif" },
   { id: "noto-sans", label: "Noto Sans", family: "'Noto Sans', ui-sans-serif, system-ui, sans-serif" },
   { id: "noto-thai", label: "Noto Sans Thai", family: "'Noto Sans Thai', 'PingFang SC', 'Noto Sans SC', ui-sans-serif, sans-serif" },

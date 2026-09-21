@@ -9,12 +9,12 @@ import AbilityRadar from "@/components/dashboard/AbilityRadar";
 import GrowthCurve from "@/components/dashboard/GrowthCurve";
 import { Target, TrendingUp, Sparkles } from "lucide-react";
 
-export default function AbilitySection({ progress: progressProp, loading: loadingProp }) {
+export default function AbilitySection({ progress: progressProp, loading: loadingProp, planets = [] }) {
   const hook = useLearningProgress();
   const progress = progressProp ?? hook.progress;
   const loading = loadingProp ?? hook.loading;
 
-  const abilities = useMemo(() => estimateAbilities(progress), [progress]);
+  const abilities = useMemo(() => estimateAbilities(progress, planets), [progress, planets]);
   const { series, cumulative } = useMemo(
     () => buildLevelSeries(progress?.daily_history),
     [progress]

@@ -23,8 +23,14 @@ function cefrForWords(words) {
   return found || CEFR[CEFR.length - 1];
 }
 
-/* 六维能力估计 */
-export function estimateAbilities(progress) {
+/* 六维能力估计
+ *
+ * @param {object}  progress  学习记录（total_vocabulary, accuracy_rate, daily_history）
+ * @param {Array}   planets   星系星球进度（buildPlanets() 结果），可选。
+ *                             星球掌握度会按维度映射补充到雷达分里，
+ *                             让星系进度直接体现在能力雷达上。
+ */
+export function estimateAbilities(progress, planets = []) {
   if (!progress) progress = {};
   const totalVocabulary = Number(progress.total_vocabulary) || 0;
   const accuracy = Number(progress.accuracy_rate) || 0;
@@ -34,12 +40,56 @@ export function estimateAbilities(progress) {
   const activeDays = history.length;
   const activity = clamp((activeDays / 30) * 100);
 
-  const vocab = clamp((totalVocabulary / TOTAL_WORDS_CAP) * 100);
-  const grammar = clamp(accuracy * 0.6 + vocab * 0.4);
-  const reading = clamp(vocab * 0.55 + accuracy * 0.25 + activity * 0.2);
-  const listening = clamp(vocab * 0.4 + accuracy * 0.3 + activity * 0.3);
-  const speaking = clamp(vocab * 0.5 + accuracy * 0.3 + activity * 0.2);
-  const tone = clamp(vocab * 0.35 + accuracy * 0.45 + activity * 0.2);
+  /* ── 基础估计（纯学习记录） ── */
+  const vocabBase = clamp((totalVocabulary / TOTAL_WORDS_CAP) * 100);
+  const grammarBase = clamp(accuracy * 0.6 + vocabBase * 0.4);
+  const readingBase = clamp(vocabBase * 0.55 + accuracy * 0.25 + activity * 0.2);
+  const listeningBase = clamp(vocabBase * 0.4 + accuracy * 0.3 + activity * 0.3);
+  const speakingBase = clamp(vocabBase * 0.5 + accuracy * 0.3 + activity * 0.2);
+  const toneBase = clamp(vocabBase * 0.35 + accuracy * 0.45 + activity * 0.2);
+
+  /*
+   * ── 星球掌握度 → 雷达维度映射 ──
+   *
+   * 星系里的每颗星球代表一个学习方向，它的真实进度（stage 完成百分比）
+   * 应该反馈到能力雷达上——用户在某个方向花的功夫应该看得见。
+   *
+   * 映射规则（每颗星球的 progress 按权重贡献到 1~2 个维度）：
+   *   基础语言  → 词汇 +30%、声调 +20%
+   *   日常交流  → 口语 +35%、听力 +25%
+   *   文化探索  → 阅读 +40%、语法 +10%
+   *   媒体沉浸  → 听力 +30%、阅读 +15%
+   *   专业方向  → 语法 +25%、词汇 +15%
+   *
+   * 权重之和每维度 ≤1.0（最极端情况也不把某一项直接拉满），
+   * 并与基础估计取 max（不让星球数据「覆盖」真实学习记录，只做「补充」）。
+   */
+  const planetBoost = { vocab: 0, grammar: 0, reading: 0, listening: 0, speaking: 0, tone: 0 };
+  const PLANET_MAP = {
+    basics:   { vocab: 0.3, tone: 0.2 },
+    daily:    { speaking: 0.35, listening: 0.25 },
+    culture:  { reading: 0.4, grammar: 0.1 },
+    media:    { listening: 0.3, reading: 0.15 },
+    pro:      { grammar: 0.25, vocab: 0.15 },
+  };
+  if (Array.isArray(planets)) {
+    planets.forEach((planet) => {
+      const mapping = PLANET_MAP[planet.id];
+      if (!mapping || typeof planet.progress !== "number") return;
+      const p = Math.max(0, Math.min(100, planet.progress));
+      Object.entries(mapping).forEach(([dim, weight]) => {
+        planetBoost[dim] = Math.max(planetBoost[dim], p * weight);
+      });
+    });
+  }
+
+  /* 取 max：星球补充不会拉低真实学习记录产生的估计 */
+  const vocab = clamp(Math.max(vocabBase, vocabBase * 0.7 + planetBoost.vocab * 0.3 + planetBoost.vocab * 0.3));
+  const grammar = clamp(Math.max(grammarBase, grammarBase * 0.7 + planetBoost.grammar * 0.3 + planetBoost.grammar * 0.3));
+  const reading = clamp(Math.max(readingBase, readingBase * 0.7 + planetBoost.reading * 0.3 + planetBoost.reading * 0.3));
+  const listening = clamp(Math.max(listeningBase, listeningBase * 0.7 + planetBoost.listening * 0.3 + planetBoost.listening * 0.3));
+  const speaking = clamp(Math.max(speakingBase, speakingBase * 0.7 + planetBoost.speaking * 0.3 + planetBoost.speaking * 0.3));
+  const tone = clamp(Math.max(toneBase, toneBase * 0.7 + planetBoost.tone * 0.3 + planetBoost.tone * 0.3));
 
   const overallScore = Math.round(
     (vocab + speaking + listening + reading + grammar + tone) / 6
@@ -47,12 +97,12 @@ export function estimateAbilities(progress) {
   const cefr = cefrForWords(totalVocabulary);
 
   const starData = [
-    { subject: "词汇", score: vocab, full: 100 },
-    { subject: "口语", score: speaking, full: 100 },
-    { subject: "听力", score: listening, full: 100 },
-    { subject: "阅读", score: reading, full: 100 },
-    { subject: "语法", score: grammar, full: 100 },
-    { subject: "声调", score: tone, full: 100 },
+    { subject: "词汇", score: vocab, full: 100, hasGalaxyBoost: planetBoost.vocab > 0 },
+    { subject: "口语", score: speaking, full: 100, hasGalaxyBoost: planetBoost.speaking > 0 },
+    { subject: "听力", score: listening, full: 100, hasGalaxyBoost: planetBoost.listening > 0 },
+    { subject: "阅读", score: reading, full: 100, hasGalaxyBoost: planetBoost.reading > 0 },
+    { subject: "语法", score: grammar, full: 100, hasGalaxyBoost: planetBoost.grammar > 0 },
+    { subject: "声调", score: tone, full: 100, hasGalaxyBoost: planetBoost.tone > 0 },
   ];
 
   return {

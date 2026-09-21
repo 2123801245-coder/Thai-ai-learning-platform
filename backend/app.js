@@ -3,7 +3,9 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import dotenv from "dotenv";
+// 必须最先执行：确定性加载 .env（按 backend/ → 仓库根 → cwd 顺序，见 backend/env.js）。
+// 注意 import 是按书写顺序求值的——env.js 排在任何读取 process.env 的模块之前。
+import "./env.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -15,6 +17,7 @@ import authRouter from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
 import speakingRouter from "./routes/speaking.js";
 import vocabularyRouter from "./routes/vocabulary.js";
+import thaiRouter from "./routes/thai.js";
 import progressRouter from "./routes/progress.js";
 import ttsRouter from "./routes/tts.js";
 import featuresRouter from "./routes/features.js";
@@ -23,10 +26,27 @@ import paymentsRouter from "./routes/payments.js";
 import newsRouter from "./routes/news.js";
 import aiTeacherRouter from "./routes/aiTeacher.js";
 import planRouter from "./routes/plan.js";
-dotenv.config();
-
+import profileRouter from "./routes/profile.js";
+import professionalRouter from "./routes/professional.js";
 const app = express();
-const PORT = process.env.PORT || 3001;
+
+// 端口：显式忽略 PORT=0。否则 express 会静默监听一个随机端口——
+// 表现是「启动成功、日志也正常，但没有一个客户端能连上」。
+// 想真的用随机端口（集成测试）就设 ALLOW_RANDOM_PORT=1。
+const _rawPort = Number(process.env.PORT);
+const PORT =
+  Number.isInteger(_rawPort) && _rawPort > 0
+    ? _rawPort
+    : process.env.ALLOW_RANDOM_PORT === "1"
+      ? 0
+      : 3001;
+
+if (String(process.env.PORT || "") === "0" && process.env.ALLOW_RANDOM_PORT !== "1") {
+  console.warn(
+    "[env] 检测到 PORT=0（随机端口），已改用 3001。" +
+      "如确实需要随机端口，请设置 ALLOW_RANDOM_PORT=1。"
+  );
+}
 
 // ============================================================
 // ES Module 当前文件目录
@@ -241,6 +261,10 @@ app.use(
   vocabularyRouter
 );
 app.use(
+  "/api",
+  thaiRouter
+);
+app.use(
   "/api/progress",
   progressRouter
 );
@@ -279,6 +303,14 @@ app.use(
 app.use(
   "/api/plan",
   planRouter
+);
+app.use(
+  "/api/profile",
+  profileRouter
+);
+app.use(
+  "/api/professional",
+  professionalRouter
 );
 // ============================================================
 // 首页
@@ -338,7 +370,7 @@ app.use(
 // 启动服务器
 // ============================================================
 
-app.listen(
+const server = app.listen(
   PORT,
   () => {
     console.log(
@@ -369,3 +401,23 @@ app.listen(
     startVipExpiryCheck(db);
   }
 );
+
+/*
+ * 监听失败的显式处理。
+ *
+ * 没有这段时，端口被占用（同一台机器重复启动后端、或上一个进程没退干净）
+ * 的进程会继续活着——数据库连接、VIP 定时器全都在跑，但一个请求也接不到，
+ * 表现和「服务起不来」一模一样，排查成本很高。这里直接报错退出。
+ */
+server.on("error", (err) => {
+  if (err?.code === "EADDRINUSE") {
+    console.error(
+      `[启动失败] 端口 ${PORT} 已被占用，进程退出。\n` +
+        `  查看占用者：lsof -nP -iTCP:${PORT} -sTCP:LISTEN\n` +
+        `  换端口启动：PORT=3002 npm run dev`
+    );
+  } else {
+    console.error("[启动失败]", err?.message || err);
+  }
+  process.exit(1);
+});

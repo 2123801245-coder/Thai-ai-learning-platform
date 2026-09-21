@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { RotateCcw, CheckCircle2, XCircle, Trophy, Volume2 } from "lucide-react";
 import WordBookPicker from "@/components/practice/WordBookPicker";
 import { speakThai } from "@/lib/thaiSpeech";
-import { mergeBooks, generateMatchPairs, getSavedBookId, saveBookId, fetchWrongBook, recordWrongWord, formatWrongDate, getVocabBooks } from "@/lib/wordBooks";
+import { mergeBooks, generateMatchPairs, getSavedBookId, saveBookId, fetchWrongBook, formatWrongDate } from "@/lib/wordBooks";
+import { usePracticeReward } from "@/hooks/usePracticeReward";
 
 /* 词书来源统一使用 getVocabBooks()（与词汇学习板块一致） */
 
@@ -22,7 +23,7 @@ function speak(text) {
   speakThai(text, { rate: 0.8 });
 }
 
-export default function VocabMatch() {
+export default function VocabMatch({ embedded = false }) {
   const [wrongBook, setWrongBook] = useState(null);
 
   const refreshWrongBook = useCallback(() => {
@@ -59,6 +60,8 @@ export default function VocabMatch() {
   const [matches, setMatches] = useState({}); // { thaiIdx: chineseIdx }
   const [selectedThai, setSelectedThai] = useState(null);
   const [score, setScore] = useState(0);
+  /* 练习结算：答对计 XP/连续天数，答错进错题本（见 usePracticeReward） */
+  const reward = usePracticeReward();
   const [streak, setStreak] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [wrongPairs, setWrongPairs] = useState([]);
@@ -122,6 +125,8 @@ export default function VocabMatch() {
 
       setScore((s) => s + 10 + streak * 2);
       setStreak((s) => s + 1);
+      /* 本地分数只负责即时反馈；真正的 XP/连续天数写进学习进度 */
+      reward.correct({ thai: thaiWord.thai, roman: thaiWord.roman, chinese: thaiWord.chinese });
       setSelectedThai(null);
       setShowResult("correct");
 
@@ -143,18 +148,27 @@ export default function VocabMatch() {
       });
       setSelectedThai(null);
       // 记入错题本并刷新词书（不阻塞交互）
-      recordWrongWord(thaiWord).then(refreshWrongBook);
+      reward.wrong({ thai: thaiWord.thai, roman: thaiWord.roman, chinese: thaiWord.chinese });
+      refreshWrongBook();
     }
 
     setTimeout(() => setShowResult(null), 800);
   };
 
   return (
-    <div className="flex flex-col h-full p-4 sm:p-6 space-y-4 overflow-y-auto">
+    /* embedded：作为「词汇星球」里的一种练习模式渲染，
+       外层由词汇星球负责留白与滚动，这里不再自带页级容器与重复标题。 */
+    <div
+      className={
+        embedded
+          ? "flex flex-col space-y-4"
+          : "flex flex-col h-full p-4 sm:p-6 space-y-4 overflow-y-auto"
+      }
+    >
       {/* 顶部状态栏 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-white">词汇-释义配对</h1>
+          {!embedded && <h1 className="text-xl font-bold text-white">词汇-释义配对</h1>}
           <p className="text-white/40 text-sm">点击泰语词 → 点击对应的中文释义</p>
         </div>
         <div className="flex items-center gap-3">

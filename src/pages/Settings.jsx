@@ -37,6 +37,7 @@ import {
   updateQuotaSettings,
 } from "@/lib/quotaSettings";
 import AppearanceSettings from "@/components/theme/AppearanceSettings";
+import ThemeGallery from "@/components/theme/ThemeGallery";
 
 const sections = [
   {
@@ -347,13 +348,11 @@ function AdminQuotaPanel() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
 
-  /* 仅管理员可见 */
-
-  if (user?.role !== "admin") {
-    return null;
-  }
-
-  /* 首次挂载读取当前配置 */
+  /* 首次挂载读取当前配置
+     —— 必须在任何 return 之前调用。
+     此前这一段 hooks 写在了 `if (user?.role !== "admin") return null` 之后：
+     非管理员「登录后拿到 role」的那一次渲染会少调用这个 effect，
+     React 会因 hook 数量变化报错（rules-of-hooks），管理员切换身份时直接崩。 */
 
   React.useEffect(() => {
     let alive = true;
@@ -363,7 +362,6 @@ function AdminQuotaPanel() {
         setSettings(data || {});
         setSpeakingInput(data?.speakingFreeDaily ?? "");
         setNewsInput(data?.newsListeningFreeDaily ?? "");
-      setAiInput(data?.aiTeacherFreeDaily ?? "");
         setAiInput(data?.aiTeacherFreeDaily ?? "");
       })
       .catch(() => {
@@ -380,6 +378,11 @@ function AdminQuotaPanel() {
       alive = false;
     };
   }, []);
+
+  /* 仅管理员可见：守卫放在所有 hooks 之后 */
+  if (user?.role !== "admin") {
+    return null;
+  }
 
   const save = async () => {
     setSaving(true);
@@ -591,7 +594,12 @@ export default function Settings() {
         </p>
       </motion.div>
 
-      {/* 外观与主题（Theme Studio） */}
+      {/* 视觉世界（四个世界的大型 Preview）—— 放在最前面，先选世界再微调 */}
+      <section className="premium-glass rounded-2xl p-4 sm:p-5">
+        <ThemeGallery />
+      </section>
+
+      {/* 外观与主题（Theme Studio）：世界选定后的细粒度微调 */}
 
       <AppearanceSettings />
 
