@@ -33,7 +33,9 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # rsync 大量新静态资产（课程音频/视频）跨海到阿里云可能需要 15 分钟以上，
+    # 而 rsync --partial 支持断点续传：超时后重跑只需补传剩余部分。
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -81,8 +83,9 @@ jobs:
 
       - name: Rsync dist to server
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        # --partial 保留半截传输，超时重跑可续传；--info=progress2 便于在日志里观察吞吐
         run: |
-          rsync -az --delete --rsh='ssh -i ~/.ssh/deploy_key' dist/ "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIST/"
+          rsync -az --delete --partial --info=progress2 --rsh='ssh -i ~/.ssh/deploy_key' dist/ "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIST/"
 
       - name: Restart frontend container
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
