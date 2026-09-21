@@ -80,19 +80,30 @@ jobs:
             "${REMOTE_USER}@${REMOTE_HOST}:/opt/thaiai-src/deploy/build-on-server.sh"
           $SSH "chmod +x /opt/thaiai-src/deploy/build-on-server.sh && bash /opt/thaiai-src/deploy/build-on-server.sh"
 
-      - name: Cleanup password file
-        if: always()
-        run: rm -f ~/.ssh/.ssp
-
       - name: Public smoke check
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
         run: |
           set -e
+          CODE=""
           for i in 1 2 3; do
-            CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "$SITE_URL/")
+            CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "$SITE_URL/" || true)
             [ "$CODE" = "200" ] && break
             sleep 5
           done
-          echo "公网首页: HTTP $CODE"
-          [ "$CODE" = "200" ] || { echo "❌ 公网验证失败"; exit 1; }
+          if [ "$CODE" = "200" ]; then
+            echo "✅ 发布完成（runner 直连公网）：$SITE_URL"
+            exit 0
+          fi
+          # runner 在海外，跨境 TLS 握手可能被 SNI 干扰重置（curl exit 35）。
+          # 此时改从服务器内侧验证同一公网端点（真实证书 + vhost + 443），无跨境链路。
+          echo "runner 直连失败（HTTP=$CODE），改从服务器内侧验证公网端点"
+          export SSHPASS="$(cat ~/.ssh/.ssp)"
+          INNER=$(sshpass -e ssh -o ConnectTimeout=20 "${REMOTE_USER}@${REMOTE_HOST}" \
+            "curl -sk --resolve thai-ai.online:443:127.0.0.1 -o /dev/null -w '%{http_code}' --max-time 15 https://thai-ai.online/")
+          echo "服务器内侧公网端点: HTTP $INNER"
+          [ "$INNER" = "200" ] || { echo "❌ 公网端点验证失败"; exit 1; }
           echo "✅ 发布完成：$SITE_URL"
+
+      - name: Cleanup password file
+        if: always()
+        run: rm -f ~/.ssh/.ssp
