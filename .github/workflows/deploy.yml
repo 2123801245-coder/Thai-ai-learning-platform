@@ -1,119 +1,98 @@
 name: Deploy Frontend
 
-# 推送到 main 时自动构建并部署前端到阿里云服务器
-# 部署方式与 deploy/deploy.sh 一致：rsync 覆盖 /opt/thaiai/dist + 重启前端容器
-# 认证方式：SSH key（secrets.SSH_PRIVATE_KEY），不用密码
+# ============================================================
+# 部署架构（2026-09-21 改造）：
+#
+#   push main → GitHub Actions：
+#     1. 镜像 push 到 Gitee（本仓库的国内镜像；GitHub→Gitee 走双方
+#        机房骨干网，远快于 runner→阿里云的旧 rsync 跨海通道）
+#     2. SSH 到阿里云服务器（root 密码经 secrets.SSH_PASSWORD）
+#     3. 服务器执行 deploy/build-on-server.sh：
+#        git pull（Gitee 镜像，国内秒级）→ node:20 容器内构建（npmmirror）
+#        → 原子替换 /opt/thaiai/dist → 重启前端容器 → 本机验证/自动回滚
+#
+# 服务器首次初始化（一次性，已完成）：/opt/thaiai-src 为 git 仓库，
+# origin 指向 Gitee 私有仓库（凭据内嵌于 .git/config，权限 600）。
+# ============================================================
 
 on:
   push:
     branches: [main]
-    # 忽略纯文档改动，避免无意义部署
     paths-ignore:
       - '**.md'
       - 'docs/**'
-  # 允许在 Actions 页面手动触发（可选择跳过部署只验证构建）
   workflow_dispatch:
     inputs:
       skip_deploy:
-        description: '只构建验证，不部署'
+        description: '只推送 Gitee 镜像，不部署'
         type: boolean
         default: false
 
 concurrency:
   group: deploy-frontend
-  cancel-in-progress: false   # 部署不互相打断，排队执行
+  cancel-in-progress: false
 
 env:
-  NODE_VERSION: '20'
+  GITEE_REPO: zhbedwin/thai-ai-learning-platform.git
   REMOTE_HOST: 8.140.225.225
   REMOTE_USER: root
-  REMOTE_DIST: /opt/thaiai/dist
   SITE_URL: https://thai-ai.online
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # rsync 大量新静态资产（课程音频/视频）跨海到阿里云吞吐极低（实测 <30KB/s），
-    # 需要多次 run 借助 --partial 断点续传逐步补齐，上限给足。
-    timeout-minutes: 120
+    # 正常路径全程分钟级；兜底余量给 Gitee 接收大 push
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          # 镜像仓库必须带完整历史对象，浅克隆会让 Gitee 端历史不完整
+          fetch-depth: 0
 
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-
-      - name: Build
+      - name: Mirror push to Gitee
         run: |
-          npm run build
-          # 产物自检：主 JS 引用存在 + crossorigin 已剥离
-          JS=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | head -1)
-          [ -n "$JS" ] || { echo "❌ dist/index.html 无主 JS 引用"; exit 1; }
-          N=$(grep -c crossorigin dist/index.html || true)
-          [ "$N" = "0" ] || { echo "❌ 产物含 $N 处 crossorigin"; exit 1; }
-          echo "JS_HASH=$JS" >> "$GITHUB_ENV"
-          echo "本地产物: $JS (crossorigin=0)"
+          set -e
+          git remote add gitee "https://${{ secrets.GITEE_USERNAME }}:${{ secrets.GITEE_TOKEN }}@gitee.com/${GITEE_REPO}"
+          git push gitee --force "+refs/remotes/origin/*:refs/heads/*" --tags
+          echo "镜像完成: Gitee main = $(git rev-parse origin/main)"
 
-      - name: Setup SSH key
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          # 首次连接自动信任主机 key（也可用 ssh-keyscan 预填 known_hosts）
-          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          cat > ~/.ssh/config <<EOF
-          Host aliyun
-            HostName $REMOTE_HOST
-            User $REMOTE_USER
-            IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking yes
-          EOF
-
-      - name: Backup current dist on server
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
-        run: |
-          ssh aliyun "if [ -d $REMOTE_DIST ]; then cp -a $REMOTE_DIST $REMOTE_DIST.bak-\$(date +%Y%m%d-%H%M%S) && echo backed up; else echo 'no existing dist'; fi"
-
-      - name: Rsync dist to server
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
-        # --partial 保留半截传输，超时重跑可续传；--info=progress2 便于在日志里观察吞吐
-        run: |
-          rsync -az --delete --partial --info=progress2 --rsh='ssh -i ~/.ssh/deploy_key' dist/ "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIST/"
-
-      - name: Restart frontend container
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
-        run: |
-          ssh aliyun 'FE=$(docker ps --format "{{.Names}}" | grep -m1 thaiai_frontend || true); if [ -n "$FE" ]; then docker restart $FE && echo "restarted $FE"; else echo "no frontend container"; fi'
-
-      - name: Verify deployment
+      - name: Setup server SSH
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
         run: |
           set -e
-          REMOTE_JS=$(ssh aliyun "grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' $REMOTE_DIST/index.html | head -1")
-          REMOTE_CO=$(ssh aliyun "grep -c crossorigin $REMOTE_DIST/index.html || true")
-          # 在服务器本机验证 443（http:// 会 301 跳转，直接验证 https）
-          HOME_CODE=$(ssh aliyun "curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1/")
-          API_CODE=$(ssh aliyun "curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1/api/features")
+          command -v sshpass >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq sshpass; }
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PASSWORD }}" | sed 's/$//' > ~/.ssh/.ssp
+          chmod 600 ~/.ssh/.ssp
+          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          git config --global core.quotepath off 2>/dev/null || true
 
-          echo "线上主 JS: $REMOTE_JS (本地: $JS_HASH)"
-          echo "crossorigin: $REMOTE_CO | 首页: $HOME_CODE | API: $API_CODE"
+      - name: Deploy on server (git pull + docker build + verify)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        run: |
+          set -e
+          export SSHPASS="$(cat ~/.ssh/.ssp)"
+          SSH="sshpass -e ssh -o ConnectTimeout=20 ${REMOTE_USER}@${REMOTE_HOST}"
+          # 同步最新发布脚本到服务器（首次部署时服务器上还没有仓库代码，必须先落脚本）
+          $SSH "mkdir -p /opt/thaiai-src/deploy" < /dev/null
+          sshpass -e scp -o StrictHostKeyChecking=no deploy/build-on-server.sh \
+            "${REMOTE_USER}@${REMOTE_HOST}:/opt/thaiai-src/deploy/build-on-server.sh"
+          $SSH "chmod +x /opt/thaiai-src/deploy/build-on-server.sh && bash /opt/thaiai-src/deploy/build-on-server.sh"
 
-          FAIL=0
-          [ "$REMOTE_JS" = "$JS_HASH" ] || { echo "❌ hash 不一致"; FAIL=1; }
-          [ "$REMOTE_CO" = "0" ] || { echo "❌ 线上含 crossorigin"; FAIL=1; }
-          [ "$HOME_CODE" = "200" ] || { echo "❌ 首页非 200"; FAIL=1; }
-          [ "$API_CODE" = "200" ] || { echo "❌ API 非 200"; FAIL=1; }
+      - name: Cleanup password file
+        if: always()
+        run: rm -f ~/.ssh/.ssp
 
-          if [ "$FAIL" = "1" ]; then
-            echo "❌ 验证失败，回滚..."
-            ssh aliyun "BAK=\$(ls -dt $REMOTE_DIST.bak-* 2>/dev/null | head -1); if [ -n \"\$BAK\" ]; then rm -rf $REMOTE_DIST && cp -a \"\$BAK\" $REMOTE_DIST; FE=\$(docker ps --format '{{.Names}}' | grep -m1 thaiai_frontend || true); [ -n \"\$FE\" ] && docker restart \$FE; echo rolled back to \$BAK; fi"
-            exit 1
-          fi
-          echo "✅ 部署验证通过：$REMOTE_JS"
+      - name: Public smoke check
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        run: |
+          set -e
+          for i in 1 2 3; do
+            CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "$SITE_URL/")
+            [ "$CODE" = "200" ] && break
+            sleep 5
+          done
+          echo "公网首页: HTTP $CODE"
+          [ "$CODE" = "200" ] || { echo "❌ 公网验证失败"; exit 1; }
+          echo "✅ 发布完成：$SITE_URL"

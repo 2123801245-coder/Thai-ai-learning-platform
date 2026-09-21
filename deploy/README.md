@@ -1,262 +1,55 @@
-# ThaiAI 生产部署指南（国内服务器 · HTTPS · 微信/支付宝）
+# ThaiAI 部署
 
-> 目标架构：一台国内云服务器（Ubuntu 22.04+ / Debian 12），
-> 域名已备案并解析到服务器 IP。Docker Compose 一键部署。
+## 架构（2026-09-21 起）
 
 ```
-浏览器 ── HTTPS ──> nginx (80/443)
-                     ├── 静态前端 dist（SPA 回退 index.html）
-                     └── /api /videos /uploads /subtitles ──> backend:3001 (Node)
+push main (GitHub)
+  └─ Actions: mirror push → Gitee 私有镜像（zhbedwin/thai-ai-learning-platform）
+       └─ Actions: SSH(root 密码, secrets.SSH_PASSWORD) → 服务器执行 deploy/build-on-server.sh
+            ├─ git fetch + reset（Gitee，国内带宽秒级）
+            ├─ node:20-bookworm-slim 容器构建（npmmirror，缓存卷 thaiai-npm-cache）
+            ├─ 备份 → rsync 原子替换 /opt/thaiai/dist
+            ├─ docker restart thaiai_frontend
+            └─ 本机验证（hash / 首页 200 / API 200），失败自动回滚
 ```
 
----
+- 正常发布耗时 **2~5 分钟**（不再有跨海 rsync）。
+- backend 容器独立运行，本流程不触碰；后端改动需在服务器上另行重建。
+- 服务器 Node 构建在一次性容器内完成，宿主机零 Node 依赖。
 
-## 一、服务器准备
+## 一次性初始化（已完成，留档）
+
+1. Gitee 建私有仓库 `thai-ai-learning-platform`（token 经 API 创建）。
+2. 本地首次全量推送：`git push https://<user>:<token>@gitee.com/zhbedwin/thai-ai-learning-platform.git main:main`
+3. 服务器 `/opt/thaiai-src`：`git init` + `git remote add origin https://<user>:<token>@gitee.com/...`（凭据内嵌 .git/config，权限 600）。
+4. GitHub Secrets：`GITEE_USERNAME`、`GITEE_TOKEN`、`SSH_PASSWORD`（root 密码）。
+
+## GitHub Secrets 清单
+
+| Secret | 用途 |
+| --- | --- |
+| `SSH_PRIVATE_KEY` | （旧）保留无害，新流程未使用 |
+| `SSH_PASSWORD` | 服务器 root 密码，Actions SSH 用 |
+| `GITEE_USERNAME` | Gitee 用户名（镜像推送） |
+| `GITEE_TOKEN` | Gitee 私人令牌（需 projects 权限） |
+
+## 手动操作
 
 ```bash
-# 安装 Docker（官方脚本，国内可用镜像源加速）
-curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun
-sudo systemctl enable --now docker
+# 手动触发一次完整发布（Actions 页面 Run workflow，skip_deploy=false）
 
-# 安装 docker compose 插件（一般随 Docker 自带，确认一下）
-docker compose version
+# 只同步 Gitee 镜像不部署（skip_deploy=true）
+
+# 服务器上手动发布（SSH 后）：
+bash /opt/thaiai-src/deploy/build-on-server.sh
+
+# 服务器上手动回滚（最近一份备份）：
+BAK=$(ls -dt /opt/thaiai/dist.bak-* | head -1)
+rm -rf /opt/thaiai/dist && cp -a "$BAK" /opt/thaiai/dist
+docker restart thaiai_frontend
 ```
 
-域名解析：把 `your-domain.com`（及 `www.`）A 记录指向服务器公网 IP。
+## 旧方案（已废弃，仅留档）
 
-防火墙放行：`80`、`443`。
-
----
-
-## 二、SSL 证书（HTTPS）
-
-**方式 A：certbot 自动签发（推荐）**
-
-```bash
-# 先把 80 端口的 nginx 跑起来（或临时用其他服务），再签发：
-sudo apt install -y certbot
-sudo certbot certonly --standalone -d your-domain.com
-# 证书生成在 /etc/letsencrypt/live/your-domain.com/
-
-# 复制到项目 certs 目录（compose 挂载位置）
-mkdir -p certs
-sudo cp /etc/letsencrypt/live/your-domain.com/fullchain.pem certs/thaiai.crt
-sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem  certs/thaiai.key
-sudo chown -R $USER certs/
-```
-
-**方式 B：已有证书** —— 直接放到 `certs/thaiai.crt` 和 `certs/thaiai.key`。
-
-> 自动续期（crontab）：`0 3 * * * certbot renew --quiet --post-hook "cp ... && docker compose -f /path/docker-compose.yml restart frontend"`
-
----
-
-## 三、配置环境变量
-
-```bash
-cp .env.example .env
-vim .env
-```
-
-必填项：
-
-| 变量 | 说明 |
-|---|---|
-| `JWT_SECRET` | 登录签名密钥，`openssl rand -hex 32` 生成 |
-| `ADMIN_EMAILS` | 管理员邮箱（逗号分隔），注册即管理员 |
-| `PAY_WECHAT_MCHID` | 微信支付商户号（小微商户个人可申请） |
-| `PAY_WECHAT_APIV3_KEY` | 微信 API v3 密钥（32 位） |
-| `PAY_WECHAT_SERIAL_NO` | 商户 API 证书序列号 |
-| `PAY_WECHAT_PRIVATE_KEY` | 商户 API 私钥（路径或内联 PEM） |
-| `PAY_WECHAT_PLATFORM_CERT` | 微信平台证书 PEM（可选，不填自动下载） |
-| `PAY_WECHAT_MOCK` | ⚠️ 仅本地演示用。`=1` 时假装微信已配置并返回演示二维码（不扣款）。**生产必须删除/置空**，否则支付界面可用但永远收不到钱 |
-| `PAY_EPAY_MCHID` | 易支付商户号（pid，支付宝补充渠道，可选） |
-| `PAY_EPAY_KEY` | 易支付商户密钥 |
-| `PAY_EPAY_GATEWAY` | 易支付网关，如 `https://pay.example.com` |
-| `PAY_NOTIFY_BASE` | 你的站点域名，如 `https://your-domain.com`（回调地址） |
-| `SPEECH_KEY` / `SPEECH_REGION` | Azure 发音评测（如已启用） |
-| `CORS_ORIGINS` | `https://your-domain.com` |
-
-> **首选：微信支付官方（小微商户）**——这是最可靠的路径，资金直达银行卡、费率 0.6%。
-> 申请步骤：微信支付商户平台（pay.weixin.qq.com）→「小微商户」入驻（凭身份证 + 银行卡，
-> 个人即可，约 1~3 个工作日审核）→ 商户后台「API 安全」→ 设置 APIv3 密钥、
-> 下载 apiclient_key.pem / apiclient_cert.pem。把商户号 / 密钥 / 证书序列号 / 私钥填入
-> 四个 `PAY_WECHAT_*` 变量，回调地址填 `https://your-domain.com/api/payments/wechat-notify`。
->
-> **补充：易支付（支付宝渠道）**——个人无支付宝官方 API，如需支付宝收款，
-> 可在任意易支付系统注册商户号（彩虹易支付等）获得 pid + 密钥 + 网关，
-> 回填地址 `https://your-domain.com/api/payments/notify`。
->
-> 若都不接，把 `PAY_*` 留空即可——前端自动隐藏在线支付，保留激活码开通。
-
----
-
-## 四、一键部署（前端卷挂载 · 容器重建不回退）
-
-> ⚠️ 关键：前端 dist 与 nginx 配置**以卷挂载方式**进入容器
-> （`docker-compose.prod.yml` 已将 `./dist` 挂到 `/usr/share/nginx/html`、
-> `./deploy/nginx.conf` 挂到 `/etc/nginx/conf.d/default.conf`）。
-> 容器删除重建后内容是宿主机目录，**不会回退到镜像内烘焙的旧版**——
-> 这是本轮反复白屏（镜像内旧 dist 带 crossorigin）的根治方案。
-
-### 首次部署
-
-```bash
-# 服务器上（项目根目录 = 你的项目路径，如 /opt/thaiai）
-# ⚠️ 必须用 compose v2（`docker compose`）：服务器的 docker-compose v1 与现代 Docker 不兼容（KeyError），勿用
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-### 日常更新前端（一键脚本，推荐）
-
-```bash
-# 在开发机（本项目根目录）执行：
-cp deploy/deploy.env.example deploy/deploy.env   # 首次：填服务器地址
-deploy/deploy.sh                                  # 构建 + 备份 + rsync + 重启 + 验证
-
-# 跳过构建直接同步现有 dist：
-deploy/deploy.sh --skip-build
-
-# 脚本自动完成：
-#   1. 本地构建（主目录超时/失败自动回退 /tmp 干净副本，规避 iCloud dataless 卡死）
-#   2. 校验产物（主 JS 引用存在、crossorigin=0）
-#   3. 备份服务器 dist → /opt/thaiai/dist.bak-<时间戳>
-#   4. rsync 同步到 /opt/thaiai/dist（--delete，镜像目录）
-#   5. 重启前端容器（thaiai_frontend*）
-#   6. 验证：本地/线上 JS hash 一致 + crossorigin=0 + 首页/API 200
-#      任一失败自动回滚到备份并退出非零
-# SSHPASS 通过环境变量传入：export SSHPASS='密码' 后再运行
-```
-
-### 容器编排已归一化到 compose（2026-09-06 起）
-
-- `docker-compose.prod.yml` 为两个服务都加了 **`container_name`**（`thaiai_backend` / `thaiai_frontend`），
-  compose 全权管理固定容器名，**不再产生 `thaiai_backend_1` 这类漂移副本**；
-  nginx 上游 `upstream thaiai_backend` 直连该名，无需改动。
-- 服务器需用 **compose v2**：已安装为 Docker CLI 插件（`docker compose version` → v5.5.1）。
-  旧的 `docker-compose`（v1.29）会因 BuildKit 镜像缺 `ContainerConfig` 报 KeyError，勿再使用。
-- 服务器 `/opt/thaiai/docker-compose.yml` 已是指向 `docker-compose.prod.yml` 的**符号链接**
-  （旧的微信支付变体已备份为 `docker-compose.yml.legacy-*`），任何调用方式读到的都是同一份配置。
-- 两端数据都在宿主机卷（`./data`、`./dist`、`./certs`、`./deploy/nginx.conf`），compose 重建不丢。
-
-### 需要重建容器时（如改端口/依赖/后端代码）
-
-```bash
-cd /opt/thaiai
-# 重建+重启后端（先同步 backend 源码到服务器，如 streak/plan 那轮）：
-docker compose -f docker-compose.prod.yml build backend
-docker compose -f docker-compose.prod.yml up -d backend
-# 仅重建前端容器（dist 卷挂载，内容不动）：
-docker compose -f docker-compose.prod.yml up -d frontend
-# 或整体重建两端：
-docker compose -f docker-compose.prod.yml up -d
-```
-
-> 幂等：容器名固定后重复执行 `up -d` 只会显示 `Running`，不会重建、不会产生 `_1` 副本。
-
-### 回滚
-
-```bash
-# 方式一：用脚本输出的备份路径（每次部署都会打印）
-ssh root@<server> 'rm -rf /opt/thaiai/dist && cp -a /opt/thaiai/dist.bak-<时间戳> /opt/thaiai/dist'
-
-# 方式二：把旧 dist 重新上传覆盖 /opt/thaiai/dist 即可，无需动容器
-```
-
-验证：
-
-```bash
-# 后端健康
-curl -s https://your-domain.com/api/payments/status
-# → {"enabled":false,"channels":[],"plans":{...}} （未配支付时 enabled:false）
-
-# 前端首页 + 最新构建 hash + 无 crossorigin + no-cache 头
-curl -sI https://your-domain.com | head -1                     # → HTTP/1.1 200
-curl -s https://your-domain.com/ | grep -o 'index-[A-Za-z0-9_-]*\.js'
-curl -s https://your-domain.com/ | grep -c crossorigin         # → 0（无输出）
-curl -sI https://your-domain.com/ | grep -i cache-control      # → no-cache, must-revalidate
-
-# 日志
-docker logs -f thaiai_backend
-```
-
----
-
-## 五、支付联调自测（模拟易支付回调）
-
-后端内置了完整的验签 + 幂等逻辑，可用本地 Node 脚本模拟网关回调：
-
-```bash
-# 1. 登录拿 token
-TOKEN=$(curl -s -X POST https://your-domain.com/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"admin@example.com","password":"xxx"}' | jq -r .token)
-
-# 2. 创建订单
-curl -s -X POST https://your-domain.com/api/payments/checkout \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"plan":"m1","channel":"wechat"}'
-# → {"url":"https://pay.example.com/submit.php?...","orderNo":"TAI..."}
-
-# 3. 用 orderNo + money 复算 MD5 签名并模拟回调（验签通过即激活 VIP）
-```
-
-前端流程：VipPanel「在线支付」页签 → 选套餐/渠道 → 新窗口打开收银台 → 每 3 秒轮询订单 → 支付成功自动解锁 VIP 并刷新状态。
-
----
-
-## 六、数据与备份
-
-- SQLite 数据库：`./data/users.db`（compose 卷挂载，重启不丢）
-- 用户头像：`./data/uploads/`
-- 备份：
-  ```bash
-  # 每天凌晨备份（crontab）
-  0 4 * * * docker exec $(docker compose ps -q backend) sqlite3 /data/users.db ".backup '/data/backup-$(date +\%F).db'" && docker cp ... 
-  ```
-
----
-
-## 七、升级发布
-
-```bash
-git pull
-docker compose up -d --build
-```
-
-新代码上线即生效；数据库表结构由后端启动时自动迁移（幂等 ADD COLUMN）。
-
----
-
-## 常见问题
-
-| 问题 | 处理 |
-|---|---|
-| 微信支付回调收不到 | ① 确认 `PAY_NOTIFY_BASE` 是公网可访问的 https 域名；② 微信商户平台「API安全 → 支付通知」确认回调地址为 `/api/payments/wechat-notify`；③ 看 `docker compose logs backend` 里有无 `[payments]` 日志 |
-| 微信回调报验签失败 | 平台证书过期/未下载。配置 `PAY_WECHAT_PLATFORM_CERT`（商户平台下载最新平台证书 PEM）即可，后端也支持自动下载 |
-| 易支付回调收不到 | ① 确认 `PAY_NOTIFY_BASE` 是公网可访问的 https 域名；② 在易支付后台填回调地址 `/api/payments/notify`；③ 看 `docker compose logs backend` 里有无 `[payments]` 日志 |
-| 微信/支付宝扫码不开 | 易支付商户需要实名认证 + 开通收款，联系易支付客服 |
-| 视频 404 | 确认 `backend/videos/` 目录在镜像里（.dockerignore 未排除） |
-| 线上显示微信扫码但收不到钱 | `.env` 里 `PAY_WECHAT_MOCK=1` 没删！生产必须删除该行 |
-
----
-
-## 八、商业化上线路线图（按推荐顺序）
-
-> ①②③ 是「主体 + 资质」前置，只能由你本人完成；④ 之后系统已可跑通全流程，
-> ⑤⑥⑦⑧ 的代码全部就绪，拿到商户号后填入 `.env` 即自动启用。
-
-| 步骤 | 事项 | 谁做 | 说明 |
-|---|---|---|---|
-| ① | 个体工商户主体 | 你 | 本地市场监管局 / 线上政务平台办理，几天下证；微信支付官方 API 的前提 |
-| ② | 正式域名 | 你 | 阿里云/腾讯云注册，建议 `.com/.cn`；备案前可先用 IP 预览 |
-| ③ | ICP 备案 | 你 | 云厂商控制台提交，通常 1~3 周；备案完成前 80/443 不能对大陆公网开放 |
-| ④ | ThaiAI 正式商业版上线 | 一起 | 按本指南部署（域名→证书→compose up），此时激活码模式已可收款前先跑通 |
-| ⑤ | 微信支付商户号 | 你 | 小微商户（身份证+银行卡）或普通商户（需①执照），1~3 个工作日 |
-| ⑥ | 微信支付 API 凭证 | 你 | 商户后台 → API安全 → APIv3 密钥 + 证书序列号 + apiclient_key.pem |
-| ⑦ | 订单系统 | 已完成 | `payments` 表 + checkout/订单轮询/记录，实测通过 |
-| ⑧ | VIP 自动开通 | 已完成 | wechat-notify 验签 → 金额校验 → 幂等激活 VIP，实测通过 |
-
-**第 ④ 步之后、⑤⑥ 之前**：网站照常运营，用「激活码」模式先收第一波用户；
-拿到商户号后，填 `PAY_WECHAT_*` + 删 `PAY_WECHAT_MOCK`，重启即切换为真实微信收款，前端零改动。
-| TTS 没声音 | 后端 `say` 依赖 macOS 本地语音，**服务器是 Linux 时无 Kanya**——会自动走 Edge 神经语音（需服务器能访问微软服务），或用 Windows/macOS 本机部署 |
+GitHub Actions 构建 → rsync 158MB 产物跨海（实测 <30KB/s）→ 重启容器。
+首次全量部署耗时数小时、依赖多轮 --partial 续传。`deploy/deploy.sh`（本地构建 + sshpass rsync）仍可用作手动应急通道。
