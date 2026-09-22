@@ -178,5 +178,10 @@ fi
 [ "$PROBE" != "404" ] || rollback "新路由 /api/thai/segment 返回 404，运行的不是新代码"
 docker logs --tail 5 "$CONTAINER" 2>&1 | sed 's/^/   │ /' || true
 
+# 每次重建都会把上一版镜像降级为悬空（rollback tag 只留一份），长期会堆盘。
+# 只清「24 小时前」的悬空镜像：它们已被 latest/rollback 取代，不可能是刚失败的退路。
+PRUNED=$(docker image prune -f --filter "until=24h" 2>&1 | tail -1 || true)
+echo "   清理悬空镜像: ${PRUNED:-跳过}"
+
 echo "$NEW" > "$MARKER"
 echo "BACKEND_OK commit=$NEW image=${NEW_IMG_ID:7:12}"
