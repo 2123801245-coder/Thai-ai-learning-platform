@@ -108,15 +108,33 @@ systemctl start thaiai-gitee-sync.service         # 立即同步一次
 - ⚠️ 若 GitHub 侧发生**历史重写**（force push / rebase 已发布提交），镜像的强制推送会被保护规则拦下，
   需临时调整保护设置，或改用非强制推送。
 
-## 发布通知（钉钉 / 企业微信）
+## 发布通知（推送到手机）
 
 发布**成功**或**失败回滚**都会推消息到手机。三条触发路径（Actions / WebHook / 轮询）
 共用同一个发布脚本，因此都会通知，消息里带触发来源。
 
-### 安装（服务器上，一次）
+支持 5 个通道，**配哪个发哪个**（可多选，都不配则静默跳过）：
+
+| 类型 | 通道 | 要不要建群 | 怎么拿 key |
+| --- | --- | --- | --- |
+| 个人 | **Bark**（iOS） | 不用 | 装 Bark App，打开即得 key |
+| 个人 | **Server酱**（微信） | 不用 | sct.ftqq.com 扫码登录拿 SendKey |
+| 个人 | **PushPlus**（微信/邮件） | 不用 | pushplus.plus 扫码登录拿 token |
+| 群 | **钉钉**自定义机器人 | **需要群** | 群设置 → 智能群助手 → 自定义机器人（开「加签」最安全） |
+| 群 | **企业微信**群机器人 | **需要群** | 群设置 → 群机器人 → 添加机器人 |
+
+> 钉钉/企微的「自定义机器人」必须挂在一个群里（个人无法直接建机器人）；
+> 若不想建群，选 Bark / Server酱 / PushPlus，三者都只需一个 key。
+
+### 安装（服务器上，一次；按需保留要用的行）
 
 ```bash
 cat > /etc/thaiai-notify.env <<'EOF'
+# 个人推送（三选一即可）
+BARK_KEY=你的BarkKey
+SERVERCHAN_KEY=SCT你的SendKey
+PUSHPLUS_TOKEN=你的token
+# 群机器人（可选，需先有群）
 DINGTALK_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=xxx
 DINGTALK_SECRET=SECxxx
 WECHAT_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx
@@ -124,18 +142,17 @@ EOF
 chmod 600 /etc/thaiai-notify.env
 ```
 
-- 只填一个也可以；两个都填就两条都发；**都不填则静默跳过**（视为未启用）
-- `DINGTALK_SECRET` 仅在钉钉机器人开了「加签」时需要；若机器人用「自定义关键词」模式，
+- `DINGTALK_SECRET` 仅在钉钉机器人开了「加签」时需要；若用「自定义关键词」模式，
   关键词需出现在消息里（默认消息含 `ThaiAI`）
-- 企业微信对应「群机器人 → Webhook 地址」
+- 自建 Bark 服务端可另配 `BARK_URL=https://你的域名`
 
 ### 测试与排查
 
 ```bash
 python3 /opt/thaiai-src/deploy/notify.py success --commit test123 \
-  --subject "通知自检" --elapsed 42 --site-code 200          # 真发一条
+  --subject "通知自检" --elapsed 42 --site-code 200          # 真发一条（所有已配通道）
 python3 /opt/thaiai-src/deploy/notify.py failure --stage "自检" --dry-run   # 只看内容
-systemctl start thaiai-gitee-sync.service                   # 跑一次真实发布（无变化几秒退出）
+FORCE=1 bash /opt/thaiai-src/deploy/build-on-server.sh      # 跑一次真实重建（会发通知）
 ```
 
 ### 设计约定
