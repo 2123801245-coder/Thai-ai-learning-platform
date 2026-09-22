@@ -2,7 +2,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Mic,
-  Square,
   Volume2,
   ChevronLeft,
   ChevronRight,
@@ -17,6 +16,33 @@ import { motion, AnimatePresence } from "framer-motion";
 import { speakThai, stopThaiAudio } from "@/lib/thaiSpeech";
 import { createAudioRecorder } from "@/lib/audioRecorder";
 import { API_BASE_URL } from "@/lib/api";
+import MatrixOrb from "@/components/ui/matrix-orb";
+
+/* =========================================================
+   Matrix Orb 包装：把实时麦克风电平喂给语音球。
+   电平轮询只让这个小组件重渲染（80ms 一次），页面其余部分不受影响。
+========================================================= */
+
+function LiveOrb({ state, recorderRef, ...orbProps }) {
+  const [level, setLevel] = useState(undefined);
+
+  useEffect(() => {
+    /* 只有「正在听」时才跟随真人声，其余状态交给 Orb 自己的呼吸动画 */
+
+    if (state !== "listening") {
+      setLevel(undefined);
+      return undefined;
+    }
+
+    const timer = setInterval(() => {
+      setLevel(recorderRef.current?.getLevel?.() ?? 0);
+    }, 80);
+
+    return () => clearInterval(timer);
+  }, [state, recorderRef]);
+
+  return <MatrixOrb state={state} level={level} {...orbProps} />;
+}
 
 export default function SpeakingRecorder({
   words = [],
@@ -1156,6 +1182,14 @@ export default function SpeakingRecorder({
   const score =
     result?.score ?? null;
 
+  /* 语音球三态：分析中 → thinking，录音中 → listening，其余 → idle */
+
+  const orbState = analyzing
+    ? "thinking"
+    : recording
+    ? "listening"
+    : "idle";
+
   const scoreLevel =
     score === null
       ? null
@@ -1449,79 +1483,35 @@ export default function SpeakingRecorder({
                     ))}
                 </AnimatePresence>
 
-                {/* 核心语音球 */}
+                {/* 核心语音球：Matrix Orb（点阵，idle / listening / thinking 三态） */}
 
                 <motion.button
                   whileHover={{
-                    scale: analyzing ? 1 : 1.06,
+                    scale: analyzing ? 1 : 1.04,
                   }}
                   whileTap={{
-                    scale: analyzing ? 1 : 0.93,
+                    scale: analyzing ? 1 : 0.96,
                   }}
                   onClick={handleRecording}
                   disabled={analyzing}
-                  className={`
-                    relative
-                    z-10
-                    flex
-                    h-24
-                    w-24
-                    items-center
-                    justify-center
-                    overflow-hidden
-                    rounded-full
-                    border
-                    shadow-2xl
-                    transition-all
-                    duration-300
-                    disabled:cursor-not-allowed
-                    disabled:opacity-70
-                    ${
-                      analyzing
-                        ? "border-yellow-200/40 bg-gradient-to-br from-yellow-300/80 to-amber-500 shadow-yellow-900/40"
-                        : recording
-                        ? "border-red-200/40 bg-gradient-to-br from-red-400 to-red-600 shadow-red-900/40"
-                        : "border-emerald-200/30 bg-gradient-to-br from-emerald-400 via-teal-400 to-emerald-600 shadow-emerald-900/40"
-                    }
-                  `}
+                  aria-label={
+                    analyzing
+                      ? "正在分析朗读"
+                      : recording
+                      ? "停止录音"
+                      : "开始朗读"
+                  }
+                  className="relative z-10 flex h-32 w-32 items-center justify-center rounded-full transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {/* 球体内部高光 */}
-
-                  <div
-                    className={`pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-white/25 via-transparent to-transparent ${
-                      recording ? "opacity-50" : "opacity-40"
-                    }`}
+                  <LiveOrb
+                    state={orbState}
+                    recorderRef={recorderRef}
+                    size={128}
+                    dots={11}
+                    color="#34d399"
+                    labels={{ idle: "", listening: "", thinking: "" }}
+                    className="pointer-events-none gap-0"
                   />
-
-                  {/* 内部呼吸微光 */}
-
-                  <motion.div
-                    animate={
-                      recording
-                        ? { opacity: [0.2, 0.55, 0.2] }
-                        : { opacity: [0.12, 0.32, 0.12] }
-                    }
-                    transition={{
-                      duration: 1.6,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                    className="pointer-events-none absolute inset-3 rounded-full bg-white/10"
-                  />
-
-                  {analyzing ? (
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-white/30 border-t-white" />
-                  ) : recording ? (
-                    <Square className="h-8 w-8 fill-white text-white" />
-                  ) : (
-                    <Mic className="h-9 w-9 text-white" />
-                  )}
-
-                  {/* AI 标识 */}
-
-                  <span className="absolute bottom-1.5 right-2 text-[9px] font-black tracking-widest text-white/70">
-                    AI
-                  </span>
                 </motion.button>
               </div>
 
