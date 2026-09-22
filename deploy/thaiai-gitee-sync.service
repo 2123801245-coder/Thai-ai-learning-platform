@@ -21,6 +21,8 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
+# 只用于发布通知里区分触发来源
+Environment="THAIAI_TRIGGER=Gitee 轮询兜底"
 ExecStart=/bin/bash /opt/thaiai-src/deploy/build-on-server.sh
 # 发布脚本内部最坏路径：构建 60s + 验证；留足余量
 TimeoutStartSec=1500

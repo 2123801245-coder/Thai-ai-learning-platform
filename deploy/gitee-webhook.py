@@ -92,6 +92,8 @@ def trigger(commit):
                 stdin=subprocess.DEVNULL,
                 stdout=out,
                 stderr=subprocess.STDOUT,
+                # 告诉发布脚本这次是谁触发的（只用于通知文案）
+                env=dict(os.environ, THAIAI_TRIGGER="Gitee WebHook"),
                 # 独立会话：父进程（以及 systemd 重启服务）都不会带走它
                 start_new_session=True,
             )

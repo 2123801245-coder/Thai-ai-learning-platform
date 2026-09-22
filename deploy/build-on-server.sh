@@ -28,6 +28,30 @@ SITE_CHECK=https://127.0.0.1
 # 记录最近一次发布成功的 commit，用于双通道并发时短路重复构建
 MARKER=/opt/thaiai/.deployed-commit
 LOCK=/var/lock/thaiai-deploy.lock
+# 触发来源（由调用方注入：GitHub Actions / Gitee WebHook / 轮询兜底），只用于通知文案
+TRIGGER=${THAIAI_TRIGGER:-未标注}
+START=$(date +%s)
+NEW=""
+SUBJECT=""
+
+# 发布通知（钉钉/企业微信）。配置缺失或推送失败都只记一行，**绝不影响发布本身**。
+# 配置在服务器 /etc/thaiai-notify.env（600，不进仓库）；实现在 deploy/notify.py。
+notify() {
+  [ -f "$SRC/deploy/notify.py" ] || return 0
+  python3 "$SRC/deploy/notify.py" "$1" \
+    --commit "${NEW:-}" --subject "${SUBJECT:-}" --trigger "$TRIGGER" \
+    "${@:2}" 2>&1 | sed 's/^/   /' || true
+  return 0
+}
+
+# 未预期中断（set -e 触发）也要通知：否则「没消息」和「失败了」分不清
+on_abort() {
+  local code=$?
+  trap - ERR
+  notify failure --stage "未预期中断" --detail "脚本以退出码 $code 中止"
+  exit "$code"
+}
+trap on_abort ERR
 
 # 两条通道可能几乎同时触发。并发跑构建会同时 rsync dist 并把容器重启到中间状态，
 # 所以在最前面就排它：后到者等锁（最多 15 分钟），拿到后一般会被 MARKER 短路。
@@ -44,6 +68,7 @@ OLD=$(git rev-parse --short HEAD 2>/dev/null || echo none)
 git fetch origin main
 git reset --hard origin/main
 NEW=$(git rev-parse --short HEAD)
+SUBJECT=$(git log -1 --pretty=%s 2>/dev/null | cut -c1-60 || true)
 if [ "$OLD" = "$NEW" ]; then
   echo "   代码已是最新（$NEW）——继续执行（可能是重试）"
 else
@@ -107,6 +132,7 @@ else
     rm -f "$NGINX_CONF.orig"
     echo "❌ nginx 配置语法错误，已还原（未重启，站点不受影响）"
     docker exec thaiai_frontend nginx -t || true
+    notify failure --stage "nginx 配置语法检查" --detail "配置已还原，未重启容器"
     exit 1
   fi
 fi
@@ -172,8 +198,10 @@ if [ "$FAIL" = "1" ]; then
   echo "❌ 验证失败，回滚到 $BAK"
   rm -rf "$DIST" && cp -a "$BAK" "$DIST"
   docker restart thaiai_frontend >/dev/null 2>&1 || true
+  notify failure --stage "本机验证未通过" --detail "已回滚到上一版（hash/首页/API/音频/接收端之一未过）"
   exit 1
 fi
 
 echo "$NEW" > "$MARKER"
 echo "✅ DEPLOY_OK commit=$NEW js=$JS"
+notify success --elapsed "$(( $(date +%s) - START ))" --site-code "$HOME_CODE"

@@ -108,6 +108,48 @@ systemctl start thaiai-gitee-sync.service         # 立即同步一次
 - ⚠️ 若 GitHub 侧发生**历史重写**（force push / rebase 已发布提交），镜像的强制推送会被保护规则拦下，
   需临时调整保护设置，或改用非强制推送。
 
+## 发布通知（钉钉 / 企业微信）
+
+发布**成功**或**失败回滚**都会推消息到手机。三条触发路径（Actions / WebHook / 轮询）
+共用同一个发布脚本，因此都会通知，消息里带触发来源。
+
+### 安装（服务器上，一次）
+
+```bash
+cat > /etc/thaiai-notify.env <<'EOF'
+DINGTALK_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=xxx
+DINGTALK_SECRET=SECxxx
+WECHAT_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx
+EOF
+chmod 600 /etc/thaiai-notify.env
+```
+
+- 只填一个也可以；两个都填就两条都发；**都不填则静默跳过**（视为未启用）
+- `DINGTALK_SECRET` 仅在钉钉机器人开了「加签」时需要；若机器人用「自定义关键词」模式，
+  关键词需出现在消息里（默认消息含 `ThaiAI`）
+- 企业微信对应「群机器人 → Webhook 地址」
+
+### 测试与排查
+
+```bash
+python3 /opt/thaiai-src/deploy/notify.py success --commit test123 \
+  --subject "通知自检" --elapsed 42 --site-code 200          # 真发一条
+python3 /opt/thaiai-src/deploy/notify.py failure --stage "自检" --dry-run   # 只看内容
+systemctl start thaiai-gitee-sync.service                   # 跑一次真实发布（无变化几秒退出）
+```
+
+### 设计约定
+
+**通知永远不影响发布**：`notify.py` 缺失、配置为空、网络不通都只打印一行日志，发布流程照常继续
+（`notify()` 内部 `|| true`，且失败路径不会递归触发 ERR 陷阱）。
+
+消息内容：
+
+| 状态 | 内容 |
+| --- | --- |
+| ✅ 成功 | 提交（含标题）、触发来源、耗时、站点状态码 |
+| ⚠️ 失败 | 提交、触发来源、失败环节（nginx 语法 / 本机验证 / 未预期中断）、回滚说明、日志位置 |
+
 ## 一次性初始化（已完成，留档）
 
 1. Gitee 建私有仓库 `thai-ai-learning-platform`（token 经 API 创建）。

@@ -78,7 +78,8 @@ jobs:
           $SSH "mkdir -p /opt/thaiai-src/deploy" < /dev/null
           sshpass -e scp -o StrictHostKeyChecking=no deploy/build-on-server.sh \
             "${REMOTE_USER}@${REMOTE_HOST}:/opt/thaiai-src/deploy/build-on-server.sh"
-          $SSH "chmod +x /opt/thaiai-src/deploy/build-on-server.sh && bash /opt/thaiai-src/deploy/build-on-server.sh"
+          # THAIAI_TRIGGER 只用于发布通知里区分触发来源（Workflow / WebHook / 轮询）
+          $SSH "chmod +x /opt/thaiai-src/deploy/build-on-server.sh && THAIAI_TRIGGER='GitHub Actions' bash /opt/thaiai-src/deploy/build-on-server.sh"
 
       - name: Public smoke check
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}

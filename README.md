@@ -287,6 +287,7 @@ Actions 把代码镜像到 Gitee → 服务器 `git reset --hard origin/main` �
 
 - 只同步镜像、不发布：手动触发 workflow 并勾选 `skip_deploy`
 - 纯文档改动（`**.md`、`docs/**`）不触发部署
+- 发布成功或失败回滚都会推送到钉钉 / 企业微信（配置见 `deploy/README.md`）
 - 后端（`backend/`）不在前端发布流程内，后端改动需上服务器单独重建容器
 
 ### 直接从 Gitee 发布（GitHub 不通时）
