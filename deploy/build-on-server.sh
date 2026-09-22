@@ -4,13 +4,18 @@
 #
 #   bash /opt/thaiai-src/deploy/build-on-server.sh
 #
+# 两条触发通道共用本脚本（并发安全）：
+#   - GitHub Actions：mirror push 到 Gitee 后 SSH 执行
+#   - Gitee WebHook：push 后由 deploy/gitee-webhook.py 触发
+# 后到者在这里等锁获得串行，拿到锁后多半被「已发布」标记直接短路。
+#
 # 流程：
 #   1. git fetch + reset 到 origin/main（Gitee 镜像，国内带宽秒级）
 #   2. node:20 容器内 npm ci + vite build（npmmirror，带全局缓存卷）
 #   3. 产物自检（主 JS 引用存在）
 #   4. 备份当前 dist → rsync 同屏替换 /opt/thaiai/dist
-#   5. 同步 deploy/nginx.conf 到容器挂载源 + 重启前端容器
-#   6. 本机验证（hash/首页/API/音频 MIME），失败自动回滚
+#   5. 同步 deploy/nginx.conf 到容器挂载源 + 同步 WebHook 服务 + 重启前端容器
+#   6. 本机验证（hash/首页/API/音频 MIME/WebHook 存活），失败自动回滚
 #
 # 后端不在本脚本职责内（backend 容器独立运行，源码更新后另行重建）。
 # ============================================================
@@ -20,6 +25,18 @@ SRC=/opt/thaiai-src
 DIST=/opt/thaiai/dist
 NODE_IMAGE=docker.m.daocloud.io/library/node:20-bookworm-slim
 SITE_CHECK=https://127.0.0.1
+# 记录最近一次发布成功的 commit，用于双通道并发时短路重复构建
+MARKER=/opt/thaiai/.deployed-commit
+LOCK=/var/lock/thaiai-deploy.lock
+
+# 两条通道可能几乎同时触发。并发跑构建会同时 rsync dist 并把容器重启到中间状态，
+# 所以在最前面就排它：后到者等锁（最多 15 分钟），拿到后一般会被 MARKER 短路。
+# 手动强制重建：FORCE=1 bash build-on-server.sh
+exec 9>"$LOCK"
+if ! flock -w 900 9; then
+  echo "❌ 等待发布锁超时（另一发布仍在执行）"
+  exit 1
+fi
 
 cd "$SRC"
 echo "── [1/6] 拉取最新代码"
@@ -31,6 +48,13 @@ if [ "$OLD" = "$NEW" ]; then
   echo "   代码已是最新（$NEW）——继续执行（可能是重试）"
 else
   echo "   $OLD → $NEW"
+fi
+
+# 已经发布成功过的 commit 不必重建：双通道并发时，后到的那个走到这里就直接结束。
+# （失败会保留旧 MARKER，所以重试仍会真的重建。）
+if [ "${FORCE:-0}" != "1" ] && [ -f "$MARKER" ] && [ "$(cat "$MARKER" 2>/dev/null)" = "$NEW" ]; then
+  echo "   $NEW 已发布过，跳过构建（需要重建：FORCE=1）"
+  exit 0
 fi
 
 echo "── [2/6] Docker 内安装依赖 + 构建"
@@ -77,6 +101,19 @@ if [ -n "$NGINX_CONF" ] && [ -f "$NGINX_CONF" ] && ! cmp -s "$SRC/deploy/nginx.c
 else
   echo "   nginx.conf 无变化或未找到挂载源（$NGINX_CONF）"
 fi
+
+# WebHook 接收端（第二条发布通道）：unit 随发布同步；只在已安装（存在密钥文件）时管它
+if [ -f /etc/thaiai-webhook.env ]; then
+  if ! cmp -s "$SRC/deploy/thaiai-webhook.service" /etc/systemd/system/thaiai-webhook.service; then
+    install -m 644 "$SRC/deploy/thaiai-webhook.service" /etc/systemd/system/thaiai-webhook.service
+    systemctl daemon-reload
+    echo "   thaiai-webhook.service 已更新"
+  fi
+  systemctl is-enabled --quiet thaiai-webhook 2>/dev/null || systemctl enable thaiai-webhook >/dev/null 2>&1 || true
+  # 重启以加载最新的 gitee-webhook.py（发布本身是独立会话，不会被带走）
+  systemctl restart thaiai-webhook
+fi
+
 docker restart thaiai_frontend >/dev/null
 sleep 3
 
@@ -93,6 +130,13 @@ FAIL=0
 [ "$HOME_CODE" = "200" ] || { echo "❌ 首页非 200"; FAIL=1; }
 [ "$API_CODE" = "200" ] || { echo "❌ API 非 200"; FAIL=1; }
 case "$AUDIO_CT" in audio/*) ;; *) echo "❌ 音频 MIME 异常（$AUDIO_CT）"; FAIL=1 ;; esac
+# 已安装 WebHook 服务时，它必须活着（否则第二条发布通道静默失效）
+if [ -f /etc/thaiai-webhook.env ]; then
+  HOOK=$(curl -s --max-time 5 "http://127.0.0.1:9911/hooks/gitee" || true)
+  echo "   WebHook 接收端: ${HOOK:-无响应}"
+  echo "$HOOK" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("ok") else 1)' \
+    2>/dev/null || { echo "❌ WebHook 接收端无响应"; FAIL=1; }
+fi
 
 if [ "$FAIL" = "1" ]; then
   echo "❌ 验证失败，回滚到 $BAK"
@@ -101,4 +145,5 @@ if [ "$FAIL" = "1" ]; then
   exit 1
 fi
 
+echo "$NEW" > "$MARKER"
 echo "✅ DEPLOY_OK commit=$NEW js=$JS"

@@ -1,0 +1,31 @@
+# ============================================================
+# ThaiAI · Gitee WebHook 接收端（systemd）
+#
+#   install -m 644 deploy/thaiai-webhook.service /etc/systemd/system/
+#   printf 'THAIAI_WEBHOOK_SECRET=%s\n' "$(openssl rand -hex 32)" > /etc/thaiai-webhook.env
+#   chmod 600 /etc/thaiai-webhook.env
+#   systemctl daemon-reload && systemctl enable --now thaiai-webhook
+#
+# 发布流程本身由 deploy/build-on-server.sh 负责（含构建/替换/验证/回滚），
+# 本服务只做「验签 + 触发」，不重复实现发布逻辑。
+# ============================================================
+[Unit]
+Description=ThaiAI Gitee WebHook receiver (push to main -> server-side deploy)
+Documentation=https://github.com/2123801245-coder/Thai-ai-learning-platform
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 密钥（Gitee WebHook 的「密码」）只放在这里，不进仓库
+EnvironmentFile=/etc/thaiai-webhook.env
+Environment=THAIAI_WEBHOOK_PORT=9911
+# 需要 docker/rsync 权限执行发布脚本，与 GitHub Actions 的 SSH 通道同权限
+User=root
+ExecStart=/usr/bin/python3 /opt/thaiai-src/deploy/gitee-webhook.py
+Restart=always
+RestartSec=5
+# 只监听 127.0.0.1，公网入口由 nginx 的 location = /hooks/gitee 反代
+
+[Install]
+WantedBy=multi-user.target

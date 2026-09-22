@@ -1,41 +1,48 @@
-# Base44 Project
+# ThaiAI · AI 泰语学习平台
 
-Use this repository to run and edit the app locally, then publish changes back through Base44.
+**线上：https://thai-ai.online**
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+把「AI 老师 + 泰语专业知识 + 泰国文化 + 个性化学习路径」合在一起的泰语学习平台。
+目标不是做一个功能很多的泰语网站，而是让用户形成
+**发现方向 → 拿到路径 → 学课程 → 练习 → AI 纠错 → 复习 → 能力成长 → 探索文化** 的长期循环。
 
-## Prerequisites
+## 主要能力
 
-1. Clone the repository using the project's Git URL.
-2. Navigate to the project directory.
-3. Install dependencies: `npm install`.
-4. Install the Base44 CLI: `npm install -g base44@latest`.
+| 板块 | 内容 |
+|---|---|
+| 学习 | 入学能力测试 → A1~B2 学习路径、分类课程、专业方向（商务/媒体/旅游/翻译…） |
+| 课程 | 课文精读：同步音频、逐句字幕、点词查义、词汇提取、语法与文化讲解 |
+| AI 老师 | 跨会话记住学生的对话教学（画像/目标/薄弱点/偏好），贯穿讲解、纠错、情景模拟 |
+| 练习 | 词汇 SRS、错题本、每日小测、挑战 |
+| 探索 | 泰国文化、新闻实验室（真实新闻双语）、媒体学习（泰剧/音乐/新闻）、泰国地图 |
+| 我的 | 学习计划、能力雷达、成就证书、排行榜、设置 |
+| 沉浸世界 | 首页不是课程列表，而是空间化的「学习星系」（three.js，见下文性能规则） |
 
-See the [Base44 CLI docs](https://docs.base44.com/developers/references/cli/get-started/overview) if you want to run Base44 commands directly.
+## 技术栈
 
-## Run Locally
+| 层 | 技术 |
+|---|---|
+| 前端 | React + Vite、React Router、Framer Motion、Tailwind CSS |
+| 3D | three.js / @react-three/fiber（**只允许懒加载**，见「ThaiAI World」章节） |
+| 后端 | Node + Express、SQLite（`backend/users.db`）、JWT 认证 |
+| AI | 统一出口 `backend/aiProvider.js`（DeepSeek / OpenAI 兼容网关）、Azure 发音评估、Edge 神经语音 TTS |
+| 部署 | nginx + Docker Compose，GitHub Actions 与 Gitee 镜像双通道自动发布 |
 
-Run the full local development environment from the project root:
+## 仓库与发布
 
-```bash
-base44 dev
+主仓库在 GitHub，**每次 push 到 `main` 会自动镜像到 Gitee 私有仓库并发布上线**。
+两条发布通道共用同一个脚本 `deploy/build-on-server.sh`（文件锁串行 + 已发布 commit 短路，不会重复构建）：
+
+```
+git push main
+├─ 通道一（主）：GitHub Actions → 镜像 push 到 Gitee → SSH 执行服务器发布脚本
+└─ 通道二（备）：Gitee WebHook → https://thai-ai.online/hooks/gitee
+                 → 验签（X-Gitee-Token）→ 同一个发布脚本
 ```
 
-`base44 dev` starts the local Base44 development backend and, when this app is configured for it, also starts the frontend dev server for you. Use the frontend URL printed by the command.
+服务器侧细节（一次性初始化、密钥、分支保护、回滚机制）见 **[`deploy/README.md`](deploy/README.md)**。
 
-For example, when the Base44 project config includes a `serveCommand`, `base44 dev` can launch the frontend too:
-
-```json5
-{
-  "site": {
-    "serveCommand": "npm run dev"
-  }
-}
-```
-
-In a Base44 project this lives in `base44/config.jsonc`.
-
-## Run The Full Stack Locally
+## 本地开发（前后端）
 
 This app has two parts that can run independently:
 
@@ -74,15 +81,14 @@ override). The frontend's API client already points at
   or your environment. Without it, `POST /api/speaking/analyze` returns 503
   with a clear message.
 
-## Run Only The Frontend
-
-If you only want to work on the frontend against the hosted Base44 backend, run:
+## 只跑前端
 
 ```bash
-npm run dev
+npm run dev        # Vite，默认 http://localhost:5173
 ```
 
-Open the local URL printed by Vite.
+开发服务器把 `/api`、`/videos`、`/uploads` 代理到 `http://localhost:3001`（见 `vite.config.js`），
+所以前端始终走同源相对路径 —— 本地与生产一致，无需另外配置 API 地址。
 
 ## 生产部署（Production）
 
@@ -263,33 +269,42 @@ AI 老师等灰度功能由后端 `settings` 表持久化，管理员在**设置
   连接断开自动重连，初始连接先推送当前快照
 - 管理员身份：`ADMIN_EMAILS` 环境变量中的邮箱注册即获得，或 DB 中 `role='admin'`
 
-## Use The Hosted Backend
+## 部署与发布
 
-For frontend-only development, create or update `.env.local` in the project root:
+生产环境是阿里云单机：nginx（容器）+ Express 后端（容器）+ SQLite。
+完整流程、一次性初始化与排错见 **[`deploy/README.md`](deploy/README.md)**，这里只讲日常使用。
 
-```bash
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=https://your-app.base44.app
-```
-
-`VITE_BASE44_APP_ID` identifies the Base44 app.
-
-`VITE_BASE44_APP_BASE_URL` tells the Base44 Vite plugin where to send local `/api` requests. Point it at your deployed Base44 app URL when you want the local frontend to use the hosted backend.
-
-When you use `base44 dev`, the command injects the local Base44 values for you, so `.env.local` is mainly needed for frontend-only workflows.
-
-## Publish Your Changes
-
-After pushing your changes to git, open the Base44 dashboard and publish the app:
+### 日常发布
 
 ```bash
-base44 dashboard open
+git push origin main      # 其余全部自动完成，约 2~3 分钟上线
 ```
 
-## Docs & Support
+Actions 把代码镜像到 Gitee → 服务器 `git reset --hard origin/main` → 容器内 `npm run build`
+→ 原子替换 `dist` → 重启前端容器 → 自检（JS hash / 首页 / API / 音频 MIME / WebHook 存活）
+→ 任一失败自动回滚到上一版。
 
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
+- 只同步镜像、不发布：手动触发 workflow 并勾选 `skip_deploy`
+- 纯文档改动（`**.md`、`docs/**`）不触发部署
+- 后端（`backend/`）不在前端发布流程内，后端改动需上服务器单独重建容器
 
-Base44 CLI command reference: [https://docs.base44.com/developers/references/cli/commands/introduction](https://docs.base44.com/developers/references/cli/commands/introduction)
+### 直接从 Gitee 发布（GitHub 不通时）
 
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+Gitee 是完整镜像。把改动推到 Gitee 的 `main`，仓库 WebHook 会通知服务器
+（`https://thai-ai.online/hooks/gitee`，用 `X-Gitee-Token` 验签），服务器自行拉取并发布。
+两条通道同时触发时只会有一次真实构建。
+
+### 分支保护
+
+Gitee `main` 为保护分支：仅仓库管理员可推送、不可删除。镜像推送以管理员身份进行，
+因此正常发布不受影响；但若 GitHub 侧发生**历史重写**（force push / rebase 已发布提交），
+镜像的强制推送会被保护规则拦下 —— 此时需要临时调整保护设置，或改用非强制推送。
+
+## 常见问题
+
+| 现象 | 处理 |
+|---|---|
+| 发布后页面白屏 | `index.html` 是 no-cache，先硬刷新；仍不行看服务器 `dist/index.html` 引用的是否本次构建 |
+| 课文音频无法播放 | 查 `/lessons/audio/**` 的 `Content-Type` 是否为 `audio/*`（nginx 配置随发布同步） |
+| 部署失败但站点正常 | 发布脚本验证未过会自动回滚，站点留在上一版；看 Actions 日志或服务器 `/var/log/thaiai-deploy.log` |
+| WebHook 没触发发布 | `systemctl status thaiai-webhook`、`journalctl -u thaiai-webhook -n 50` |
