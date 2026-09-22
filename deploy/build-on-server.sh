@@ -124,6 +124,17 @@ if [ -f /etc/thaiai-webhook.env ]; then
   systemctl restart thaiai-webhook
 fi
 
+# Gitee 轮询兜底（拉取式）：WebHook 投递失败时靠它保证 Gitee → 部署仍然可用。
+# 不需要密钥，所以无条件安装启用；共用同一发布脚本，本身自带锁与短路。
+for U in thaiai-gitee-sync.service thaiai-gitee-sync.timer; do
+  if ! cmp -s "$SRC/deploy/$U" "/etc/systemd/system/$U"; then
+    install -m 644 "$SRC/deploy/$U" "/etc/systemd/system/$U"
+    systemctl daemon-reload
+    echo "   $U 已更新"
+  fi
+done
+systemctl enable --now thaiai-gitee-sync.timer >/dev/null 2>&1 || true
+
 docker restart thaiai_frontend >/dev/null
 sleep 3
 
@@ -154,6 +165,8 @@ if [ -f /etc/thaiai-webhook.env ]; then
   echo "   WebHook 公网链路: ${HOOK_PUB:-无响应}（401=通）"
   [ "$HOOK_PUB" = "401" ] || echo "   ⚠️ WebHook 公网链路异常（$HOOK_PUB），第二条发布通道可能不可用"
 fi
+# 轮询兜底是 Gitee 通道的保底，必须活着（否则 Gitee 侧改动无人拉取）
+echo "   Gitee 轮询兜底: $(systemctl is-active thaiai-gitee-sync.timer 2>/dev/null)"
 
 if [ "$FAIL" = "1" ]; then
   echo "❌ 验证失败，回滚到 $BAK"

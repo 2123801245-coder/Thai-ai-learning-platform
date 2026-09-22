@@ -1,0 +1,18 @@
+# ============================================================
+# ThaiAI · Gitee 轮询同步定时器
+#   systemctl enable --now thaiai-gitee-sync.timer
+#   systemctl list-timers thaiai-gitee-sync.timer
+#   journalctl -u thaiai-gitee-sync -n 30
+# ============================================================
+[Unit]
+Description=ThaiAI Gitee poll sync timer (every 3 minutes)
+
+[Timer]
+# 开机 2 分钟后首次检查，之后每 3 分钟一次
+OnBootSec=2min
+OnUnitActiveSec=3min
+AccuracySec=15s
+Unit=thaiai-gitee-sync.service
+
+[Install]
+WantedBy=timers.target

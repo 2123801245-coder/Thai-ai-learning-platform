@@ -1,0 +1,26 @@
+# ============================================================
+# ThaiAI · Gitee 轮询同步（WebHook 的兜底通道）
+#
+#   install -m 644 deploy/thaiai-gitee-sync.service deploy/thaiai-gitee-sync.timer \
+#       /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now thaiai-gitee-sync.timer
+#
+# 为什么需要它：Gitee WebHook 是**推送式**的，投递失败时（实测本环境 Gitee 侧
+# 返回 "SocketException: Connection reset"，请求根本到不了 nginx）没有任何补救。
+# 轮询是**拉取式**的，只要服务器能访问 Gitee（国内带宽，秒级）就一定有效。
+#
+# 两条路径共用同一个发布脚本：脚本自带 flock 与「已发布 commit」短路，
+# 因此无事可做时几秒内退出，也不会和 WebHook / GitHub Actions 并发构建。
+# ============================================================
+[Unit]
+Description=ThaiAI Gitee poll sync (fallback for WebHook: pull + build + deploy)
+Documentation=https://github.com/2123801245-coder/Thai-ai-learning-platform
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/bash /opt/thaiai-src/deploy/build-on-server.sh
+# 发布脚本内部最坏路径：构建 60s + 验证；留足余量
+TimeoutStartSec=1500

@@ -10,6 +10,7 @@ push main (GitHub)
 push main (Gitee)
   └─ 通道二（备）：Gitee WebHook → https://thai-ai.online/hooks/gitee
        └─ 验签（X-Gitee-Token）→ 同一个发布脚本
+  └─ 兜底（拉取式）：thaiai-gitee-sync.timer 每 3 分钟检查 Gitee main
 
             ┌── 两条通道共用 ───────────────────────────┐
             │  1. flock 排它（后到者等锁，双通道不会并发构建）  │
@@ -76,6 +77,30 @@ journalctl -u thaiai-webhook -n 50          # 验签失败/忽略的分支都会
 tail -f /var/log/thaiai-deploy.log          # WebHook 触发的发布输出
 curl -s http://127.0.0.1:9911/hooks/gitee   # 接收端自检
 ```
+
+### ⚠️ 已知问题：Gitee 侧投递报 Connection reset（已用轮询兜底）
+
+本环境实测：**Gitee 会尝试投递**（hook 详情里的 `result` 会随 push 变成
+`SocketException: Connection reset`，`result_code=-2`），但请求**到不了 nginx**
+（nginx 日志里没有任何来自 Gitee 的连接）。同时已逐项排除服务端原因：
+
+- 端点对外可达（外部通道 GET → 403；走公网 IP 回环 POST → 401）
+- 证书为 Let's Encrypt 有效证书；TLS 1.2 / 1.3、无 SNI、CBC 与 GCM 套件均握手成功
+- DNS 单条 A 记录、主机 iptables 无拦截
+
+重置发生在 TCP/TLS 层，服务端无可修之处。因此新增**拉取式兜底**：
+
+```bash
+systemctl list-timers thaiai-gitee-sync.timer     # 下一次轮询时间
+journalctl -u thaiai-gitee-sync -n 30             # 轮询触发的发布输出
+systemctl start thaiai-gitee-sync.service         # 立即同步一次
+```
+
+- 每 3 分钟 `git fetch` 一次 Gitee main；无变化时几秒内退出（不构建）
+- 与 WebHook / Actions 共用同一个发布脚本，锁 + 「已发布 commit」保证只有一个真构建
+- 代价：Gitee-only 改动最多晚 3 分钟上线（Actions 主通道仍是即时）
+
+若后续 Gitee 侧投递恢复（或改用网页端重建 hook），WebHook 会立即生效，与轮询共存不冲突。
 
 ## 分支保护（Gitee `main`）
 

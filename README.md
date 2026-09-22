@@ -36,8 +36,9 @@
 ```
 git push main
 ├─ 通道一（主）：GitHub Actions → 镜像 push 到 Gitee → SSH 执行服务器发布脚本
-└─ 通道二（备）：Gitee WebHook → https://thai-ai.online/hooks/gitee
-                 → 验签（X-Gitee-Token）→ 同一个发布脚本
+├─ 通道二（备）：Gitee WebHook → https://thai-ai.online/hooks/gitee
+│                 → 验签（X-Gitee-Token）→ 同一个发布脚本
+└─ 兜底（拉取式）：服务器每 3 分钟拉一次 Gitee main，变化即发布
 ```
 
 服务器侧细节（一次性初始化、密钥、分支保护、回滚机制）见 **[`deploy/README.md`](deploy/README.md)**。
