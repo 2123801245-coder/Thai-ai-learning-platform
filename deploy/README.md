@@ -15,21 +15,62 @@ push main (Gitee)
             ┌── 两条通道共用 ───────────────────────────┐
             │  1. flock 排它（后到者等锁，双通道不会并发构建）  │
             │  2. git fetch + reset（Gitee，国内带宽秒级）      │
-            │  3. 已发布 commit 标记 → 命中则短路退出         │
-            │  4. node:20 容器构建（npmmirror，缓存卷）        │
-            │  5. 备份 → rsync 原子替换 /opt/thaiai/dist      │
-            │  6. 同步 nginx.conf（按实际网关重写 WebHook 地址）│
-            │  7. 同步并重启 thaiai-webhook 服务              │
-            │  8. docker restart thaiai_frontend            │
-            │  9. 验证（hash / 首页 / API / 音频 MIME / 接收端）│
+            │  3. 变更判定：前端（非 backend/）与后端各自判断   │
+            │     两边都没变 → 直接退出（秒级）                │
+            │  4. 后端：backend/ 或 src/data/ 有变 →          │
+            │     备份 SQLite → 构建镜像 → compose 重建容器    │
+            │     健康断言不过 → 回滚镜像 + 数据库              │
+            │  5. 前端：node:20 容器构建（npmmirror，缓存卷）   │
+            │  6. 备份 → rsync 原子替换 /opt/thaiai/dist      │
+            │  7. 同步 nginx.conf（按实际网关重写 WebHook 地址）│
+            │  8. 同步并重启 thaiai-webhook 服务              │
+            │  9. docker restart thaiai_frontend            │
+            │ 10. 验证（hash / 首页 / API / 音频 MIME / 接收端）│
             │     任一失败 → 自动回滚到上一版                    │
             └────────────────────────────────────────┘
 ```
 
-- 正常发布耗时 **2~5 分钟**（不再有跨海 rsync）。
-- backend 容器独立运行，本流程不触碰；后端改动需在服务器上另行重建。
+- 正常发布耗时 **2~5 分钟**（不再有跨海 rsync）；只改后端、不改前端时约 **1~2 分钟**。
+- 后端容器已纳入本流程（见下节）；只改前端的发布会跳过后端，反过来也一样。
 - 服务器 Node 构建在一次性容器内完成，宿主机零 Node 依赖。
-- `FORCE=1 bash build-on-server.sh` 可强制重建（忽略「已发布」标记）。
+- `FORCE=1 bash build-on-server.sh` 强制重建前端；`BACKEND_FORCE=1` 强制重建后端。
+
+## 后端容器重建（2026-09-22 起）
+
+`backend/` 或 `src/data/` 有变化时，发布流程会自动重建 backend 容器并跑健康断言。
+由 `deploy/deploy-backend.sh` 实现，`build-on-server.sh` **先做后端再做前端**
+（前端自检要查 `/api/features`，后端先起来才不会误判）。
+
+```
+变更检测（backend/ + src/data/，基线 /opt/thaiai/.deployed-backend-commit）
+  └─ 无变化 → BACKEND_SKIP（0.01s）
+  └─ 有变化 ↓
+       1. 一致性备份 SQLite（python3 sqlite3 backup API，WAL 下也安全）
+       2. 旧镜像留档 thaiai-backend:rollback
+       3. docker build -f $SRC/backend/Dockerfile -t <运行中镜像名> $SRC
+       4. docker compose up -d --no-build --no-deps --force-recreate backend
+       5. 断言：容器 healthy + 跑的是刚构建的镜像 + 网络未漂移 + /api/features 200
+          + 新路由 /api/thai/segment 非 404（证明不是旧代码）
+       6. 失败 → 镜像指回 rollback、数据库还原快照、容器重建、等健康，然后退出 1
+```
+
+**为什么必须用 git 源码目录当构建上下文**：compose 里 backend 的 `build.context` 是
+`.`（即 `/opt/thaiai` 运行目录），而那份 `backend/` 是旧快照——直接 `docker compose build`
+会打出旧代码。脚本一律从 `/opt/thaiai-src` 构建，再把镜像 tag 成运行中容器实际使用的名字
+（从 `docker inspect` 反查，不硬编码）。
+
+**安全网**：
+
+- 数据库快照放在 `/opt/thaiai/backups/users.db.<时间戳>.bak`，保留最近 5 份；
+  回滚时会先停容器再覆盖数据文件（SQLite 带 WAL，在线覆盖不安全）。
+- 旧镜像留档为 `thaiai-backend:rollback`；构建失败时容器未被触碰，线上原样运行。
+- 断言里的「跑的是新镜像」是关键一项：它挡住「compose 用旧上下文自行重建」这种静默退化。
+
+手动重建（排查用）：
+
+```bash
+BACKEND_FORCE=1 bash /opt/thaiai-src/deploy/deploy-backend.sh
+```
 
 ## 第二条发布通道：Gitee WebHook
 

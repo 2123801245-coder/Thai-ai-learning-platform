@@ -281,14 +281,21 @@ AI 老师等灰度功能由后端 `settings` 表持久化，管理员在**设置
 git push origin main      # 其余全部自动完成，约 2~3 分钟上线
 ```
 
-Actions 把代码镜像到 Gitee → 服务器 `git reset --hard origin/main` → 容器内 `npm run build`
-→ 原子替换 `dist` → 重启前端容器 → 自检（JS hash / 首页 / API / 音频 MIME / WebHook 存活）
-→ 任一失败自动回滚到上一版。
+Actions 把代码镜像到 Gitee → 服务器 `git reset --hard origin/main` → **按变更分别处理**：
+
+- **后端**：`backend/` 或 `src/data/` 有变化 → 先用 sqlite backup API 备份数据库 →
+  从 git 源码目录构建镜像 → compose 重建 backend 容器 → 健康断言（容器 healthy /
+  跑的是新镜像 / 网络未漂移 / API 200 / 新路由非 404）→ 不过则回滚镜像+数据库
+- **前端**：非 `backend/` 路径有变化 → 容器内 `npm run build` → 原子替换 `dist`
+  → 重启前端容器 → 自检（JS hash / 首页 / API / 音频 MIME / WebHook 存活）
+
+只改一边时另一边自动跳过（纯后端修复约 1~2 分钟上线，两边都没变则秒级退出）；
+任一环节失败自动回滚到上一版。
 
 - 只同步镜像、不发布：手动触发 workflow 并勾选 `skip_deploy`
 - 纯文档改动（`**.md`、`docs/**`）不触发部署
 - 发布成功或失败回滚都会推送到手机：Bark / Server酱 / PushPlus 或钉钉、企业微信（见 `deploy/README.md`）
-- 后端（`backend/`）不在前端发布流程内，后端改动需上服务器单独重建容器
+- 强制重建：`FORCE=1` 前端 / `BACKEND_FORCE=1` 后端（服务器上执行，见 `deploy/README.md`）
 
 ### 直接从 Gitee 发布（GitHub 不通时）
 

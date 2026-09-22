@@ -8,7 +8,10 @@ name: Deploy Frontend
 #        机房骨干网，远快于 runner→阿里云的旧 rsync 跨海通道）
 #     2. SSH 到阿里云服务器（root 密码经 secrets.SSH_PASSWORD）
 #     3. 服务器执行 deploy/build-on-server.sh：
-#        git pull（Gitee 镜像，国内秒级）→ node:20 容器内构建（npmmirror）
+#        git pull（Gitee 镜像，国内秒级）
+#        → backend/ 或 src/data/ 有变化时重建后端容器（deploy/deploy-backend.sh，
+#          先备份 SQLite，健康断言失败自动回滚镜像+数据库）
+#        → 非 backend/ 路径有变化时 node:20 容器内构建（npmmirror）
 #        → 原子替换 /opt/thaiai/dist → 重启前端容器 → 本机验证/自动回滚
 #
 # 服务器首次初始化（一次性，已完成）：/opt/thaiai-src 为 git 仓库，
@@ -68,7 +71,7 @@ jobs:
           ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts 2>/dev/null
           git config --global core.quotepath off 2>/dev/null || true
 
-      - name: Deploy on server (git pull + docker build + verify)
+      - name: Deploy on server (git pull + frontend/backend build + verify)
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
         run: |
           set -e
@@ -76,8 +79,9 @@ jobs:
           SSH="sshpass -e ssh -o ConnectTimeout=20 ${REMOTE_USER}@${REMOTE_HOST}"
           # 同步最新发布脚本到服务器（首次部署时服务器上还没有仓库代码，必须先落脚本）
           $SSH "mkdir -p /opt/thaiai-src/deploy" < /dev/null
-          sshpass -e scp -o StrictHostKeyChecking=no deploy/build-on-server.sh \
-            "${REMOTE_USER}@${REMOTE_HOST}:/opt/thaiai-src/deploy/build-on-server.sh"
+          sshpass -e scp -o StrictHostKeyChecking=no \
+            deploy/build-on-server.sh deploy/deploy-backend.sh deploy/notify.py \
+            "${REMOTE_USER}@${REMOTE_HOST}:/opt/thaiai-src/deploy/"
           # THAIAI_TRIGGER 只用于发布通知里区分触发来源（Workflow / WebHook / 轮询）
           $SSH "chmod +x /opt/thaiai-src/deploy/build-on-server.sh && THAIAI_TRIGGER='GitHub Actions' bash /opt/thaiai-src/deploy/build-on-server.sh"
 

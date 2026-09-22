@@ -80,6 +80,8 @@ def build_messages(args):
     if args.status == "success":
         title = "✅ ThaiAI 发布成功"
         rows = [("提交", subject), ("触发", trigger)]
+        if args.backend:
+            rows.append(("后端", args.backend))
         if args.elapsed:
             rows.append(("耗时", f"{args.elapsed}s"))
         if args.site_code:
@@ -90,6 +92,8 @@ def build_messages(args):
         rows = [("提交", subject), ("触发", trigger)]
         if args.stage:
             rows.append(("失败环节", args.stage))
+        if args.backend:
+            rows.append(("后端", args.backend))
         if args.detail:
             rows.append(("详情", args.detail))
         rows.append(("影响", "站点停留在上一版，线上未受影响"))
@@ -208,6 +212,7 @@ def main():
     parser.add_argument("--elapsed", type=int, default=0)
     parser.add_argument("--stage", default="")
     parser.add_argument("--detail", default="")
+    parser.add_argument("--backend", default="", help="后端容器重建结果（成功/失败通知各渲染成一行「后端」）")
     parser.add_argument("--site-code", default="")
     parser.add_argument("--dry-run", action="store_true", help="只打印将要发送的内容")
     args = parser.parse_args()
