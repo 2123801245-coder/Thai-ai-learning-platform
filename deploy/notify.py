@@ -72,6 +72,9 @@ def load_config():
 
 def build_messages(args):
     """返回 (title, markdown, plain) —— 各通道渲染能力不同，分别给。"""
+    # 真机验证通知链路时用：标题带「测试样例」，避免被误认为真实故障。
+    # 脚本侧用环境变量注入（THAIAI_NOTIFY_TEST=1），手动发送用 --test。
+    is_test = bool(args.test) or os.environ.get("THAIAI_NOTIFY_TEST") == "1"
     when = time.strftime("%Y-%m-%d %H:%M:%S")
     trigger = args.trigger or os.environ.get("THAIAI_TRIGGER") or "未标注"
     commit = args.commit or "未知"
@@ -89,7 +92,9 @@ def build_messages(args):
             rows.append(("站点", f"{SITE} → {args.site_code}"))
         rows.append(("时间", when))
     else:
-        title = "⚠️ ThaiAI 发布失败（已自动回滚）"
+        # 标题不写「已自动回滚」：镜像构建就失败时线上根本没被动过，
+        # 到底回滚没回滚由「详情」行如实说明（两者对用户意义不同）。
+        title = "⚠️ ThaiAI 发布失败"
         rows = [("提交", subject), ("触发", trigger)]
         if args.stage:
             rows.append(("失败环节", args.stage))
@@ -100,6 +105,10 @@ def build_messages(args):
         rows.append(("影响", "站点停留在上一版，线上未受影响"))
         rows.append(("日志", "/var/log/thaiai-deploy.log"))
         rows.append(("时间", when))
+
+    if is_test:
+        title = f"{title}·测试样例"
+        rows.append(("说明", "测试样例，非真实故障（验证通知链路用）"))
 
     markdown = "\n".join([f"### {title}"] + [f"> {k}：{v}" for k, v in rows])
     plain = "\n".join([title] + [f"{k}：{v}" for k, v in rows])
@@ -216,6 +225,8 @@ def main():
     parser.add_argument("--detail", default="")
     parser.add_argument("--backend", default="", help="后端容器重建结果（成功/失败通知各渲染成一行「后端」）")
     parser.add_argument("--site-code", default="")
+    parser.add_argument("--test", action="store_true",
+                        help="标题标注「测试样例，非真实故障」，用于真机验证通知链路")
     parser.add_argument("--dry-run", action="store_true", help="只打印将要发送的内容")
     args = parser.parse_args()
 

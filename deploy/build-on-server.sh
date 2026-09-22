@@ -115,10 +115,26 @@ if [ "$BOK" = "1" ] && grep -q '^BACKEND_OK ' "$BOUT"; then
   TOK=$(sed -n 's/^BACKEND_OK commit=\([^ ]*\).*/\1/p' "$BOUT" | head -1)
   BACKEND_NOTE="已重建并上线（$TOK）"
 fi
+# 用 deploy-backend.sh 给出的结局标记区分「线上未被改动」与「已回滚」：
+# 镜像构建就失败时线上根本没被动过，通知里绝不能说「已回滚」。
+BMARK=""
+if grep -q '^BACKEND_FAIL ' "$BOUT"; then
+  BMARK=$(sed -n 's/^BACKEND_FAIL \(.*\)/\1/p' "$BOUT" | head -1)
+fi
 rm -f "$BOUT"
 if [ "$BOK" != "1" ]; then
-  notify failure --stage "后端容器重建" \
-    --detail "后端重建失败并已回滚（镜像+数据库）；前端本次未发布"
+  case "$BMARK" in
+    rolled_back)
+      notify failure --stage "后端容器重建" \
+        --detail "后端重建失败，镜像与数据库已回滚到重建前状态；前端本次未发布" ;;
+    untouched)
+      notify failure --stage "后端容器重建" \
+        --detail "后端镜像未构建成功，线上容器未被改动（仍运行原镜像）；前端本次未发布" ;;
+    *)
+      # 已重建之后才中断：既不能说「没动过」也不能说「已回滚」，如实描述
+      notify failure --stage "后端容器重建" \
+        --detail "后端容器已用新镜像重建，但发布流程异常中断；请查看日志确认状态" ;;
+  esac
   exit 1
 fi
 

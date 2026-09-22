@@ -37,6 +37,21 @@ NEW=${1:-}
 RECREATED=0
 DBBAK=""
 
+# 非预期中断（set -e）也要给出结局标记：调用方只能靠它区分「线上未被改动」
+# 与「已回滚」，而重建之后中断时，两者都不是真相——那种情况必须说「已重建但中断」。
+# 路径内的显式 `exit 1` 不会触发 ERR，所以它们各自的标记依然有效。
+on_err() {
+  local code=$?
+  trap - ERR
+  if [ "$RECREATED" = "1" ]; then
+    echo "BACKEND_FAIL recreated"
+  else
+    echo "BACKEND_FAIL untouched"
+  fi
+  exit "$code"
+}
+trap on_err ERR
+
 cd "$SRC"
 [ -n "$NEW" ] || NEW=$(git rev-parse --short HEAD)
 
@@ -85,9 +100,13 @@ fi
 # ── 3. 旧镜像留档 + 构建新镜像 ──────────────────────────────
 # 镜像名取运行中容器实际使用的那个（compose 未显式指定 image，用的是
 # 自动推导名），避免硬编码猜错导致重建后跑的还是旧镜像。
-IMG=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || echo thaiai-backend)
+# docker CLI 在守护进程不可达时仍可能往 stdout 吐一个空行，拼进去会让镜像名变成
+# "\nthaiai-backend"，docker build 直接报 invalid reference format。这里去掉空白字符、
+# 空则退回默认名，保证是个干净的镜像引用。
+IMG=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER" 2>/dev/null | tr -d '[:space:]' || true)
+[ -n "$IMG" ] || IMG=thaiai-backend
 IMG=${IMG%%:*}
-OLD_IMG_ID=$(docker inspect -f '{{.Image}}' "$CONTAINER" 2>/dev/null || true)
+OLD_IMG_ID=$(docker inspect -f '{{.Image}}' "$CONTAINER" 2>/dev/null | tr -d '[:space:]' || true)
 if [ -n "$OLD_IMG_ID" ]; then
   docker tag "$OLD_IMG_ID" "$IMG:rollback"
 fi
@@ -96,6 +115,8 @@ echo "   构建 $IMG（上下文 $SRC；含 sqlite3 源码编译，约 2~5 分�
 if ! docker build -f "$SRC/backend/Dockerfile" -t "$IMG" "$SRC"; then
   echo "❌ 后端重建失败：镜像构建失败"
   echo "   容器未重建，线上仍运行原镜像，无需回滚"
+  # 供调用方区分「线上未被改动」与「已回滚」，通知文案不能混为一谈
+  echo "BACKEND_FAIL untouched"
   exit 1
 fi
 NEW_IMG_ID=$(docker image inspect -f '{{.Id}}' "$IMG")
@@ -110,9 +131,12 @@ fi
 
 # 回滚到重建前状态：镜像指回留档 tag、数据库还原到备份、容器重建、等健康
 rollback() {
+  set +e          # 恢复流程尽力而为：单步失败不该中断剩下的恢复动作
+  trap - ERR
   echo "❌ 后端重建失败：$1"
   if [ "${RECREATED:-0}" != "1" ]; then
     echo "   容器未重建，线上仍运行原镜像，无需回滚"
+    echo "BACKEND_FAIL untouched"
     exit 1
   fi
   echo "   回滚中……"
@@ -134,6 +158,7 @@ rollback() {
     [ "$(docker inspect -f '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo none)" = "healthy" ] && break
   done
   echo "   回滚后状态: $(docker inspect -f '{{.State.Status}} / {{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo 无容器)"
+  echo "BACKEND_FAIL rolled_back"
   exit 1
 }
 
@@ -179,8 +204,10 @@ fi
 docker logs --tail 5 "$CONTAINER" 2>&1 | sed 's/^/   │ /' || true
 
 # 每次重建都会把上一版镜像降级为悬空（rollback tag 只留一份），长期会堆盘。
-# 只清「24 小时前」的悬空镜像：它们已被 latest/rollback 取代，不可能是刚失败的退路。
-PRUNED=$(docker image prune -f --filter "until=24h" 2>&1 | tail -1 || true)
+# 只清「7 天前」的悬空镜像：已被 latest/rollback 取代，不可能是刚失败的退路。
+# 这个阈值不能太短：legacy builder 的构建缓存正以悬空中间层形式存在，
+# 清太早会让下一次重建丢掉缓存、重编 sqlite3（实测多花约 10 分钟）。
+PRUNED=$(docker image prune -f --filter "until=168h" 2>&1 | tail -1 || true)
 echo "   清理悬空镜像: ${PRUNED:-跳过}"
 
 echo "$NEW" > "$MARKER"
