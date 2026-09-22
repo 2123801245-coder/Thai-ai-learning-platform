@@ -84,13 +84,24 @@ rsync -a --delete "$SRC/dist/" "$DIST/"
 # 目标路径从运行中的容器反查，避免硬编码挂载点悄悄漂移。
 NGINX_CONF=$(docker inspect thaiai_frontend \
   --format '{{range .Mounts}}{{if eq .Destination "/etc/nginx/conf.d/default.conf"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
-if [ -n "$NGINX_CONF" ] && [ -f "$NGINX_CONF" ] && ! cmp -s "$SRC/deploy/nginx.conf" "$NGINX_CONF"; then
+# nginx 在容器里：要代理到宿主机（WebHook 接收端）必须走 docker 网桥网关，
+# 而该地址会随网络重建变化。这里按容器实际网关重写这一行，避免端点静默 502。
+GW=$(docker inspect thaiai_frontend \
+  --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' 2>/dev/null || true)
+[ -n "$GW" ] || GW=172.18.0.1
+CONF_NEW=$(mktemp)
+sed "s#\(proxy_pass http://\)[0-9.]*\(:9911;\)#\1${GW}\2#" "$SRC/deploy/nginx.conf" > "$CONF_NEW"
+if [ -z "$NGINX_CONF" ] || [ ! -f "$NGINX_CONF" ]; then
+  echo "   ⚠️ 未找到 nginx 配置挂载源，跳过配置同步（$NGINX_CONF）"
+elif cmp -s "$CONF_NEW" "$NGINX_CONF"; then
+  echo "   nginx.conf 无变化（WebHook 网关 $GW）"
+else
   cp -a "$NGINX_CONF" "$NGINX_CONF.orig"
-  cp "$SRC/deploy/nginx.conf" "$NGINX_CONF"
+  cp "$CONF_NEW" "$NGINX_CONF"
   # 先验语法：坏配置在下面的 restart 时会直接让前端容器起不来（站点全挂）
   if docker exec thaiai_frontend nginx -t >/dev/null 2>&1; then
     rm -f "$NGINX_CONF.orig"
-    echo "   nginx.conf 已更新并通过 nginx -t: $NGINX_CONF"
+    echo "   nginx.conf 已更新并通过 nginx -t（WebHook 网关 $GW）"
   else
     cp "$NGINX_CONF.orig" "$NGINX_CONF"   # 用 cp 而非 mv：保留 inode，文件型 bind mount 才看得到还原
     rm -f "$NGINX_CONF.orig"
@@ -98,9 +109,8 @@ if [ -n "$NGINX_CONF" ] && [ -f "$NGINX_CONF" ] && ! cmp -s "$SRC/deploy/nginx.c
     docker exec thaiai_frontend nginx -t || true
     exit 1
   fi
-else
-  echo "   nginx.conf 无变化或未找到挂载源（$NGINX_CONF）"
 fi
+rm -f "$CONF_NEW"
 
 # WebHook 接收端（第二条发布通道）：unit 随发布同步；只在已安装（存在密钥文件）时管它
 if [ -f /etc/thaiai-webhook.env ]; then
@@ -136,6 +146,13 @@ if [ -f /etc/thaiai-webhook.env ]; then
   echo "   WebHook 接收端: ${HOOK:-无响应}"
   echo "$HOOK" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("ok") else 1)' \
     2>/dev/null || { echo "❌ WebHook 接收端无响应"; FAIL=1; }
+  # 走公网 vhost 的完整链路（nginx → 宿主机接收端）才是 Gitee 真实走的路径。
+  # 用错误密钥探测（永远不可能触发发布），401=通、502=没打到接收端。
+  # 只告警不阻断：第二条通道的管线问题不该拖垮主发布通道。
+  HOOK_PUB=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 -X POST \
+    "https://127.0.0.1/hooks/gitee" -H "X-Gitee-Token: probe-invalid" -d '{}' || true)
+  echo "   WebHook 公网链路: ${HOOK_PUB:-无响应}（401=通）"
+  [ "$HOOK_PUB" = "401" ] || echo "   ⚠️ WebHook 公网链路异常（$HOOK_PUB），第二条发布通道可能不可用"
 fi
 
 if [ "$FAIL" = "1" ]; then
