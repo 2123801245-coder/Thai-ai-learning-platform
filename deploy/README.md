@@ -59,12 +59,20 @@ push main (Gitee)
 会打出旧代码。脚本一律从 `/opt/thaiai-src` 构建，再把镜像 tag 成运行中容器实际使用的名字
 （从 `docker inspect` 反查，不硬编码）。
 
+这不是「等价替代」：实测该目录与仓库相差 **10 个缺失文件 + 6 个内容不同**（缺 `aiProvider.js`、
+`aiMemory.js`、`env.js`、`routes/thai.js` 等），而运行中的镜像内容与仓库一致——从 compose
+上下文构建会把后端退回旧版本。
+
 **安全网**：
 
 - 数据库快照放在 `/opt/thaiai/backups/users.db.<时间戳>.bak`，保留最近 5 份；
   回滚时会先停容器再覆盖数据文件（SQLite 带 WAL，在线覆盖不安全）。
 - 旧镜像留档为 `thaiai-backend:rollback`；构建失败时容器未被触碰，线上原样运行。
 - 断言里的「跑的是新镜像」是关键一项：它挡住「compose 用旧上下文自行重建」这种静默退化。
+
+**首次纳入时的验证记录（2026-09-22）**：重建前镜像（`thaiai-backend:rollback`）与重建后镜像的
+backend 源码树与 `src/data` 树哈希**完全一致**（162 个文件）——说明当时线上后端内容本就等于 HEAD，
+首次重建属于纯机制验证，没有引入行为变更；发布完数据库 30 个用户、`pragma integrity_check` = ok。
 
 手动重建（排查用）：
 

@@ -85,11 +85,14 @@ else
 fi
 
 # 变更判定：以「上次前端成功发布的 commit」为基线，看非 backend/ 路径是否动过。
+# 排除 *.md / docs/：与 workflow 的 paths-ignore 保持一致，纯文档改动不重建前端。
 # 基线不可用（首次 / 历史被重写）时按「需要重建」处理，宁可多构建一次。
 FBASE=$(cat "$MARKER" 2>/dev/null || true)
 if [ "${FORCE:-0}" != "1" ] && [ -n "$FBASE" ] && git cat-file -e "${FBASE}^{commit}" 2>/dev/null; then
-  if [ -n "$(git diff --name-only "$FBASE..$NEW" -- . ':(exclude)backend' | head -1)" ]; then
+  FRONT_DIFF=$(git diff --name-only "$FBASE..$NEW" -- . ':(exclude)backend' ':(exclude)*.md' ':(exclude)docs/**' || true)
+  if [ -n "$FRONT_DIFF" ]; then
     NEED_FRONT=1
+    echo "   前端需重建：$FBASE → $NEW 共 $(printf '%s\n' "$FRONT_DIFF" | wc -l | tr -d ' ') 个文件"
   else
     NEED_FRONT=0
   fi
