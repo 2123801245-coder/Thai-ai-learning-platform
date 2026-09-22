@@ -132,7 +132,8 @@ def build_messages(facts):
     # 按字符截断：`cut -c` 在 C locale 下会切断多字节字符，产生孤立代理项
     subject = f"{commit} {facts.get('subject', '')}".strip()[:80]
     rows = [("提交", subject), ("触发", facts.get("trigger") or "未标注")]
-    if facts.get("backend"):
+    # 后端结局在后端环节失败时由「详情」行承担，不再重复一次
+    if facts.get("backend") and facts.get("failure") != "backend":
         rows.append(("后端", BACKEND_TEXT.get(facts["backend"], facts["backend"])))
     if facts.get("frontend"):
         rows.append(("前端", FRONTEND_TEXT.get(facts["frontend"], facts["frontend"])))
