@@ -77,7 +77,9 @@ OLD=$(git rev-parse --short HEAD 2>/dev/null || echo none)
 git fetch origin main
 git reset --hard origin/main
 NEW=$(git rev-parse --short HEAD)
-SUBJECT=$(git log -1 --pretty=%s 2>/dev/null | cut -c1-60 || true)
+# 不在这里截断：`cut -c` 在 C locale 下按字节切，会把中文标题切成半个字符，
+# 传递下去会变成孤立代理项并把通知编码搞崩（截断改在 notify.py 里按字符做）。
+SUBJECT=$(git log -1 --pretty=%s 2>/dev/null || true)
 if [ "$OLD" = "$NEW" ]; then
   echo "   代码已是最新（$NEW）——继续执行（可能是重试）"
 else

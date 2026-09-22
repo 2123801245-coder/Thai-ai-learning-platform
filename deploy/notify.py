@@ -75,7 +75,8 @@ def build_messages(args):
     when = time.strftime("%Y-%m-%d %H:%M:%S")
     trigger = args.trigger or os.environ.get("THAIAI_TRIGGER") or "未标注"
     commit = args.commit or "未知"
-    subject = f"{commit} {args.subject}".strip()
+    # 按字符截断（调用方不再用 `cut -c`，那会在 C locale 下切断多字节字符）
+    subject = f"{commit} {args.subject}".strip()[:80]
 
     if args.status == "success":
         title = "✅ ThaiAI 发布成功"
@@ -160,7 +161,8 @@ def post(url, payload, encoding):
         data = urllib.parse.urlencode(payload).encode()
         content_type = "application/x-www-form-urlencoded"
     else:
-        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        # errors="replace"：万一上游传来非法字节（孤立代理项），也只坏一个字符，不让整条通知抛异常
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8", "replace")
         content_type = "application/json; charset=utf-8"
     req = urllib.request.Request(url, data=data, headers={"Content-Type": content_type}, method="POST")
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
