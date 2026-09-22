@@ -43,6 +43,10 @@ router.get("/tts", async (req, res) => {
   }
 
   const voice = String(req.query.voice || "th-TH-PremwadeeNeural").slice(0, 100);
+  // engine=edge：强制神经语音路线（跳过 macOS say）。缓存 key 隔离，
+  // 避免同文本的 say WAV 与 Edge WAV 互相命中。
+  const engine = String(req.query.engine || "").trim().toLowerCase() === "edge" ? "edge" : "";
+  const cacheVoice = engine ? `edge:${voice}` : voice;
   const rate = rateToProsody(req.query.rate); // Edge prosody 格式（say 路线不使用）
   const rateNum = Number(req.query.rate) || 1; // say 路线数字语速
   const pitch = pitchToProsody(req.query.pitch); // Edge prosody 格式
@@ -57,7 +61,7 @@ router.get("/tts", async (req, res) => {
     : "no-store";
 
   // 缓存命中直接返回（key 含 v，格式升级后旧缓存自动失效）
-  const cached = ttsCacheGet(text, voice, rate, pitch, v);
+  const cached = ttsCacheGet(text, cacheVoice, rate, pitch, v);
   if (cached) {
     res.set({
       "Content-Type": "audio/wav",
@@ -68,8 +72,8 @@ router.get("/tts", async (req, res) => {
   }
 
   try {
-    const audio = await synthesizeThai(text, { voice, rate, rateNum, pitch, pitchNum });
-    ttsCacheSet(text, voice, rate, pitch, v, audio);
+    const audio = await synthesizeThai(text, { voice, rate, rateNum, pitch, pitchNum, engine });
+    ttsCacheSet(text, cacheVoice, rate, pitch, v, audio);
     res.set({
       "Content-Type": "audio/wav",
       "Cache-Control": cacheControl,

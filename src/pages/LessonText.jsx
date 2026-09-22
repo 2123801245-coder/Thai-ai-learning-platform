@@ -527,10 +527,11 @@ function LessonDetail({ lessonId }) {
       const rate = readerRateRef.current;
       const pitch = readerPitchRef.current;
       // 默认语速/音调下，优先播放预生成的本地课文音频
-      // （public/lessons/audio/<lessonId>/<n>.wav，由 scripts/generate-lesson-audio.js 生成）；
+      // （public/lessons/audio/<lessonId>/<n>.m4a，Edge 神经语音 AAC，由
+      // scripts/generate-lesson-audio.js 生成）；
       // 文件缺失时 audio.onerror 会自动回退到在线 TTS。
       // 切换了语速/音调则直接走在线 TTS（本地文件是固定常速常调）。
-      const localSrc = `${import.meta.env.BASE_URL}lessons/audio/${lesson.id}/${String(index + 1).padStart(2, "0")}.wav`;
+      const localSrc = `${import.meta.env.BASE_URL}lessons/audio/${lesson.id}/${String(index + 1).padStart(2, "0")}.m4a`;
       if (rate === 1 && pitch === 1) {
         fallbackSrcRef.current = getLocalTtsUrl(text, rate, pitch);
         audio.src = localSrc;
@@ -652,7 +653,6 @@ function LessonDetail({ lessonId }) {
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const vh = window.innerHeight || document.documentElement.clientHeight;
-    const vw = window.innerWidth || document.documentElement.clientWidth;
     // 段比视口还高（长段落），或整段已滚出视口上下边界 → 平滑拉回
     if (
       rect.height > vh * 0.75 ||

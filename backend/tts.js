@@ -270,6 +270,9 @@ async function synthesize(text, options = {}) {
   const pitch = options.pitch || "+0%"; // Edge prosody 格式
   const rateNum = Number(options.rateNum) || 1; // say 用的数字语速
   const pitchNum = Number(options.pitchNum) || 1; // say 用的数字音调（0.5~2.0）
+  // engine=edge：强制走神经语音路线（跳过 say）。用于预生成课文音频等
+  // 需要「与线上在线 TTS 同一声源」的场景。
+  const engine = options.engine === "edge" ? "edge" : "auto";
 
   const clean = removeIncompatibleChars(String(text || ""));
   if (!clean.trim()) throw new Error("文本为空");
@@ -284,7 +287,7 @@ async function synthesize(text, options = {}) {
   //    · say 在 <155wpm 进入平读模式（实测声调起伏 CV 0.206→0.137，五声调被压扁），
   //      且 155~175wpm 字节级相同（say 自身钳制到自然语速）→ 慢速档（rate < 0.9）
   //      走 Edge prosody（-30% 真变慢且神经语音保声调）
-  if (pitchNum === 1 && rateNum >= 0.9) {
+  if (engine === "auto" && pitchNum === 1 && rateNum >= 0.9) {
     try {
       return await synthesizeWithSay(clean, rateNum);
     } catch (err) {

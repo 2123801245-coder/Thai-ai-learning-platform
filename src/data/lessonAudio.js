@@ -37,9 +37,9 @@ export const lessonAudioCourses = courseTexts.map((lesson, index) => ({
   duration: estimateDuration(lesson.text),
   free: index === 0, // 第一课免费试读，其余 VIP（与 LessonText 页门控一致）
   audio: {
-    full: `${AUDIO_BASE}/${lesson.id}/full.wav`,
+    full: `${AUDIO_BASE}/${lesson.id}/full.m4a`,
     paragraphs: lesson.text.map(
-      (_, i) => `${AUDIO_BASE}/${lesson.id}/${pad(i + 1)}.wav`
+      (_, i) => `${AUDIO_BASE}/${lesson.id}/${pad(i + 1)}.m4a`
     ),
   },
 }));
