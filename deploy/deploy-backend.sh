@@ -17,10 +17,8 @@
 #   5. 健康断言：容器 healthy + 跑的是新镜像 + 网络未漂移 + /api/features 200
 #   6. 失败自动回滚（镜像 + 数据库 + 容器）
 #
-# 输出约定（供调用方判定）：
-#   BACKEND_OK commit=<sha>   成功重建并上线
-#   BACKEND_SKIP              后端无变化，未做任何事
-#   退出码 1                  失败（已回滚到重建前状态）
+# 输出约定：把这次后端的结局写进发布事实文件（deploy/README.md 里的契约），
+# 取值 rebuilt / skipped / untouched / rolled_back / recreated。调用方只按事实通知。
 # ============================================================
 set -euo pipefail
 
@@ -33,21 +31,21 @@ MARKER=$PROJ/.deployed-backend-commit
 BACKUP_DIR=$PROJ/backups
 KEEP_BACKUPS=5
 SITE_CHECK=https://127.0.0.1
+STATUS=${THAIAI_STATUS:-$PROJ/.deploy-status}
 NEW=${1:-}
 RECREATED=0
 DBBAK=""
 
-# 非预期中断（set -e）也要给出结局标记：调用方只能靠它区分「线上未被改动」
+# 后端结局是发布事实的一部分：与 build-on-server.sh 写的是同一个文件、同一份契约。
+record() { printf 'backend=%s\n' "$1" >> "$STATUS"; }
+
+# 非预期中断（set -e）也要给出结局：调用方只能靠它区分「线上未被改动」
 # 与「已回滚」，而重建之后中断时，两者都不是真相——那种情况必须说「已重建但中断」。
-# 路径内的显式 `exit 1` 不会触发 ERR，所以它们各自的标记依然有效。
+# 路径内的显式 `exit 1` 不会触发 ERR，所以它们各自记录的结局依然有效。
 on_err() {
   local code=$?
   trap - ERR
-  if [ "$RECREATED" = "1" ]; then
-    echo "BACKEND_FAIL recreated"
-  else
-    echo "BACKEND_FAIL untouched"
-  fi
+  if [ "$RECREATED" = "1" ]; then record recreated; else record untouched; fi
   exit "$code"
 }
 trap on_err ERR
@@ -72,7 +70,7 @@ fi
 
 if [ -z "$REASON" ]; then
   echo "   backend/ 与 src/data/ 无变化（基线 $BASE → $NEW），跳过后端重建"
-  echo "BACKEND_SKIP"
+  record skipped
   exit 0
 fi
 echo "   需重建：$REASON"
@@ -115,8 +113,7 @@ echo "   构建 $IMG（上下文 $SRC；含 sqlite3 源码编译，约 2~5 分�
 if ! docker build -f "$SRC/backend/Dockerfile" -t "$IMG" "$SRC"; then
   echo "❌ 后端重建失败：镜像构建失败"
   echo "   容器未重建，线上仍运行原镜像，无需回滚"
-  # 供调用方区分「线上未被改动」与「已回滚」，通知文案不能混为一谈
-  echo "BACKEND_FAIL untouched"
+  record untouched
   exit 1
 fi
 NEW_IMG_ID=$(docker image inspect -f '{{.Id}}' "$IMG")
@@ -136,7 +133,7 @@ rollback() {
   echo "❌ 后端重建失败：$1"
   if [ "${RECREATED:-0}" != "1" ]; then
     echo "   容器未重建，线上仍运行原镜像，无需回滚"
-    echo "BACKEND_FAIL untouched"
+    record untouched
     exit 1
   fi
   echo "   回滚中……"
@@ -158,7 +155,7 @@ rollback() {
     [ "$(docker inspect -f '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo none)" = "healthy" ] && break
   done
   echo "   回滚后状态: $(docker inspect -f '{{.State.Status}} / {{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo 无容器)"
-  echo "BACKEND_FAIL rolled_back"
+  record rolled_back
   exit 1
 }
 
@@ -211,4 +208,5 @@ PRUNED=$(docker image prune -f --filter "until=168h" 2>&1 | tail -1 || true)
 echo "   清理悬空镜像: ${PRUNED:-跳过}"
 
 echo "$NEW" > "$MARKER"
-echo "BACKEND_OK commit=$NEW image=${NEW_IMG_ID:7:12}"
+record rebuilt
+echo "   backend 结局: rebuilt commit=$NEW image=${NEW_IMG_ID:7:12}"

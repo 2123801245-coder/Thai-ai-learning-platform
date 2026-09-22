@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 # ============================================================
-# ThaiAI · 发布结果通知
+# ThaiAI · 发布结果通知（渲染端）
 #
-#   python3 deploy/notify.py success --commit a55f760 --elapsed 62 --site-code 200
-#   python3 deploy/notify.py failure --commit a55f760 --stage "本机验证" --detail "首页非 200"
-#   python3 deploy/notify.py success --commit x --dry-run      # 只看会发什么
+#   python3 deploy/notify.py --status /opt/thaiai/.deploy-status
+#   python3 deploy/notify.py --status /tmp/facts --dry-run      # 只看会发什么
 #
-# 由 deploy/build-on-server.sh 在「发布成功」与「失败已回滚 / 未预期中断」两处调用，
-# 所以 GitHub Actions、Gitee WebHook、轮询兜底三条触发路径都会通知。
+# 「这次发布发生了什么」只有一份数据源：事实文件（每行 key=value，同名键取最后一次）。
+# 执行侧只写事实（deploy/build-on-server.sh 写身份与结局、deploy/deploy-backend.sh 写
+# 后端结局），本模块只做「事实 → 人话」的映射与渲染：标题不预设结论，详情由事实决定。
+#
+# 事实键（缺哪个就不渲染哪一行，不猜）：
+#   status   success | failure
+#   failure  backend | verify | nginx_config | abort     （仅失败时）
+#   backend  rebuilt | skipped | untouched | rolled_back | recreated
+#   frontend deployed | skipped | rolled_back
+#   commit / subject / trigger / elapsed / site_code / test
 #
 # ------------------------------------------------------------
 # 支持的通道（配哪个发哪个，可多选；都不配则静默跳过）
@@ -43,12 +50,46 @@ import urllib.parse
 import urllib.request
 
 ENV_FILE = os.environ.get("THAIAI_NOTIFY_ENV", "/etc/thaiai-notify.env")
+STATUS_FILE = os.environ.get("THAIAI_STATUS", "/opt/thaiai/.deploy-status")
 SITE = "https://thai-ai.online"
 TIMEOUT = 10
 CONFIG_KEYS = (
     "DINGTALK_WEBHOOK", "DINGTALK_SECRET", "WECHAT_WEBHOOK",
     "BARK_KEY", "BARK_URL", "SERVERCHAN_KEY", "PUSHPLUS_TOKEN",
 )
+
+# 事实 → 人话。同一份事实在成功与失败通知里含义一致，所以只有这一处映射。
+BACKEND_TEXT = {
+    "rebuilt": "已重建并上线",
+    "skipped": "未涉及（无变化）",
+    "untouched": "镜像未构建成功，线上容器未被改动（仍运行原镜像）",
+    "rolled_back": "镜像与数据库已回滚到重建前状态",
+    "recreated": "已用新镜像重建，但流程异常中断",
+}
+FRONTEND_TEXT = {
+    "deployed": "已发布",
+    "skipped": "未涉及（无变化）",
+    "rolled_back": "已回滚到上一版",
+    "not_run": "本次未发布（流程未走到）",
+}
+# 失败环节 → 环节名；环节 → (详情, 影响)。failure=backend 时后两者取后端结局的人话。
+FAILURE_TEXT = {
+    "backend": "后端容器重建",
+    "verify": "本机验证未通过",
+    "nginx_config": "nginx 配置语法检查",
+    "abort": "未预期中断",
+}
+FAILURE_DETAIL = {
+    "verify": ("已回滚到上一版（hash / 首页 / API / 音频 / 接收端 之一未通过）",
+               "站点已恢复，线上未受影响"),
+    "nginx_config": ("配置已还原，容器未重启", "站点不受影响"),
+    "abort": ("脚本以非预期错误中止", "请查看日志确认线上状态"),
+}
+BACKEND_IMPACT = {
+    "untouched": "站点停留在上一版，线上未受影响",
+    "rolled_back": "站点已恢复，线上未受影响",
+    "recreated": "线上已换成新镜像，请查看日志确认状态",
+}
 
 
 def load_config():
@@ -70,45 +111,59 @@ def load_config():
     return cfg
 
 
-def build_messages(args):
-    """返回 (title, markdown, plain) —— 各通道渲染能力不同，分别给。"""
-    # 真机验证通知链路时用：标题带「测试样例」，避免被误认为真实故障。
-    # 脚本侧用环境变量注入（THAIAI_NOTIFY_TEST=1），手动发送用 --test。
-    is_test = bool(args.test) or os.environ.get("THAIAI_NOTIFY_TEST") == "1"
+def read_facts(path):
+    """读事实文件；同名键取最后一次（同一运行里后端与前端各自追加）。"""
+    facts = {}
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                key, sep, value = line.rstrip("\n").partition("=")
+                if sep:
+                    facts[key.strip()] = value
+    except OSError:
+        pass
+    return facts
+
+
+def build_messages(facts):
+    """事实 → (title, markdown, plain)。各通道渲染能力不同，分别给。"""
     when = time.strftime("%Y-%m-%d %H:%M:%S")
-    trigger = args.trigger or os.environ.get("THAIAI_TRIGGER") or "未标注"
-    commit = args.commit or "未知"
-    # 按字符截断（调用方不再用 `cut -c`，那会在 C locale 下切断多字节字符）
-    subject = f"{commit} {args.subject}".strip()[:80]
+    commit = facts.get("commit") or "未知"
+    # 按字符截断：`cut -c` 在 C locale 下会切断多字节字符，产生孤立代理项
+    subject = f"{commit} {facts.get('subject', '')}".strip()[:80]
+    rows = [("提交", subject), ("触发", facts.get("trigger") or "未标注")]
+    if facts.get("backend"):
+        rows.append(("后端", BACKEND_TEXT.get(facts["backend"], facts["backend"])))
+    if facts.get("frontend"):
+        rows.append(("前端", FRONTEND_TEXT.get(facts["frontend"], facts["frontend"])))
 
-    if args.status == "success":
-        title = "✅ ThaiAI 发布成功"
-        rows = [("提交", subject), ("触发", trigger)]
-        if args.backend:
-            rows.append(("后端", args.backend))
-        if args.elapsed:
-            rows.append(("耗时", f"{args.elapsed}s"))
-        if args.site_code:
-            rows.append(("站点", f"{SITE} → {args.site_code}"))
-        rows.append(("时间", when))
-    else:
+    if facts.get("status") == "failure":
         # 标题不写「已自动回滚」：镜像构建就失败时线上根本没被动过，
-        # 到底回滚没回滚由「详情」行如实说明（两者对用户意义不同）。
+        # 到底回滚没回滚由「详情」与「影响」行如实说明。
         title = "⚠️ ThaiAI 发布失败"
-        rows = [("提交", subject), ("触发", trigger)]
-        if args.stage:
-            rows.append(("失败环节", args.stage))
-        if args.backend:
-            rows.append(("后端", args.backend))
-        if args.detail:
-            rows.append(("详情", args.detail))
-        rows.append(("影响", "站点停留在上一版，线上未受影响"))
-        rows.append(("日志", "/var/log/thaiai-deploy.log"))
-        rows.append(("时间", when))
+        key = facts.get("failure", "")
+        if key == "backend":
+            # 详情与影响就是后端结局的人话，与成功通知里的「后端」行同一份映射
+            end = facts.get("backend", "")
+            detail = BACKEND_TEXT.get(end, "请查看日志确认状态")
+            impact = BACKEND_IMPACT.get(end, "请查看日志确认状态")
+        else:
+            detail, impact = FAILURE_DETAIL.get(
+                key, ("请查看日志确认状态", "请查看日志确认线上状态"))
+        rows += [("失败环节", FAILURE_TEXT.get(key, "未标注")),
+                 ("详情", detail), ("影响", impact),
+                 ("日志", "/var/log/thaiai-deploy.log")]
+    else:
+        title = "✅ ThaiAI 发布成功"
+        if facts.get("elapsed"):
+            rows.append(("耗时", f"{facts['elapsed']}s"))
+        if facts.get("site_code"):
+            rows.append(("站点", f"{SITE} → {facts['site_code']}"))
 
-    if is_test:
+    if facts.get("test") == "1":
         title = f"{title}·测试样例"
         rows.append(("说明", "测试样例，非真实故障（验证通知链路用）"))
+    rows.append(("时间", when))
 
     markdown = "\n".join([f"### {title}"] + [f"> {k}：{v}" for k, v in rows])
     plain = "\n".join([title] + [f"{k}：{v}" for k, v in rows])
@@ -170,7 +225,7 @@ def post(url, payload, encoding):
         data = urllib.parse.urlencode(payload).encode()
         content_type = "application/x-www-form-urlencoded"
     else:
-        # errors="replace"：万一上游传来非法字节（孤立代理项），也只坏一个字符，不让整条通知抛异常
+        # errors="replace"：万一传来非法字节（孤立代理项），也只坏一个字符，不让整条通知抛异常
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8", "replace")
         content_type = "application/json; charset=utf-8"
     req = urllib.request.Request(url, data=data, headers={"Content-Type": content_type}, method="POST")
@@ -215,22 +270,16 @@ def send(cfg, title, markdown, plain, dry_run=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="ThaiAI 发布通知")
-    parser.add_argument("status", choices=["success", "failure"])
-    parser.add_argument("--commit", default="")
-    parser.add_argument("--subject", default="")
-    parser.add_argument("--trigger", default="")
-    parser.add_argument("--elapsed", type=int, default=0)
-    parser.add_argument("--stage", default="")
-    parser.add_argument("--detail", default="")
-    parser.add_argument("--backend", default="", help="后端容器重建结果（成功/失败通知各渲染成一行「后端」）")
-    parser.add_argument("--site-code", default="")
-    parser.add_argument("--test", action="store_true",
-                        help="标题标注「测试样例，非真实故障」，用于真机验证通知链路")
+    parser = argparse.ArgumentParser(description="ThaiAI 发布通知（读事实文件渲染）")
+    parser.add_argument("--status", default=STATUS_FILE, help="发布事实文件（key=value）")
     parser.add_argument("--dry-run", action="store_true", help="只打印将要发送的内容")
     args = parser.parse_args()
 
-    title, markdown, plain = build_messages(args)
+    facts = read_facts(args.status)
+    if not facts:
+        print(f"[notify] 事实文件为空或不存在（{args.status}），跳过通知")
+        return 0
+    title, markdown, plain = build_messages(facts)
     return send(load_config(), title, markdown, plain, dry_run=args.dry_run)
 
 

@@ -21,6 +21,10 @@
 #   6. 本机验证（hash/首页/API/音频 MIME/WebHook 存活），失败自动回滚
 #
 # 后端改动只重建后端、前端改动只重建前端；两边都没变则整个脚本秒退。
+#
+# 「这次发布发生了什么」只写进一份结构化事实：$STATUS（key=value）。
+#   本脚本写身份与结局，deploy-backend.sh 写后端结局；deploy/notify.py 只做渲染。
+# 键与取值见 deploy/README.md「发布事实」一节。
 # ============================================================
 set -euo pipefail
 
@@ -31,33 +35,43 @@ SITE_CHECK=https://127.0.0.1
 # 记录最近一次发布成功的 commit，用于判定「哪些部分需要重建」与短路重复构建
 MARKER=/opt/thaiai/.deployed-commit
 LOCK=/var/lock/thaiai-deploy.lock
+# 本次发布的事实文件（被 deploy-backend.sh 与 notify.py 共用，同为可覆盖路径）
+STATUS=${THAIAI_STATUS:-/opt/thaiai/.deploy-status}
 # 触发来源（由调用方注入：GitHub Actions / Gitee WebHook / 轮询兜底），只用于通知文案
 TRIGGER=${THAIAI_TRIGGER:-未标注}
 START=$(date +%s)
 NEW=""
 SUBJECT=""
-BACKEND_NOTE="未涉及（无变化）"
 NEED_FRONT=1
 STEP=0
 
 step() { STEP=$((STEP + 1)); echo "── [$STEP] $*"; }
 
-# 发布通知（钉钉/企业微信/个人推送）。配置缺失或推送失败都只记一行，**绝不影响发布本身**。
-# 配置在服务器 /etc/thaiai-notify.env（600，不进仓库）；实现在 deploy/notify.py。
+# 发布通知（钉钉/企业微信/个人推送）。渲染在 deploy/notify.py，配置在服务器
+# /etc/thaiai-notify.env（600，不进仓库）。配置缺失或推送失败都只记一行，
+# **绝不影响发布本身**。
 notify() {
   [ -f "$SRC/deploy/notify.py" ] || return 0
-  python3 "$SRC/deploy/notify.py" "$1" \
-    --commit "${NEW:-}" --subject "${SUBJECT:-}" --trigger "$TRIGGER" \
-    --backend "${BACKEND_NOTE:-}" \
-    "${@:2}" 2>&1 | sed 's/^/   /' || true
+  python3 "$SRC/deploy/notify.py" --status "$STATUS" 2>&1 | sed 's/^/   /' || true
   return 0
 }
 
-# 未预期中断（set -e 触发）也要通知：否则「没消息」和「失败了」分不清
+# 记录结局（status / frontend / failure）再通知。未知的键一律不写：
+# 渲染端缺哪个键就不渲染哪一行，绝不替事实下结论。
+finish() {
+  if [ "${THAIAI_NOTIFY_TEST:-0}" = "1" ]; then echo "test=1" >> "$STATUS"; fi
+  printf 'status=%s\nfrontend=%s\nfailure=%s\nelapsed=%s\nsite_code=%s\n' \
+    "$1" "$2" "$3" "$(( $(date +%s) - START ))" "${HOME_CODE:-}" >> "$STATUS"
+  notify
+}
+
+# 未预期中断（set -e 触发）也要通知：否则「没消息」和「失败了」分不清。
+# 此时没人知道前端改没改，所以只写确定的事实（阶段=abort），不写 frontend。
 on_abort() {
   local code=$?
   trap - ERR
-  notify failure --stage "未预期中断" --detail "脚本以退出码 $code 中止"
+  printf 'status=failure\nfailure=abort\nelapsed=%s\n' "$(( $(date +%s) - START ))" >> "$STATUS"
+  notify
   exit "$code"
 }
 trap on_abort ERR
@@ -77,9 +91,15 @@ OLD=$(git rev-parse --short HEAD 2>/dev/null || echo none)
 git fetch origin main
 git reset --hard origin/main
 NEW=$(git rev-parse --short HEAD)
-# 不在这里截断：`cut -c` 在 C locale 下按字节切，会把中文标题切成半个字符，
-# 传递下去会变成孤立代理项并把通知编码搞崩（截断改在 notify.py 里按字符做）。
 SUBJECT=$(git log -1 --pretty=%s 2>/dev/null || true)
+# 事实文件每次运行重建；不在这里截断 SUBJECT：`cut -c` 在 C locale 下按字节切，
+# 会把中文标题切成半个字符（渲染端按字符截断）。
+: > "$STATUS"
+{
+  printf 'commit=%s\n' "$NEW"
+  printf 'subject=%s\n' "$SUBJECT"
+  printf 'trigger=%s\n' "$TRIGGER"
+} >> "$STATUS"
 if [ "$OLD" = "$NEW" ]; then
   echo "   代码已是最新（$NEW）——继续执行（可能是重试）"
 else
@@ -103,38 +123,9 @@ else
 fi
 
 step "后端容器（有变更时自动重建）"
-BOUT=$(mktemp)
-TOK=""
-# 用 if 包裹以避开 set -e 的立即退出，同时拿到管道整体退出码
-if bash "$SRC/deploy/deploy-backend.sh" "$NEW" 2>&1 | tee "$BOUT"; then
-  BOK=1
-else
-  BOK=0
-fi
-if [ "$BOK" = "1" ] && grep -q '^BACKEND_OK ' "$BOUT"; then
-  TOK=$(sed -n 's/^BACKEND_OK commit=\([^ ]*\).*/\1/p' "$BOUT" | head -1)
-  BACKEND_NOTE="已重建并上线（$TOK）"
-fi
-# 用 deploy-backend.sh 给出的结局标记区分「线上未被改动」与「已回滚」：
-# 镜像构建就失败时线上根本没被动过，通知里绝不能说「已回滚」。
-BMARK=""
-if grep -q '^BACKEND_FAIL ' "$BOUT"; then
-  BMARK=$(sed -n 's/^BACKEND_FAIL \(.*\)/\1/p' "$BOUT" | head -1)
-fi
-rm -f "$BOUT"
-if [ "$BOK" != "1" ]; then
-  case "$BMARK" in
-    rolled_back)
-      notify failure --stage "后端容器重建" \
-        --detail "后端重建失败，镜像与数据库已回滚到重建前状态；前端本次未发布" ;;
-    untouched)
-      notify failure --stage "后端容器重建" \
-        --detail "后端镜像未构建成功，线上容器未被改动（仍运行原镜像）；前端本次未发布" ;;
-    *)
-      # 已重建之后才中断：既不能说「没动过」也不能说「已回滚」，如实描述
-      notify failure --stage "后端容器重建" \
-        --detail "后端容器已用新镜像重建，但发布流程异常中断；请查看日志确认状态" ;;
-  esac
+# 后端结局由 deploy-backend.sh 自己写进事实文件；这里只看它成功与否
+if ! bash "$SRC/deploy/deploy-backend.sh" "$NEW"; then
+  finish failure not_run backend
   exit 1
 fi
 
@@ -194,7 +185,8 @@ else
       rm -f "$NGINX_CONF.orig"
       echo "❌ nginx 配置语法错误，已还原（未重启，站点不受影响）"
       docker exec thaiai_frontend nginx -t || true
-      notify failure --stage "nginx 配置语法检查" --detail "配置已还原，未重启容器"
+      # dist 已在上面替换，所以前端事实是 deployed（站点仍在服务，只是配置回退了）
+      finish failure deployed nginx_config
       exit 1
     fi
   fi
@@ -260,11 +252,13 @@ else
     echo "❌ 验证失败，回滚到 $BAK"
     rm -rf "$DIST" && cp -a "$BAK" "$DIST"
     docker restart thaiai_frontend >/dev/null 2>&1 || true
-    notify failure --stage "本机验证未通过" --detail "已回滚到上一版（hash/首页/API/音频/接收端之一未过）"
+    finish failure rolled_back verify
     exit 1
   fi
 fi
 
+BEND=$(sed -n 's/^backend=//p' "$STATUS" | tail -1)
+if [ "$NEED_FRONT" = "0" ]; then FIN=skipped; else FIN=deployed; fi
 echo "$NEW" > "$MARKER"
-echo "✅ DEPLOY_OK commit=$NEW js=$JS backend=$BACKEND_NOTE"
-notify success --elapsed "$(( $(date +%s) - START ))" --site-code "$HOME_CODE"
+echo "✅ DEPLOY_OK commit=$NEW js=$JS backend=${BEND:-未知} frontend=$FIN"
+finish success "$FIN" none

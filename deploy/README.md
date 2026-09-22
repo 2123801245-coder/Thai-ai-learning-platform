@@ -195,26 +195,51 @@ chmod 600 /etc/thaiai-notify.env
   关键词需出现在消息里（默认消息含 `ThaiAI`）
 - 自建 Bark 服务端可另配 `BARK_URL=https://你的域名`
 
+### 发布事实（唯一数据源）
+
+「这次发布发生了什么」只写进一份结构化事实：`/opt/thaiai/.deploy-status`（每行 `key=value`，
+同名键取最后一次）。执行侧只写事实，`deploy/notify.py` 只做「事实 → 人话」的映射与渲染，
+标题与详情都不各自预设结论。前端与后端结局在同一份契约里。
+
+| 键 | 取值 | 谁写 |
+| --- | --- | --- |
+| `commit` / `subject` / `trigger` | 短 sha / 提交标题 / 触发来源 | `build-on-server.sh`（开跑时） |
+| `backend` | `rebuilt` `skipped` `untouched` `rolled_back` `recreated` | `deploy-backend.sh` |
+| `status` / `frontend` / `failure` / `elapsed` / `site_code` / `test` | 见下 | `build-on-server.sh`（收尾） |
+| `frontend` | `deployed` `skipped` `rolled_back` `not_run` | 同上 |
+| `failure` | `backend` `verify` `nginx_config` `abort` | 同上 |
+
+缺哪个键就不渲染哪一行：例如未预期中断时前端状态未知，就既不写也不显示，
+所以文案里不会出现「不知道却说已回滚」这类结论。后端的五个结局含义：
+
+| `backend` | 含义 |
+| --- | --- |
+| `rebuilt` | 已重建并上线 |
+| `skipped` | 未涉及（无变化） |
+| `untouched` | 镜像未构建成功，线上容器未被改动 |
+| `rolled_back` | 镜像与数据库已回滚到重建前状态 |
+| `recreated` | 已用新镜像重建，但流程异常中断 |
+
 ### 测试与排查
 
 ```bash
-python3 /opt/thaiai-src/deploy/notify.py success --commit test123 \
-  --subject "通知自检" --elapsed 42 --site-code 200          # 真发一条（所有已配通道）
-python3 /opt/thaiai-src/deploy/notify.py failure --stage "自检" --dry-run   # 只看内容
-FORCE=1 bash /opt/thaiai-src/deploy/build-on-server.sh      # 跑一次真实重建（会发通知）
+python3 /opt/thaiai-src/deploy/notify.py --status /opt/thaiai/.deploy-status --dry-run  # 只看内容
+THAIAI_NOTIFY_TEST=1 FORCE=1 bash /opt/thaiai-src/deploy/build-on-server.sh   # 真跑一次，标题带「测试样例」
 ```
+
+手动发送：先写一份事实文件（内容即上表的键值对），再 `notify.py --status <文件>`。
 
 ### 设计约定
 
-**通知永远不影响发布**：`notify.py` 缺失、配置为空、网络不通都只打印一行日志，发布流程照常继续
-（`notify()` 内部 `|| true`，且失败路径不会递归触发 ERR 陷阱）。
+**通知永远不影响发布**：`notify.py` 缺失、事实文件为空、配置为空、网络不通都只打印一行日志，
+发布流程照常继续（`notify()` 内部 `|| true`，且失败路径不会递归触发 ERR 陷阱）。
 
-消息内容：
+消息内容（`后端` / `前端` 两行按事实出现，缺则整行不显示）：
 
 | 状态 | 内容 |
 | --- | --- |
-| ✅ 成功 | 提交（含标题）、触发来源、耗时、站点状态码 |
-| ⚠️ 失败 | 提交、触发来源、失败环节（nginx 语法 / 本机验证 / 未预期中断）、回滚说明、日志位置 |
+| ✅ 成功 | 提交（含标题）、触发来源、后端、前端、耗时、站点状态码 |
+| ⚠️ 失败 | 提交、触发来源、后端、前端、失败环节（后端重建 / nginx 语法 / 本机验证 / 未预期中断）、详情与影响、日志位置 |
 
 ## 一次性初始化（已完成，留档）
 
