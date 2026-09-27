@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node -e \"const fs=require('fs');const f='dist/index.html';if(fs.existsSync(f)){let h=fs.readFileSync(f,'utf8');h=h.replace(/ crossorigin/g,'');fs.writeFileSync(f,h);console.log('stripped crossorigin')}\"",
+    "build": "vite build && node -e \"const fs=require('fs');const f='dist/index.html';if(fs.existsSync(f)){let h=fs.readFileSync(f,'utf8');h=h.replace(/ crossorigin/g,'');fs.writeFileSync(f,h);console.log('stripped crossorigin')}\" && node scripts/build-share-pages.mjs",
+    "og:scene": "node scripts/make-og-scene.mjs",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",

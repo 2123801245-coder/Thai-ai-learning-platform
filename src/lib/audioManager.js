@@ -267,7 +267,12 @@ export function playThaiAudio(url, opts = {}) {
           if (cancelRequested || token !== playToken) return; // 主动取消，非错误
           const msg = classifyAudioError(err);
           if (msg) {
-            current?.onError?.(new Error(msg));
+            const mapped = new Error(msg);
+            // 保留原始错误名（NotAllowedError / NotSupportedError / NetworkError…）：
+            // 调用方要能区分「自动播放策略拦截」（退回别的格式也没用）与
+            // 「解码/网络失败」（值得换一种容器重试）。
+            if (err && err.name) mapped.name = err.name;
+            current?.onError?.(mapped);
           }
           // AbortError（主动停止类）不报错
           setState("idle");

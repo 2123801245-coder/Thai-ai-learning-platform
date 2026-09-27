@@ -803,10 +803,7 @@ border-white/10
 
 "
 
->
-
-
-<div
+><div
 
 className="
 relative
@@ -814,48 +811,27 @@ relative
 w-9
 h-9
 
+overflow-hidden
+
 rounded-xl
 
-bg-gradient-to-br
-
-from-yellow-300
-
-via-yellow-500
-
-to-emerald-500
-
-
-flex
-
-items-center
-
-justify-center
-
+border
+border-yellow-200/40
 
 shadow-[0_0_24px_rgba(250,204,21,.4)]
 
 "
-
 >
 
+<img
 
-<span
+src="/brand/thaiai-logo-512.png"
 
-className="
-relative
-z-10
+alt="ThaiAI"
 
-text-white
+className="h-full w-full object-cover"
 
-font-black
-
-text-sm
-
-"
-
->
-ไทย
-</span>
+/>
 
 
 </div>
@@ -1045,10 +1021,7 @@ xl:mb-8
 brand-enter
 "
 
->
-
-
-<div
+><div
 
 className="
 relative
@@ -1056,26 +1029,17 @@ relative
 w-20
 h-20
 
+overflow-hidden
+
 rounded-[30px]
 
-bg-gradient-to-br
-
-from-yellow-300
-
-via-yellow-500
-
-to-emerald-500
-
-
-flex
-items-center
-justify-center
+border-2
+border-yellow-200/50
 
 
 shadow-[0_0_70px_rgba(250,204,21,.55)]
 
 "
-
 >
 
 
@@ -1101,23 +1065,15 @@ animate-spin
 />
 
 
-<span
+<img
 
-className="
-relative
-z-10
+src="/brand/thaiai-logo-512.png"
 
-text-white
+alt="ThaiAI"
 
-font-black
+className="relative h-full w-full object-cover"
 
-text-3xl
-
-"
-
->
-ไทย
-</span>
+/>
 
 
 
@@ -2203,7 +2159,7 @@ animate-spin
 
 <img
 
-src="/thai-teacher-modern.svg"
+src="/brand/thaiai-logo-512.png"
 
 alt="AI Teacher"
 

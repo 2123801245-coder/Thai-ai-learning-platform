@@ -4,7 +4,8 @@
 // =========================================================
 
 import React, { useMemo, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { AccordionPanel } from "@/components/ui/accordion";
 import {
   Play,
   Pause,
@@ -40,7 +41,12 @@ import {
   videos,
   getVideosByCategory,
   getFreeVideos,
+  isEmbeddedSource,
+  bilibiliWatchUrl,
 } from "@/data/videoLibrary";
+import { isVideoLocked } from "@/lib/entitlements";
+import { API_BASE_URL } from "@/lib/api";
+import SentenceStudy from "@/components/video/SentenceStudy";
 
 // PAPER 世界的课程页版式层（“高级泰语教材”）。
 // 在这里 import 而不是塞进 index.css：这一层只服务课程页，跟着本页的
@@ -108,6 +114,59 @@ function loadYouTubeApi() {
   });
 
   return ytApiPromise;
+}
+
+
+// =========================================================
+// B 站官方播放器（站外嵌入）
+// =========================================================
+// 为什么用 iframe 而不是自己拉流：视频始终在 B 站播放，播放量、弹幕、投币
+// 都留在原作者与原站那边，本站既不下载也不转码 —— 这是风险最低的用法，
+// 下架也只需删掉 videoLibrary.js 里那一条。
+//
+// 参数（官方文档：player.bilibili.com/ 的 QueryString 表）：
+//   danmaku=0 默认关弹幕、autoplay=0 不抢用户操作、poster=1 先显示封面。
+//   high_quality=1 / as_wide=1 是未写入文档但流传很广的两个参数，
+//   留着无害（对已登录或第三方 cookie 放开的浏览器可能生效），但**不要**
+//   指望它拉高清晰度 —— 实测结论见下。
+//
+// ⚠️ 清晰度上限是 B 站的，不是我们的：实测（未登录 cookie 的浏览器）
+//   播放器发出的 playurl 是 qn=0（自动），实际解码分辨率 640×360；
+//   `realQ=16`。播放器自带的清晰度菜单显示：
+//     1080P 高清（登录即享）/ 720P 高清（登录即享）/ 480P 清晰（登录即享）/ 360P
+//   点 720P 只会弹登录提示，realQ 仍是 16（已实测）。官方外链参数表里
+//   **根本没有清晰度参数**，所以站外无法把默认清晰度改高，匿名访客就只能 360P。
+//   要真正“拉高”，只有两条正路：① 用原片上源（见 videoLibrary 的 youtubeId
+//   双源，可上 1080P）；② 自己制作/自有版权的视频（那才完全可控）。
+//   绝不用第三方“解析接口”去破解会员清晰度 —— 那是绕过 B 站的访问控制，
+//   侵权风险正好是我们要避开的东西。
+//
+// 播放进度拿不到（B 站没给站外的进度回传），所以这一类条目不计入
+// 「已观看」统计 —— 不编造数据比统计好看更重要。
+
+function BilibiliPlayer({ bvid, title }) {
+  const src = useMemo(
+    () =>
+      `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(
+        bvid
+      )}&page=1&high_quality=1&danmaku=0&autoplay=0&as_wide=1&poster=1`,
+    [bvid]
+  );
+
+  return (
+    <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-black">
+      <iframe
+        src={src}
+        title={`${title}（哔哩哔哩）`}
+        className="absolute inset-0 h-full w-full"
+        frameBorder="0"
+        scrolling="no"
+        allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+        allowFullScreen
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+    </div>
+  );
 }
 
 
@@ -393,7 +452,7 @@ function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
     setLocalProgress(getProgress(video.id));
   }, [video.id]);
 
-  const locked = !video.free && !isVipUser;
+  const locked = isVideoLocked({ video, isVipUser });
 
   return (
     <motion.div
@@ -405,6 +464,9 @@ function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
           event.preventDefault();
           onPlay(video);
         }
+      }}
+      onClick={() => {
+        if (!locked) onPlay(video);
       }}
       role="button"
       tabIndex={locked ? -1 : 0}
@@ -420,10 +482,19 @@ function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
     >
       {/* 缩略图 */}
       <div className="tp-paper-plate-frame relative aspect-video bg-black/40 overflow-hidden">
-        {video.youtubeId ? (
+        {video.cover || video.youtubeId ? (
           <img
-            src={`https://img.youtube.com/vi/${video.youtubeId}/mqdefault.jpg`}
+            src={
+              video.cover ||
+              `https://img.youtube.com/vi/${video.youtubeId}/mqdefault.jpg`
+            }
             alt={video.title}
+            /* B 站 CDN 图带 referrerPolicy=no-referrer 才稳定；加载失败就
+               自己隐掉，露出底下的渐变与播放键，不留白框 */
+            referrerPolicy="no-referrer"
+            onError={(event) => {
+              event.currentTarget.style.display = "none";
+            }}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             loading="lazy"
           />
@@ -454,6 +525,13 @@ function VideoCard({ video, index, isVipUser, onPlay, isActive }) {
         <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-white/70 font-mono">
           {video.duration}
         </div>
+
+        {/* 站外来源：B 站嵌入的条目要让人一眼看出不是本站自己的片子 */}
+        {isEmbeddedSource(video) && (
+          <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-[#fb7299]/85 text-[10px] font-semibold text-white">
+            B 站
+          </div>
+        )}
 
         {/* 免费标签 */}
         {video.free && (
@@ -522,6 +600,68 @@ export default function Course() {
   const [vipOpen, setVipOpen] = useState(false);
   const [activeVideo, setActiveVideo] = useState(null);
   const [sortBy, setSortBy] = useState("default"); // default | free | duration
+  /* 同时有 B 站源与原片源的条目（中泰双语那一类）：默认 B 站（大陆直连免登录）。
+     换片子重置回 B 站 —— 高清是备选，不是默认。 */
+  const [playSource, setPlaySource] = useState("auto"); // auto | local | bilibili | original
+
+  /* 换一条片子就回到默认播放源（auto 会选可用里最好的那个），选择不被继承 */
+  React.useEffect(() => {
+    setPlaySource("auto");
+  }, [activeVideo?.id]);
+
+  /*
+   * 本地原片索引：y2a-auto 流水线下载的 1080P 原片（带泰/中字幕）。
+   * 按 youtubeId 对到视频库的条目上 —— 同一个视频，本地源比 B 站外链
+   * 清楚三档（实测外链匿名只给 360P），而且能做逐句解析。
+   */
+  const [localTasks, setLocalTasks] = useState({});
+  React.useEffect(() => {
+    let alive = true;
+    fetch(`${API_BASE_URL}/bilingual`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d?.tasks) return;
+        const map = {};
+        for (const t of d.tasks) {
+          if (t.youtubeId && t.hasSubtitles) map[t.youtubeId] = t.taskId;
+        }
+        setLocalTasks(map);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /* 当前片子能匹配上的本地原片（按 youtubeId）与可选的播放源 */
+  const localTaskId = activeVideo?.youtubeId
+    ? localTasks[activeVideo.youtubeId] || null
+    : null;
+
+  const sourceOptions = [
+    localTaskId && { key: "local", label: "本地原片 · 1080P 逐句" },
+    activeVideo &&
+      isEmbeddedSource(activeVideo) && {
+        key: "bilibili",
+        label: "哔哩哔哩 · 免登录（360P）",
+      },
+    activeVideo?.youtubeId && {
+      key: "original",
+      label: isEmbeddedSource(activeVideo)
+        ? "原片 · 最高 1080P"
+        : "YouTube · 1080P",
+    },
+  ].filter(Boolean);
+
+  /* auto：有本地原片就用它（最清楚、不依赖外站、能逐句），否则 B 站，再否则原片 */
+  const source =
+    playSource === "auto"
+      ? localTaskId
+        ? "local"
+        : isEmbeddedSource(activeVideo)
+        ? "bilibili"
+        : "original"
+      : playSource;
 
   // 筛选视频
   const filteredVideos = useMemo(() => {
@@ -529,6 +669,12 @@ export default function Course() {
     if (sortBy === "free") list = list.filter((v) => v.free);
     return list;
   }, [category, sortBy]);
+
+  /* 当前筛选里有多少条是站外嵌入（B 站）：列表下方要据此补一句版权说明 */
+  const embeddedCount = useMemo(
+    () => filteredVideos.filter(isEmbeddedSource).length,
+    [filteredVideos]
+  );
 
   // 统计
   const totalVideos = videos.length;
@@ -649,13 +795,9 @@ export default function Course() {
       {/* =====================================================
           正在播放
       ===================================================== */}
-      <AnimatePresence>
+      <AccordionPanel open={!!activeVideo}>
         {activeVideo && (
-          <motion.section
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-          >
+          <section>
             <div className="tp-paper-section-head mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="tp-paper-ornament h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,.7)]" />
@@ -669,12 +811,51 @@ export default function Course() {
               </button>
             </div>
 
-            <YouTubePlayer
-              key={activeVideo.id}
-              videoId={activeVideo.youtubeId}
-              onProgress={(pct) => saveProgress(activeVideo.id, pct)}
-              onEnded={() => saveProgress(activeVideo.id, 100)}
-            />
+            {/* 播放源：优先本地原片（1080P + 逐句解析）；其次 B 站（大陆免登录，
+                但实测匿名只给 360P）；再其次原片 YouTube 嵌入（可上 1080P，需能访问）。 */}
+            {sourceOptions.length > 1 && (
+              <div className="mb-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-white/35">播放源</span>
+                {sourceOptions.map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setPlaySource(opt.key)}
+                    aria-pressed={playSource === opt.key}
+                    className={`apple-button rounded-full px-3 py-1 transition ${
+                      playSource === opt.key
+                        ? "border border-emerald-400/25 bg-emerald-500/20 text-emerald-200"
+                        : "border border-white/[0.06] bg-white/[0.04] text-white/45 hover:bg-white/[0.07] hover:text-white/70"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+                {playSource === "original" && (
+                  <span className="text-white/30">需能访问 YouTube</span>
+                )}
+              </div>
+            )}
+
+            {source === "local" && localTaskId ? (
+              <SentenceStudy
+                key={`${activeVideo.id}-local`}
+                taskId={localTaskId}
+                onProgress={(pct) => saveProgress(activeVideo.id, pct)}
+              />
+            ) : source === "bilibili" && isEmbeddedSource(activeVideo) ? (
+              <BilibiliPlayer
+                key={`${activeVideo.id}-bili`}
+                bvid={activeVideo.bilibiliId}
+                title={activeVideo.title}
+              />
+            ) : (
+              <YouTubePlayer
+                key={`${activeVideo.id}-${source}`}
+                videoId={activeVideo.youtubeId}
+                onProgress={(pct) => saveProgress(activeVideo.id, pct)}
+                onEnded={() => saveProgress(activeVideo.id, 100)}
+              />
+            )}
 
             <div className="mt-3 flex items-center justify-between">
               <div>
@@ -685,9 +866,68 @@ export default function Course() {
                 {activeVideo.level}
               </span>
             </div>
-          </motion.section>
+
+            {/* 出处与版权：站外嵌入或本地原片的条目都要写清「谁的片子、原片在哪」 */}
+            {(isEmbeddedSource(activeVideo) || localTaskId) && (
+              <div className="tp-paper-sub mt-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/45">
+                  {source === "local" ? (
+                    <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
+                      本地原片 · 1080P · 逐句解析
+                    </span>
+                  ) : (
+                    <>
+                      <span className="rounded-full bg-[#fb7299]/15 px-2 py-0.5 text-[10px] font-medium text-[#fb7299]">
+                        外站嵌入
+                      </span>
+                      <span>来源：{activeVideo.sourceName}</span>
+                      {activeVideo.sourceNote && <span>· {activeVideo.sourceNote}</span>}
+                      <a
+                        href={bilibiliWatchUrl(activeVideo)}
+                        target="_blank"
+                        rel="noopener noreferrer nofollow"
+                        className="text-emerald-300/80 underline decoration-dotted underline-offset-2 hover:text-emerald-200"
+                      >
+                        在 B 站打开
+                      </a>
+                    </>
+                  )}
+                </div>
+
+                {activeVideo.originName && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/35">
+                    <span>原片：{activeVideo.originName}</span>
+                    {activeVideo.originUrl && (
+                      <a
+                        href={activeVideo.originUrl}
+                        target="_blank"
+                        rel="noopener noreferrer nofollow"
+                        className="underline decoration-dotted underline-offset-2 hover:text-white/60"
+                      >
+                        原片链接
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {source === "bilibili" ? (
+                  <p className="mt-1.5 text-[10px] leading-relaxed text-white/25">
+                    清晰度：B 站外链播放器对未登录访客只给 360P（480P/720P/1080P 需在 B 站登录，站外嵌入无法代为登录）—— 要看高清请切到上方「原片」源，或点「在 B 站打开」后登录观看。
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-[10px] leading-relaxed text-white/25">
+                    本地原片：来自自己的 y2a-auto 下载流水线（1920×1080），播放不经过任何外站，逐句字幕也由同一批字幕清洗而来。
+                  </p>
+                )}
+
+                <p className="mt-1.5 text-[10px] leading-relaxed text-white/25">
+                  版权归原作者与原站所有：本站在此仅做站外嵌入播放，不下载、不转码、不二次剪辑；若权利人希望下架，联系我们即可移除。
+                </p>
+              </div>
+            )}
+          </section>
         )}
-      </AnimatePresence>
+      </AccordionPanel>
 
 
       {/* =====================================================
@@ -726,6 +966,12 @@ export default function Course() {
             </h2>
             <p className="tp-paper-sub mt-1 text-xs text-white/30">
               共 {filteredVideos.length} 个视频
+              {/* 站外嵌入的条目在此说明一句：播放、版权都在原站 */}
+              {embeddedCount > 0 && (
+                <span className="text-white/25">
+                  （其中 {embeddedCount} 条为哔哩哔哩站外嵌入，版权归原作者）
+                </span>
+              )}
             </p>
           </div>
 
@@ -793,7 +1039,8 @@ export default function Course() {
                 解锁全部视频
               </h3>
               <p className="tp-paper-note-body text-xs text-yellow-200/40 mt-0.5">
-                升级 VIP 即可观看所有 {videos.length} 个泰语教学视频，包含进阶课程。
+                每个分类都留了 1 条免费精讲（共 {freeVideos} 条）；
+                升级 VIP 解锁全部 {videos.length} 条视频，含进阶课程。
               </p>
             </div>
             <button

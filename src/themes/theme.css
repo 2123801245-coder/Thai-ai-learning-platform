@@ -1,8 +1,9 @@
 /* ============================================================
-   ThaiAI Theme Studio — 主题变量层
-   - 默认值 = 当前墨绿风格（视觉零变化）
-   - 仅当 <html class="theme-custom"> 时才重映射常见强调色，
-     保证默认主题完全不动
+   ThaiAI 主题变量层
+   ------------------------------------------------------------
+   :root 只是「JS 还没跑到之前」的兜底；真正的取值由 ThemeContext
+   把 worlds.js 的 token 写到 <html> 的 inline style 上。
+   主题只有深色（midnight）与浅色（paper）两种。
    ============================================================ */
 
 :root {
@@ -13,56 +14,34 @@
   --tp-card: rgba(255, 255, 255, 0.06);
   --tp-text: #ffffff;
   --tp-font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --tp-radius: 16px;
-  --tp-glass: 1;
-  --tp-bg-effect: none;
   --tp-glow: rgba(16, 185, 129, 0.25);
   --tp-glow-accent: rgba(245, 196, 81, 0.22);
 }
 
-/* 全局字体 */
-html.theme-applied *,
-html:has([data-theme]) body { font-family: var(--tp-font-family); }
-html[data-theme] body {
-  font-family: var(--tp-font-family);
-}
-
-/* 全站平滑过渡（限主题相关属性） */
-html[data-theme] body,
-html[data-theme] .page-shell,
-html[data-theme] .premium-glass,
-html[data-theme] .premium-glass-strong {
-  transition: background-color 300ms ease, color 300ms ease, border-color 300ms ease;
-}
+/* 全局字体：世界 token 给出 --tp-font-family（深色无衬线 / 纸本泰文字体） */
+html body { font-family: var(--tp-font-family); }
 
 /* ============================================================
-   强调色 / 常用色重映射（仅 custom 主题启用）
-   默认主题不带 .theme-custom，以下规则全部不生效
+   调色板层（.theme-custom 由 ThemeContext 常开）
+   ------------------------------------------------------------
+   把组件里硬写的 Tailwind 颜色类（emerald / teal / cyan / amber …）
+   重映射到当前世界的 --tp-* 变量。曾经它只对「用户改过颜色」的主题
+   生效，现在主题只有两种形态，所以常开。
    ============================================================ */
 .theme-custom {
   /* 全局文字 */
   color: var(--tp-text);
 }
 
-/* 统一圆角（仅 custom 主题） */
+/* 世界圆角也要盖住 Tailwind 的 rounded-2xl/3xl（垫片只管颜色，不管圆角） */
 .theme-custom .rounded-2xl,
-.theme-custom .rounded-3xl,
-.theme-custom .premium-glass,
-.theme-custom .premium-glass-strong,
-.theme-custom .premium-glass-gold {
-  border-radius: var(--tp-radius);
-}
-
-/* 玻璃 vs 纯色卡片（仅 custom 主题） */
-html.theme-custom[data-glass="off"] .premium-glass {
-  backdrop-filter: none;
-  background: rgba(255, 255, 255, 0.045) !important;
+.theme-custom .rounded-3xl {
+  border-radius: var(--tp-radius-md);
 }
 
 /* ============================================================
-   全站背景图跟随主题（仅 custom 主题）
-   - 背景图降为极淡装饰，主体底色改用 --tp-bg
-   - 使 Bangkok / Cyber / Pearl 等预设真正改变整体色调
+   全站背景图跟随主题
+   - 背景图降为极淡装饰（深色下则整张隐藏），主体底色用 --tp-bg
    ============================================================ */
 .theme-custom .theme-site-backdrop .site-bg-a,
 .theme-custom .theme-site-backdrop .site-bg-b {
@@ -103,9 +82,7 @@ html.theme-custom[data-glass="off"] .premium-glass {
   );
 }
 
-/* 每个主题的氛围色 cast：把主题主/辅/强调色渗透到全局背景，
-   让 Bangkok（青蓝）、Royal（紫金）、Ocean（青）、Cyber（黑+紫）等
-   差异一眼可见。默认主题不带 theme-custom，不生效。 */
+/* 氛围色 cast：把世界主/辅/强调色渗透到全局背景，避免大面积纯色平铺。 */
 .theme-custom .theme-site-backdrop::before,
 .theme-custom .home-theme-backdrop::after {
   content: "";
@@ -120,30 +97,9 @@ html.theme-custom[data-glass="off"] .premium-glass {
   opacity: 0.8;
 }
 
-/* Sidebar 背景跟随主题背景色（仅 custom 主题） */
+/* Sidebar 背景跟随主题背景色 */
 .theme-custom .theme-sidebar {
   background-color: color-mix(in srgb, var(--tp-bg) 82%, black);
-}
-
-/* 首页 Hero 佛像背景跟随主题背景色（仅 custom 主题） */
-.theme-custom .theme-hero-overlay-x {
-  background-image: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--tp-bg) 82%, black),
-    color-mix(in srgb, var(--tp-bg) 55%, transparent),
-    transparent
-  ) !important;
-}
-.theme-custom .theme-hero-overlay-y {
-  background-image: linear-gradient(
-    to top,
-    color-mix(in srgb, var(--tp-bg) 62%, black),
-    transparent 55%,
-    color-mix(in srgb, var(--tp-bg) 28%, transparent)
-  ) !important;
-}
-.theme-custom .theme-hero-glow {
-  background-color: color-mix(in srgb, var(--tp-primary) 22%, transparent) !important;
 }
 
 /* 主要红色系：emerald / teal / jade 风格的常用 Tailwind 色统一映射到主/辅色 */
@@ -152,12 +108,8 @@ html.theme-custom[data-glass="off"] .premium-glass {
 .theme-custom .text-emerald-300,
 .theme-custom .text-emerald-400,
 .theme-custom .text-teal-200,
-.theme-custom .text-teal-300,
-.theme-custom .text-teal-400 { color: var(--tp-primary) !important; }
-.theme-custom .text-emerald-500,
-.theme-custom .text-emerald-600,
-.theme-custom .text-teal-500,
-.theme-custom .text-teal-600 { color: var(--tp-secondary) !important; }
+.theme-custom .text-teal-300 { color: var(--tp-primary) !important; }
+.theme-custom .text-emerald-500 { color: var(--tp-secondary) !important; }
 .theme-custom .from-emerald-300,
 .theme-custom .to-emerald-300,
 .theme-custom .from-emerald-400,
@@ -165,9 +117,7 @@ html.theme-custom[data-glass="off"] .premium-glass {
 .theme-custom .from-emerald-500,
 .theme-custom .to-emerald-500,
 .theme-custom .from-teal-400,
-.theme-custom .to-teal-400,
-.theme-custom .from-teal-500,
-.theme-custom .to-teal-500 {
+.theme-custom .to-teal-400 {
   background-image: linear-gradient(to right, var(--tp-primary), var(--tp-secondary));
 }
 .theme-custom .bg-emerald-400\/\[0\.04\],
@@ -188,8 +138,7 @@ html.theme-custom[data-glass="off"] .premium-glass {
 .theme-custom .border-emerald-300\/30,
 .theme-custom .border-teal-300\/20 { border-color: color-mix(in srgb, var(--tp-primary) 28%, transparent); }
 .theme-custom .shadow-emerald-400\/10,
-.theme-custom .shadow-emerald-400\/15,
-.theme-custom .shadow-teal-400\/10 { box-shadow: 0 10px 30px -12px var(--tp-primary); }
+.theme-custom .shadow-emerald-400\/15 { box-shadow: 0 10px 30px -12px var(--tp-primary); }
 
 /* 金色系 */
 .theme-custom .text-yellow-100,
@@ -198,10 +147,8 @@ html.theme-custom[data-glass="off"] .premium-glass {
 .theme-custom .text-amber-200,
 .theme-custom .text-amber-300 { color: var(--tp-accent) !important; }
 .theme-custom .from-yellow-200,
-.theme-custom .to-yellow-200,
 .theme-custom .from-yellow-300,
 .theme-custom .to-yellow-300,
-.theme-custom .from-amber-300,
 .theme-custom .to-amber-300 {
   background-image: linear-gradient(to right, var(--tp-accent), color-mix(in srgb, var(--tp-accent) 70%, white));
 }
@@ -217,72 +164,27 @@ html.theme-custom[data-glass="off"] .premium-glass {
 .theme-custom .bg-yellow-300\/\[0\.16\],
 .theme-custom .bg-amber-300\/\[0\.08\] { background-color: color-mix(in srgb, var(--tp-accent) 14%, transparent); }
 
-/* 科技色系（bangkok / cyber / ocean 特有） */
-.theme-custom .text-cyan-300,
-.theme-custom .text-cyan-400 { color: var(--tp-secondary) !important; }
+/* 冷色与紫金系：强调色 */
+.theme-custom .text-cyan-300 { color: var(--tp-secondary) !important; }
 .theme-custom .text-purple-300,
-.theme-custom .text-purple-400,
-.theme-custom .text-fuchsia-300,
 .theme-custom .text-violet-300 { color: var(--tp-accent) !important; }
 .theme-custom .bg-cyan-400\/\[0\.08\],
 .theme-custom .bg-cyan-400\/\[0\.1\] { background-color: color-mix(in srgb, var(--tp-secondary) 14%, transparent); }
 .theme-custom .border-cyan-300\/20 { border-color: color-mix(in srgb, var(--tp-secondary) 30%, transparent); }
 
 /* ============================================================
-   背景氛围效果（data-bgeffect）
+   环境光晕（.thai-ambient-foreground 的 ::after）
+   ------------------------------------------------------------
+   这里曾经是「背景氛围」设置（none / soft / glow / particle / thai /
+   star 六选一）。选项已下线，只留下当时默认的那一种 —— 纸本模式会在
+   下面把整个 .thai-ambient-foreground 关掉，所以它只出现在深色主题。
    ============================================================ */
-html[data-bgeffect="none"] .thai-ambient-foreground { display: none; }
-
-/* 柔和渐变 */
-html[data-bgeffect="soft"] .thai-ambient-foreground::after {
-  content: "";
-  position: fixed; inset: 0; pointer-events: none; z-index: 1;
-  background: radial-gradient(60% 50% at 80% 20%, var(--tp-glow-accent), transparent 60%),
-              radial-gradient(50% 40% at 10% 85%, var(--tp-glow), transparent 60%);
-  opacity: 0.5;
-}
-
-/* 光晕 */
-html[data-bgeffect="glow"] .site-bg-a { opacity: 0.9; }
-html[data-bgeffect="glow"] .thai-ambient-foreground::after {
+.thai-ambient-foreground::after {
   content: "";
   position: fixed; inset: 0; pointer-events: none; z-index: 1;
   background: radial-gradient(55% 45% at 78% 18%, var(--tp-glow-accent), transparent 62%);
   opacity: 0.45;
 }
-
-/* 静电/粒子氛围由 body::before 简单模拟 */
-html[data-bgeffect="particle"] body::before {
-  content: "";
-  position: fixed; inset: 0; pointer-events: none; z-index: 1;
-  background-image:
-    radial-gradient(1px 1px at 20% 30%, color-mix(in srgb, var(--tp-accent) 60%, transparent), transparent),
-    radial-gradient(1px 1px at 70% 60%, color-mix(in srgb, var(--tp-primary) 60%, transparent), transparent),
-    radial-gradient(1px 1px at 45% 85%, color-mix(in srgb, var(--tp-secondary) 60%, transparent), transparent);
-  background-size: 180px 180px;
-  opacity: 0.4;
-  animation: tp-drift 22s linear infinite;
-}
-@keyframes tp-drift {
-  from { background-position: 0 0; }
-  to { background-position: 360px 180px; }
-}
-
-/* 泰式文化氛围 */
-html[data-bgeffect="thai"] .site-bg-a { filter: saturate(1.2) brightness(1.05); }
-html[data-bgeffect="thai"] .thai-ambient-foreground::after {
-  content: "";
-  position: fixed; inset: 0; pointer-events: none; z-index: 1;
-  background:
-    radial-gradient(50% 40% at 82% 12%, var(--tp-glow-accent), transparent 60%),
-    radial-gradient(45% 40% at 12% 88%, var(--tp-glow), transparent 60%);
-  opacity: 0.4;
-}
-html[data-bgeffect="thai"] .thai-gold-line { opacity: 0.35; }
-
-/* 星空（默认即保留，仅在 star 时强化） */
-html[data-bgeffect="star"] .noise-overlay { opacity: 0.5; }
-html[data-bgeffect="star"] .site-bg-a { filter: brightness(1.06); }
 
 /* ============================================================
    纯黑白配色模式（data-mode）
@@ -359,27 +261,6 @@ html.theme-custom[data-mode="light"] [class*="bg-black/"] {
   background-color: rgba(255, 255, 255, 0.78) !important;
 }
 
-/* 浅色：主题快捷切换按钮（Sidebar 白底上不可见）——转深描边 + 浅底深字 */
-html.theme-custom[data-mode="light"] .theme-quick-toggle {
-  background-color: rgba(255, 255, 255, 0.6) !important;
-  border-color: rgba(0, 0, 0, 0.18) !important;
-  box-shadow: inset 0 0 0 0 !important;
-}
-html.theme-custom[data-mode="light"] .theme-quick-toggle:hover {
-  border-color: rgba(16, 185, 129, 0.5) !important;
-  background-color: rgba(255, 255, 255, 0.85) !important;
-}
-html.theme-custom[data-mode="light"] .theme-quick-toggle svg {
-  color: #10b981 !important;
-}
-html.theme-custom[data-mode="light"] .theme-quick-toggle svg.lucide-chevron-down {
-  color: rgba(0, 0, 0, 0.4) !important;
-}
-html.theme-custom[data-mode="light"] .theme-quick-toggle span,
-html.theme-custom[data-mode="light"] .theme-quick-label {
-  color: #161616 !important;
-}
-
 /* 浅色：硬编码白边转浅灰边 */
 html.theme-custom[data-mode="light"] [class*="border-white"] {
   border-color: rgba(0, 0, 0, 0.12) !important;
@@ -396,84 +277,6 @@ html.theme-custom[data-mode="light"] [class*="bg-[#071817]"] {
 /* 浅色：首页其它硬编码深色底也转浅 */
 html.theme-custom[data-mode="light"] [class*="bg-[#0c1719]"] {
   background: #f4f7f6 !important;
-}
-
-/* 浅色：Hero 卡也转为浅色沉浸视觉（深字 + 浅遮罩 + 隐藏背景图），
-   使首页所有板块都统一为白色 */
-html.theme-custom[data-mode="light"] .theme-hero-card {
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  background: rgba(255, 255, 255, 0.6) !important;
-  box-shadow: 0 20px 60px -30px rgba(0, 0, 0, 0.25) !important;
-}
-/* 隐藏 Hero 卡内部的背景大图（浅色模式不要图片） */
-html.theme-custom[data-mode="light"] .theme-hero-card img {
-  opacity: 0 !important;
-}
-html.theme-custom[data-mode="light"] .theme-hero-card .gold-draw {
-  opacity: 0.5 !important;
-}
-html.theme-custom[data-mode="light"] .theme-hero-card .theme-hero-overlay-x,
-html.theme-custom[data-mode="light"] .theme-hero-card > div[class*="absolute"] {
-  background-image: linear-gradient(
-    to right,
-    color-mix(in srgb, #ffffff 55%, transparent),
-    color-mix(in srgb, #f4f7f6 30%, transparent),
-    transparent
-  ) !important;
-}
-html.theme-custom[data-mode="light"] .theme-hero-card .theme-hero-overlay-y {
-  background-image: linear-gradient(
-    to top,
-    color-mix(in srgb, #ffffff 45%, transparent),
-    transparent 55%,
-    color-mix(in srgb, #f4f7f6 20%, transparent)
-  ) !important;
-}
-html.theme-custom[data-mode="light"] .theme-hero-card .theme-hero-glow {
-  background-color: color-mix(in srgb, var(--tp-primary) 16%, transparent) !important;
-}
-html.theme-custom[data-mode="light"] .theme-hero-card [class*="text-white"] {
-  color: #161616 !important;
-}
-html.theme-custom[data-mode="light"] .theme-hero-card [class*="text-white/"] {
-  color: rgba(22, 22, 22, 0.78) !important;
-}
-html.theme-custom[data-mode="light"] .theme-hero-card [class*="bg-black"] {
-  background-color: rgba(255, 255, 255, 0.72) !important;
-}
-
-/* 浅色：AI 泰语老师 promo Hero 卡（thai-teacher）也转白、隐藏背景大图 */
-html.theme-custom[data-mode="light"] .theme-teacher-card {
-  background: rgba(255, 253, 250, 0.92) !important;
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  box-shadow: 0 30px 90px -40px rgba(0, 0, 0, 0.25) !important;
-  backdrop-filter: none !important;
-}
-html.theme-custom[data-mode="light"] .theme-teacher-card img[src*="thai-teacher-bg"] {
-  opacity: 0 !important;
-}
-/* 浅色：Hero 内深绿渐变遮罩转浅色 */
-html.theme-custom[data-mode="light"] .theme-teacher-card > div[class*="bg-gradient-to-t from-[#061513]"] {
-  background-image: linear-gradient(
-    to top,
-    rgba(255, 255, 255, 0.55),
-    rgba(255, 255, 255, 0.25),
-    rgba(255, 255, 255, 0.4)
-  ) !important;
-}
-/* 浅色：AI 老师名、气泡文字转深色可读 */
-html.theme-custom[data-mode="light"] .theme-teacher-card [class*="text-white"] {
-  color: #161616 !important;
-}
-html.theme-custom[data-mode="light"] .theme-teacher-card [class*="text-white/"] {
-  color: rgba(22, 22, 22, 0.78) !important;
-}
-html.theme-custom[data-mode="light"] .theme-teacher-card [class*="bg-white/"] {
-  background-color: rgba(255, 255, 255, 0.85) !important;
-}
-/* 浅色：AI 老师卡片内的 emerald 在线状态徽章转主题主色 */
-html.theme-custom[data-mode="light"] .theme-teacher-card {
-  color: #161616;
 }
 
 /* 浅色：premium-glass 卡转白底深字 */
@@ -498,36 +301,76 @@ html.theme-custom[data-mode="light"] .gold-gradient-text {
 
 /* 深色：白色系维持原样（不额外处理） */
 /* ============================================================
-   浅色模式：照片英雄区（佛像首页 / World Hero Band / 学习星系场景）
+   浅色模式：照片英雄区（佛像首页 / World Hero Band）
    ------------------------------------------------------------
-   这两个板块背后是同一张真实照片，不是页面底色，所以「白字 → 深字」
-   那套批量重映射在这里是错的：深字压在暗照片上根本读不出来（实测截图上
-   「欢迎回来，我的学习伙伴」几乎看不见）。所以这里开一个例外：
+   浅色模式下这张照片不再是「青黑陶瓷 + 傍晚」，而是白瓷浮雕
+   （public/images/thai-guardian-hero-light*）。于是原来那套「深字压在
+   暗照片上读不出来」的例外全部反转：
 
-     · 文案块（.world-scene-copy）保持浅色字 + 更强投影
-     · HUD 药丸、状态牌、底部提示继续走「黑底 → 白卡」重映射 ——
-       白卡浮在照片上本来就很清楚，正是浅色模式想要的样子
-     · 其余硬编码深底（bg-[#050807] 等）转白卡
+     · 文案块（.world-scene-copy）回到常规重映射 —— 浅色底上就是墨字，
+       投影只会在白瓷上变成脏边，所以整个撤掉
+     · 主体不再提亮（原来的 brightness(1.28) 是给暗照片补光，
+       压在白瓷上会直接过曝）
+     · HUD 药丸、状态牌继续走「黑底 → 白卡」重映射
      · 带子底缘的融色改成融回页面底色，浅色下不能再出现一条黑边
    ============================================================ */
 
 /*
- * 文案块：浅色模式仍然用浅色字（它背后的表面是照片）。
- * 但按钮要排除在外：文案块里的次级按钮是 bg-black/40 + text-white/xx，
- * 浅色模式下底色会被翻成白卡 —— 再把字强行改回白色就是白底白字（实测
- * 「回到佛像大厅」几乎看不见）。排除后按钮自己拿回深字，照片上的标题
- * 与正文继续用浅字。
+ * 主体明暗：两张素材的曝光需求相反，所以滤镜按模式分开给，且只在这个文件里给一次。
+ *
+ * 它们以前写在 index.css 的 `.world-scene-subject` / `.world-scene-dof` 里，
+ * 特异性 (0,1,0) 输给了垫片那条 `html[data-visual-mode] img[alt=""] { filter: none }`
+ * （(0,2,2)，而且垫片在文件更后面）—— 两张图都带 `alt=""`，于是
+ * **深色下佛像一直没补光、景深层也从未模糊**（静默失效了很久）。
+ * 这里带上 `html.theme-custom[data-mode=...]` 前缀（(0,3,1)）接管它们。
  */
-html.theme-custom[data-mode="light"] .world-scene-copy [class*="text-white"]:not(button) {
-  color: #ffffff !important;
+html.theme-custom[data-mode="light"] .world-scene-subject {
+  /* 白瓷浮雕只需要一点点对比，不要再补光 */
+  filter: brightness(1.02) contrast(1.03) saturate(0.98);
 }
-html.theme-custom[data-mode="light"] .world-scene-copy [class*="text-white/"]:not(button) {
-  color: rgba(255, 255, 255, 0.86) !important;
+html.theme-custom[data-mode="dark"] .world-scene-subject {
+  /* 青黑陶瓷 + 傍晚本来就暗，补回一点亮度，否则叠上压暗层就看不见了 */
+  filter: brightness(1.28) contrast(1.05) saturate(1.04);
 }
+/* 景深层：同一张图的外圈，模糊后才能把清晰的那一层衬出来 */
+html.theme-custom[data-mode="dark"] .world-scene-dof {
+  filter: blur(11px) saturate(1.05) brightness(0.9);
+}
+html.theme-custom[data-mode="light"] .world-scene-dof {
+  /* 浅色不压暗：白瓷上落一点灰就变成脏晕，只做模糊 */
+  filter: blur(11px) saturate(1.02);
+}
+@media (min-width: 1100px) {
+  /* 桌面用的是离线合成的宽幅图，本身已是电影调色，补得轻一点 */
+  html.theme-custom[data-mode="dark"] .world-scene-subject {
+    filter: brightness(1.12) contrast(1.04) saturate(1.04);
+  }
+}
+
+/*
+ * 取景：浅色竖幅是「绕佛像裁的 2:3」竖图（不是原来那张竖幅原图），
+ * 所以窄屏取景从 42% 8%（把佛像挪到画面中部）改回居中偏上；
+ * 各页自己的 --hero-focus 是给深色图调的，浅色下同样以佛脸为准。
+ */
 html.theme-custom[data-mode="light"] .world-scene-copy {
-  text-shadow:
-    0 2px 18px rgba(0, 0, 0, 0.8),
-    0 1px 4px rgba(0, 0, 0, 0.6);
+  text-shadow: none;
+}
+
+html.theme-custom[data-mode="light"] .world-scene-subject,
+html.theme-custom[data-mode="light"] .world-band-subject {
+  object-position: 50% 34%;
+}
+
+/* 左侧那条压暗渐变是给暗照片上的白字垫底的；白瓷底上它只会变成一块脏斑 */
+html.theme-custom[data-mode="light"] .world-scene-shade-r,
+html.theme-custom[data-mode="light"] .world-band-shade-r {
+  background: none;
+}
+
+@media (min-width: 1100px) {
+  html.theme-custom[data-mode="light"] .world-scene .world-band-subject {
+    object-position: 50% 46%;
+  }
 }
 
 /* 世界组件里的硬编码深底（GuardianScene 的回复面板、场景根节点等）转白卡 */
@@ -619,7 +462,7 @@ html[data-visual-mode] .tp-surface {
   box-shadow: var(--tp-shadow);
 }
 
-/* ---------- 4. 图片处理：四个世界绝不能共用同一套滤镜 ---------- */
+/* ---------- 4. 图片处理：两个世界各自的滤镜 ---------- */
 html[data-visual-mode] img:not([data-no-theme-filter]) {
   filter: var(--tp-img-filter);
   transition: filter 380ms var(--tp-anim-ease, ease);
@@ -666,51 +509,19 @@ html[data-visual-mode="paper"] body::before {
   opacity: calc(var(--tp-texture-opacity) * 0.5);
 }
 
-/* FOREST：山雾（两层很淡的横向渐变，缓慢漂移） */
-html[data-visual-mode="forest"] body::before {
-  background-image:
-    linear-gradient(180deg, rgba(180, 205, 185, 0.07), transparent 42%),
-    linear-gradient(180deg, transparent 58%, rgba(120, 160, 130, 0.09)),
-    radial-gradient(90% 50% at 30% 100%, rgba(78, 122, 94, 0.12), transparent 70%);
-  animation: tp-mist 42s ease-in-out infinite alternate;
-}
-@keyframes tp-mist {
-  from { background-position: 0 0, 0 0, 0 0; transform: translateX(-1.2%); }
-  to   { background-position: 3% 1%, -3% -1%, 2% 0; transform: translateX(1.2%); }
-}
-
-/* MODERN：极淡网格，理性、结构化 */
-html[data-visual-mode="modern"] body::before {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 56px 56px;
-}
-
-/* 减弱动效：关掉雾气漂移 */
-@media (prefers-reduced-motion: reduce) {
-  html[data-visual-mode="forest"] body::before { animation: none; }
-}
-
-/* ---------- 6. 动画速度：四个世界各自的节奏 ---------- */
+/* ---------- 6. 动画速度：世界各自的节奏 ---------- */
 html[data-visual-mode] .tp-anim,
 html[data-visual-mode] .transition-all,
 html[data-visual-mode] .transition-colors {
   transition-duration: var(--tp-anim);
   transition-timing-function: var(--tp-anim-ease);
 }
-/* MODERN 要"快而准"：微交互更短 */
-html[data-visual-mode="modern"] button,
-html[data-visual-mode="modern"] a {
-  transition-duration: calc(var(--tp-anim) * 0.6);
-}
 /* PAPER 几乎静止：不做位移类动效 */
-html[data-visual-mode="paper"] .tp-parallax,
 html[data-visual-mode="paper"] .thai-ambient-foreground {
   display: none;
 }
 
-/* ---------- 7. 密度：PAPER 留白更多，MODERN 更紧凑 ---------- */
+/* ---------- 7. 密度：PAPER 留白更多 ---------- */
 html[data-visual-mode] .tp-density {
   padding: calc(1rem * var(--tp-density));
 }
@@ -722,7 +533,6 @@ html[data-visual-mode] .tp-density {
   html[data-visual-mode] .premium-glass-strong {
     backdrop-filter: blur(calc(var(--tp-blur) * 0.5));
   }
-  html[data-visual-mode="forest"] body::before { animation: none; }
 }
 
 /* ============================================================
@@ -860,4 +670,124 @@ html[data-visual-mode] .apple-mobile-tabbar {
   background: var(--tp-shell-bg) !important;
   border-top-color: var(--tp-shell-border) !important;
   box-shadow: var(--tp-shell-shadow-up) !important;
+}
+
+/* ---------- 顶部一级导航（Gooey Nav） ----------
+   条体与选中块的颜色只在这里给出（组件不自己写颜色，见
+   src/components/ui/gooey-nav.jsx 头部）——
+   深色 = 与侧栏同族的墨绿黑 + 泰金选中块；浅色 = 纸面 + 深金选中块。
+   选中块的文字色必须跟着选中块走（金底写深字、深金底写浅字），
+   同一个白字不可能在两端都读得出来。 */
+html.theme-custom {
+  --gv-bar: rgba(6, 14, 12, 0.94);
+  --gv-bar-ink: rgba(242, 239, 230, 0.66);
+  --gv-active: #d4a44a;
+  --gv-active-ink: #12160e;
+}
+html.theme-custom[data-mode="light"] {
+  --gv-bar: #fffdf8;
+  --gv-bar-ink: rgba(36, 31, 23, 0.62);
+  /* 比纸本强调色（#9a7b2e）深一档：那一档配纸白字只有 3.94:1，没过 AA。
+     实测这一档是 5.4:1，色调仍在同一个金系里。 */
+  --gv-active: #7e6220;
+  --gv-active-ink: #fffdf8;
+}
+
+/* 阴影用 drop-shadow 而不是 box-shadow：
+   条体是「若干块 + 缝里的颈线」拼出来的，box-shadow 会照出每块的方框，
+   drop-shadow 跟的是合成后的真实轮廓（含被抬起的选中块）。 */
+.gooey-nav {
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.38));
+}
+html.theme-custom[data-mode="light"] .gooey-nav {
+  filter: drop-shadow(0 6px 14px rgba(60, 48, 30, 0.16));
+}
+
+.gooey-nav .gv-bar {
+  background-color: var(--gv-bar);
+  /* 同时作为 currentColor 的兜底：颈线渐变的两端也可能落在普通块上 */
+  color: var(--gv-bar);
+}
+.gooey-nav .gv-active {
+  background-color: var(--gv-active);
+  color: var(--gv-active);
+}
+.gooey-nav .gv-label {
+  color: var(--gv-bar-ink);
+}
+.gooey-nav .gv-active .gv-label {
+  color: var(--gv-active-ink);
+}
+.gooey-nav .gv-stop-bar {
+  stop-color: var(--gv-bar);
+}
+.gooey-nav .gv-stop-active {
+  stop-color: var(--gv-active);
+}
+
+/* ============================================================
+   Transitions.dev — Accordion（手风琴展开过渡）
+   ------------------------------------------------------------ */
+/* 来源：https://transitions.dev/transitions/accordion/（Jakub Antalik，
+   MIT）。运动令牌（--acc-*）暴露成 CSS 变量，可直接调；圆角/阴影/
+   头部字号等外观仍由各组件的既有样式负责，这里只管运动本身。 */
+/* Transitions.dev — Accordion expand (https://transitions.dev/transitions/accordion/) */
+:root {
+  --acc-expand: 250ms;
+  --acc-collapse: 250ms;
+  --acc-chevron: 250ms;
+  --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* grid-template-rows 0fr → 1fr gives a clean height animation
+with no JS measurement; the inner element clips overflow. */
+.t-acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+
+.t-acc[data-open="true"] .t-acc-panel {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+
+.t-acc-panel-inner {
+  overflow: hidden;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity var(--acc-collapse) var(--acc-ease),
+    filter var(--acc-collapse) var(--acc-ease);
+}
+
+.t-acc[data-open="true"] .t-acc-panel-inner {
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity var(--acc-expand) var(--acc-ease),
+    filter var(--acc-expand) var(--acc-ease);
+}
+
+/* Flip the chevron vertically to turn the "v" into a "^".
+scaleY(-1) about the centre passes through a flat line at
+the midpoint (same look as a \`d:\` path morph) but animates
+in every browser, unlike CSS \`d:\` morphing (Chromium only). */
+.t-acc-chevron {
+  display: inline-flex;
+  transform: scaleY(1);
+  transform-origin: center;
+  transition: transform var(--acc-chevron) var(--acc-ease);
+}
+
+.t-acc-chevron path { vector-effect: non-scaling-stroke; }
+
+.t-acc[data-open="true"] .t-acc-chevron {
+  transform: scaleY(-1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-acc-panel, .t-acc-panel-inner, .t-acc-chevron {
+    transition: none !important;
+  }
 }

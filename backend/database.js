@@ -491,6 +491,29 @@ db.serialize(() => {
   `);
 
   // ================================
+  // 「学 · AI 定制新课」今日课程表
+  // 一天一用户一行（PRIMARY KEY user_id + lesson_date）：
+  //   lesson_json 存整节课（topic/goal/tip/nextTopic/vocab/sentences/exercise），
+  //   done_count  记已练完的例句数（恢复时显示「接着上次练」）。
+  // sessionStorage 只做标签页内交接，这里才是刷新 / 换设备后还能
+  // 回访的持久层（泰国时区日期，与新闻/配额同一套归档口径）。
+  // ================================
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS today_lessons (
+      user_id     INTEGER NOT NULL,
+      lesson_date TEXT NOT NULL,
+      lesson_json TEXT NOT NULL,
+      done_count  INTEGER DEFAULT 0,
+      source      TEXT DEFAULT 'learn-loop',
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, lesson_date),
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )
+  `);
+
+  // ================================
   // 用户消息通知表
   //（真实消息中心：VIP 到期 / 激活、学习事件等）
   // ================================

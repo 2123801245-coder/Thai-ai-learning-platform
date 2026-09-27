@@ -36,8 +36,7 @@ import {
   getQuotaSettings,
   updateQuotaSettings,
 } from "@/lib/quotaSettings";
-import AppearanceSettings from "@/components/theme/AppearanceSettings";
-import ThemeGallery from "@/components/theme/ThemeGallery";
+import ThemeToggle from "@/components/motion/theme-toggle";
 
 const sections = [
   {
@@ -106,7 +105,7 @@ function VipInfoPanel() {
         </div>
 
         <span className="rounded-full border border-yellow-300/20 bg-yellow-300/[0.08] px-2 py-0.5 text-[9px] font-semibold text-yellow-200/70">
-          解锁全部进阶内容
+          全部课程 · 无限练习
         </span>
       </div>
 
@@ -594,14 +593,20 @@ export default function Settings() {
         </p>
       </motion.div>
 
-      {/* 视觉世界（四个世界的大型 Preview）—— 放在最前面，先选世界再微调 */}
-      <section className="premium-glass rounded-2xl p-4 sm:p-5">
-        <ThemeGallery />
+      {/* 主题：深色 / 浅色（其余预设、世界、字体、圆角等已下线） */}
+      <section className="premium-glass flex items-center justify-between gap-4 rounded-2xl p-4 sm:p-5">
+        <div>
+          <div className="text-sm font-semibold text-white/85">主题</div>
+          <div className="mt-1 text-[11px] text-white/35">
+            深色是夜里的泰国，浅色是白瓷与纸本。点右侧按钮即刻切换。
+          </div>
+        </div>
+        <ThemeToggle
+          start="top-right"
+          className="shrink-0 rounded-xl border border-white/10 bg-white/[0.05] p-2.5 transition hover:border-emerald-300/30 hover:bg-white/[0.08]"
+          iconClassName="h-4 w-4 text-emerald-300/80"
+        />
       </section>
-
-      {/* 外观与主题（Theme Studio）：世界选定后的细粒度微调 */}
-
-      <AppearanceSettings />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <button type="button" onClick={() => navigate("/plan")} className="premium-glass card-lift flex items-center justify-between rounded-2xl p-4 text-left">

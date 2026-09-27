@@ -6,6 +6,7 @@
 import React, { useRef } from "react";
 import { motion } from "framer-motion";
 import { Download, Share2, Trophy, BookOpen, MessageCircle, User, Calendar, Star, Sparkles } from "lucide-react";
+import { absoluteUrl } from "@/lib/siteUrl";
 
 export default function SceneCertificate({
   sceneTitle,
@@ -63,7 +64,15 @@ export default function SceneCertificate({
           text:
             shareText ||
             `我在 ThaiAI 完成了「${sceneTitle}」场景对话！学习了 ${vocabLearned} 个词汇，完成了 ${stagesComplete} 轮对话。🎭`,
-          url: window.location.href,
+          /* 分享出去的必须是**别人打得开的公开落地页**：
+             原本发的是 window.location.href（当前站内页），收件人未登录
+             会被 RootRoute 弹回登录页，等于什么也没看到。带上情景与战果，
+             落地页就能说清「谁分享了什么」。 */
+          url: absoluteUrl(
+            `/share?scene=${encodeURIComponent(sceneTitle)}${
+              vocabLearned ? `&vocab=${vocabLearned}` : ""
+            }${stagesComplete ? `&stages=${stagesComplete}` : ""}`
+          ),
         });
       } else {
         handleDownload();

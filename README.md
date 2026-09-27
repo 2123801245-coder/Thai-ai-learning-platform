@@ -110,6 +110,28 @@ VITE_API_BASE_URL=https://api.thaiai.app npm run build
 
 （`/api`、`/uploads`、`/videos`、`/subtitles` 均基于该地址推导。）
 
+### 分享卡片必须配置站点域名
+
+微信 / Twitter 的抓取器**不执行 JS，也不会替我们补域名** —— 相对路径的
+`og:image` 分享出去就是一张空图。所以站点对外地址必须由环境给定：
+
+```bash
+VITE_SITE_URL=https://thai-ai.online npm run build
+```
+
+它会填进 `index.html` 的 `%SITE_URL%` 占位符，并在构建末尾让
+`scripts/build-share-pages.mjs` 为公开落地页各生成一份带自己卡片的静态 HTML：
+
+| 路由 | 卡片 |
+|---|---|
+| `/` | `brand/og-image.png`（品牌版） |
+| `/login` | `brand/og-scene.png`（产品场景版） |
+| `/share` | `brand/og-scene.png`（分享落地） |
+| `/thai-landing` | `brand/og-image.png` |
+
+未配置时构建会打警告，且分享卡片退化为相对路径（本机开发不影响页面）。
+产品场景版卡片由 `npm run og:scene` 生成（SVG 源 + 系统光栅化 + 自检）。
+
 ### 生产环境必须配置的环境变量
 
 | 变量 | 说明 |
@@ -141,14 +163,13 @@ curl -s 'localhost:3001/api/ai/status?probe=1' | jq .probe
 
 ### ThaiAI World（沉浸式首页 · 3D 世界）
 
-首页不是课程列表，而是一个空间化世界。四层结构，全部由**现有数据**推导
+首页不是课程列表，而是一个空间化世界。各层结构全部由**现有数据**推导
 （映射层 `src/lib/worldData.js`，不新增任何学习数据源）：
 
 | 空间 | 组件 | 数据来源 | 技术 |
 |---|---|---|---|
 | 英雄区 · AI 守护者 | `components/world/WorldHero.jsx` | 等级/画像/进度 | R3F + three.js（懒加载） |
-| AI 泰语教室 | `components/world/AITeacherSpace.jsx` | 学习记录 + 今日任务 + AI 推荐 | Canvas 2D 声波 |
-| 学习星系 | `components/world/LearningGalaxy.jsx` | `generateLearningPath(profile)` 的真实阶段 | R3F + three.js（懒加载） |
+| AI 泰语教室 | `components/world/AITeacherSpace.jsx` | 学习记录 + 今日任务（`useDailyMissions`）+ 今日对话额度（`/ai/teacher/quota`） | Canvas 2D 声波 |
 | 泰语技能树 | `components/world/SkillTree.jsx` | `estimateAbilities(progress)` 六维能力 | SVG + Framer Motion |
 | 数字博物馆 | `components/world/DigitalMuseum.jsx` | `thaiCulture.js` + `mediaLessons.js` + 媒体学习记录 | CSS 3D 透视 |
 
@@ -309,6 +330,22 @@ Gitee `main` 为保护分支：仅仓库管理员可推送、不可删除。镜�
 因此正常发布不受影响；但若 GitHub 侧发生**历史重写**（force push / rebase 已发布提交），
 镜像的强制推送会被保护规则拦下 —— 此时需要临时调整保护设置，或改用非强制推送。
 
+## 泰语字幕流水线（离线 ASR）
+
+课程音视频 → 泰语 + 中文双语 VTT，供播放器直接加载（`subtitleUrlTh` / `subtitleUrl`）：
+
+```bash
+python3 scripts/thai_asr_subtitles.py 课程音频.mp4 --id lesson-01          # 默认用 .env 里的 Azure 语音密钥
+python3 scripts/thai_asr_subtitles.py 课程音频.mp4 --id lesson-01 --dry-run # 先看不写文件
+python3 scripts/test_thai_asr_subtitles.py                                  # 离线自测（不消耗额度）
+```
+
+- 产物默认写到 `backend/subtitles/`（`<id>.th.vtt`、`<id>.zh.vtt`、`<id>.bilingual.srt`、`<id>.report.json`）。
+- 引擎可换：`--engine azure|openai|qwen3|mock`（自建 Qwen3-ASR / whisper.cpp 见 `docs/字幕流水线.md`）。
+- **输出是「可校对草稿」不是成品**：实测已知脚本 CER ≈ 22%，字母名称、声调符号最易错，
+  上架前请对着 `<id>.bilingual.srt` 过一遍。
+- 细节、参数、实测数据与许可注意事项见 **[`docs/字幕流水线.md`](docs/字幕流水线.md)**。
+
 ## 常见问题
 
 | 现象 | 处理 |
@@ -317,3 +354,13 @@ Gitee `main` 为保护分支：仅仓库管理员可推送、不可删除。镜�
 | 课文音频无法播放 | 查 `/lessons/audio/**` 的 `Content-Type` 是否为 `audio/*`（nginx 配置随发布同步） |
 | 部署失败但站点正常 | 发布脚本验证未过会自动回滚，站点留在上一版；看 Actions 日志或服务器 `/var/log/thaiai-deploy.log` |
 | WebHook 没触发发布 | `systemctl status thaiai-webhook`、`journalctl -u thaiai-webhook -n 50` |
+
+## 第三方组件
+
+部分动效组件来自 [Rare UI](https://www.rareui.com)（MIT + Commons Clause，要求保留署名与回链）：
+
+| 组件 | 文件 | 来源 |
+|---|---|---|
+| Gooey Nav（桌面顶部一级导航） | `src/components/ui/gooey-nav.jsx` | https://www.rareui.com/components/gooeynav |
+
+这些文件内的版权与署名注释请勿删除；改动本项目适配部分时一并说明差异。

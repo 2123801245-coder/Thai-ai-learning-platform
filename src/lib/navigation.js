@@ -23,6 +23,9 @@
 //   flag      功能开关名（src/lib/features.js），关掉时两端一起消失
 //   tabs      true = 出现在移动端底部栏
 //   more      true = 进「更多」二级页（移动端），桌面端进「更多」分组
+//   short     紧凑标签：桌面顶部一级导航（药丸条）用它，长标签会把整条撑宽
+//   parent    上一级菜单项的 id（六个一级入口没有）。navTrail 靠它爬出层级，
+//             面包屑与「一级导航该高亮哪一项」都用这条链，不再各判一遍
 //
 // 注意：**路由不会因为这里没列出而被删掉**。没列出的旧路径由 App.jsx 的
 // 兼容路由接管（例如 /speaking-practice → /speaking），保持不变。
@@ -76,6 +79,7 @@ export const navItems = [
   {
     id: "home",
     name: "首页",
+    short: "首页",
     path: "/",
     icon: Home,
     group: "today",
@@ -88,12 +92,14 @@ export const navItems = [
     path: "/loop",
     icon: Target,
     group: "today",
+    parent: "home",
     tabs: true,
     desc: "学 · 练 · 测 · 复习",
   },
   {
     id: "conversation",
     name: "AI 对话室",
+    short: "AI 老师",
     path: "/conversation",
     icon: MessageCircle,
     group: "today",
@@ -108,6 +114,7 @@ export const navItems = [
     path: "/universe",
     icon: Orbit,
     group: "today",
+    parent: "home",
     match: ["/universe"],
     desc: "技能树 · 博物馆 · 成就卡 · 能力评估",
   },
@@ -116,6 +123,7 @@ export const navItems = [
   {
     id: "course",
     name: "课程学习",
+    short: "学习",
     path: "/course",
     icon: BookOpen,
     group: "content",
@@ -129,6 +137,7 @@ export const navItems = [
     path: "/lessons",
     icon: BookOpenText,
     group: "content",
+    parent: "course",
     badge: "vip",
     match: ["/lessons"],
   },
@@ -138,12 +147,14 @@ export const navItems = [
     path: "/media",
     icon: Film,
     group: "content",
+    parent: "culture-universe",
     match: ["/media"],
     desc: "泰剧 · 歌曲 · 综艺 · 新闻",
   },
   {
     id: "culture-universe",
     name: "文化宇宙",
+    short: "探索",
     path: "/culture-universe",
     icon: Globe2,
     group: "content",
@@ -156,8 +167,27 @@ export const navItems = [
     path: "/corpus",
     icon: BookOpenText,
     group: "content",
+    parent: "culture-universe",
     match: ["/corpus"],
     desc: "逐句精读本地语料",
+  },
+  /* 语料库下的两个深层页：不进任何菜单（hidden），但必须在导航树里有名有父，
+     否则面包屑爬到「本地语料库」就断了，用户看不出自己在第几层。 */
+  {
+    id: "corpus-listening",
+    name: "新闻听力",
+    path: "/corpus/listening",
+    group: "content",
+    parent: "corpus",
+    hidden: true,
+  },
+  {
+    id: "corpus-read",
+    name: "新闻精读",
+    path: "/corpus/read",
+    group: "content",
+    parent: "corpus",
+    hidden: true,
   },
 
   /* ═══ 更多：工具、进阶与设置 ═══ */
@@ -167,6 +197,7 @@ export const navItems = [
     path: "/vocabulary",
     icon: Languages,
     group: "more",
+    parent: "practice",
     tabs: true,
     match: ["/vocab-match", "/sentence-fill", "/word-segment"],
     desc: "词书 · 配对 · 填空 · 分词",
@@ -177,6 +208,7 @@ export const navItems = [
     path: "/speaking",
     icon: Mic,
     group: "more",
+    parent: "conversation",
     badge: "partial",
     match: ["/speaking", "/speaking-practice"],
     desc: "四维评分与发音反馈",
@@ -184,6 +216,7 @@ export const navItems = [
   {
     id: "practice",
     name: "练习中心",
+    short: "练习",
     path: "/practice",
     icon: Dumbbell,
     group: "more",
@@ -195,6 +228,7 @@ export const navItems = [
     path: "/plan",
     icon: Compass,
     group: "more",
+    parent: "profile",
     match: ["/plan"],
     desc: "学习计划与打卡",
   },
@@ -204,6 +238,7 @@ export const navItems = [
     path: "/alphabet",
     icon: SpellCheck,
     group: "more",
+    parent: "course",
   },
   {
     id: "culture",
@@ -211,6 +246,7 @@ export const navItems = [
     path: "/culture",
     icon: Landmark,
     group: "more",
+    parent: "culture-universe",
     match: ["/culture"],
   },
   /* 挑战赛 / 错题本：路由保留，但不再各自占一个侧边栏条目——
@@ -222,6 +258,7 @@ export const navItems = [
     path: "/challenges",
     icon: Trophy,
     group: "more",
+    parent: "practice",
     hidden: true,
   },
   {
@@ -230,6 +267,7 @@ export const navItems = [
     path: "/wrong-notebook",
     icon: BookOpenText,
     group: "more",
+    parent: "practice",
     hidden: true,
   },
   {
@@ -238,6 +276,7 @@ export const navItems = [
     path: "/professional",
     icon: Briefcase,
     group: "more",
+    parent: "course",
     match: ["/professional"],
   },
   {
@@ -246,6 +285,7 @@ export const navItems = [
     path: "/ranking",
     icon: Trophy,
     group: "more",
+    parent: "profile",
     match: ["/ranking"],
   },
   {
@@ -254,6 +294,7 @@ export const navItems = [
        移动端没有侧边栏，缺了它用户到不了个人中心。 */
     id: "profile",
     name: "我的",
+    short: "我的",
     path: "/profile",
     icon: User,
     group: "more",
@@ -268,7 +309,16 @@ export const navItems = [
     path: "/settings",
     icon: Settings,
     group: "more",
+    parent: "profile",
     match: ["/settings", "/profile", "/admin"],
+  },
+  {
+    id: "admin-codes",
+    name: "兑换码",
+    path: "/admin/codes",
+    group: "more",
+    parent: "settings",
+    hidden: true,
   },
 ];
 
@@ -279,10 +329,33 @@ export function visibleNavItems(isFlagOn = () => true) {
   return navItems.filter((item) => (item.flag ? isFlagOn(item.flag) : true));
 }
 
-/** 桌面侧边栏：全部非 hidden 项，按分组 */
+/*
+ * 桌面顶部一级导航的六个入口，顺序即渲染顺序。
+ *
+ * 这是「一级导航只保留六项」的唯一落点：落地页 / 学习 / AI 老师 / 练习 /
+ * 探索 / 我的。其余十几个功能不再各占一个一级入口，由侧边栏分组与页内
+ * 二级导航承载（见 desktopNav 的排除逻辑）。
+ */
+export const PRIMARY_NAV_IDS = [
+  "home",
+  "course",
+  "conversation",
+  "practice",
+  "culture-universe",
+  "profile",
+];
+
+/** 桌面顶部一级导航：六个入口，按 PRIMARY_NAV_IDS 的顺序 */
+export function primaryNav(isFlagOn = () => true) {
+  return PRIMARY_NAV_IDS.map((id) => navItems.find((item) => item.id === id))
+    .filter(Boolean)
+    .filter((item) => (item.flag ? isFlagOn(item.flag) : true));
+}
+
+/** 桌面侧边栏：全部非 hidden 项，按分组。已是顶部一级入口的不再重复列出 */
 export function desktopNav(isFlagOn) {
   const items = visibleNavItems(isFlagOn).filter(
-    (item) => !item.hidden && !item.mobileOnly
+    (item) => !item.hidden && !item.mobileOnly && !PRIMARY_NAV_IDS.includes(item.id)
   );
   return navGroups
     .map((group) => ({
@@ -326,6 +399,36 @@ export function findNavItem(pathname, search = "") {
   }
 
   return null;
+}
+
+/**
+ * 当前路径的层级链，根 → 叶（例如 /corpus/listening → 探索 › 本地语料库 › 新闻听力）。
+ *
+ * 与 findNavItem 的分工：findNavItem 回答「这是哪一项」，navTrail 回答
+ * 「它在哪一层、上面还有谁」。面包屑按它渲染，一级导航按它的根节点高亮。
+ */
+export function navTrail(pathname, search = "") {
+  const chain = [];
+  let cursor = findNavItem(pathname, search);
+
+  /* parent 写错（指向不存在的 id）时到此为止，不静默跑到别的条目上 */
+  while (cursor && !chain.some((item) => item.id === cursor.id)) {
+    chain.unshift(cursor);
+    cursor = cursor.parent
+      ? navItems.find((item) => item.id === cursor.parent)
+      : null;
+  }
+
+  return chain;
+}
+
+/**
+ * 当前路径属于哪个一级入口（六个入口之一），不属于任何入口时返回 null。
+ * 二级页面靠它让顶部一级导航指出「你在这一层」。
+ */
+export function sectionOf(pathname, search = "") {
+  const root = navTrail(pathname, search)[0];
+  return root && PRIMARY_NAV_IDS.includes(root.id) ? root : null;
 }
 
 /** 旧路径 → 新路径（统一在路由层做 301，别让每页自己判断） */

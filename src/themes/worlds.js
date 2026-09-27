@@ -17,26 +17,18 @@
 // 组件只读 Token，不写 `if (theme === 'paper')` —— 世界之间怎么差，
 // 全部由这里的数值 + theme.css 里的 `[data-visual-mode="..."]` 决定。
 //
-// 保留旧预设：老用户的 localStorage 里可能存着 emerald / royal / ...
-// 直接删掉会让他们的主题回落到默认值。旧 id 在新体系里映射到最近的
-// 世界（见 LEGACY_WORLD_MAP），不动他们的既有选择。
+// 现在只剩两个世界：midnight（深色）与 paper（浅色）。
+// ThemeContext 用 mode 二选一，用户没有别的选择项 —— 曾经的 forest / modern
+// 与 6 套颜色预设、字体、圆角、玻璃、背景氛围等自定义维度已下线。
 
 /* =========================================================
-   四个世界
+   两个世界
 ========================================================= */
 
 export const WORLDS = {
   midnight: {
-    id: "midnight",
     visualMode: "midnight",
-    name: "Midnight Thai",
-    nameCn: "夜泰国",
-    tagline: "Deep night · Emerald · Gold",
-    taglineCn: "深夜 · 翡翠 · 金光",
-    style: "Cinematic · Luxury · Immersive",
     base: "dark",
-    /* 预览卡用的三个代表色（Theme Gallery 直接读它画缩略图） */
-    swatch: ["#050807", "#3fae7a", "#d4a44a"],
     colors: {
       primary: "#3FAE7A",
       secondary: "#1F6B52",
@@ -45,7 +37,6 @@ export const WORLDS = {
       surface: "rgba(255, 255, 255, 0.05)",
       text: "#F2EFE6",
     },
-    lightColors: null,
     /* 形态语言：这些数字是"世界感"的真正来源 */
     form: {
       /* 外壳（侧边栏 / 手机底栏）：比页面更深一档，配祖母绿细边与深投影 */
@@ -77,7 +68,6 @@ export const WORLDS = {
       density: "1",
       anim: "1",
       animEase: "cubic-bezier(0.22, 0.61, 0.36, 1)",
-      texture: "stars",
       textureOpacity: "0.5",
       imageFilter: "saturate(0.72) contrast(1.12) brightness(0.86)",
       fontDisplay: '"Inter", ui-sans-serif, system-ui, sans-serif',
@@ -88,15 +78,8 @@ export const WORLDS = {
   },
 
   paper: {
-    id: "paper",
     visualMode: "paper",
-    name: "Paper Thai",
-    nameCn: "纸本泰国",
-    tagline: "Editorial · Paper · Heritage",
-    taglineCn: "编辑 · 纸张 · 人文",
-    style: "Book · Museum · Academic",
     base: "light",
-    swatch: ["#F6F1E6", "#3A4A3C", "#9A7B2E"],
     colors: {
       primary: "#3A4A3C",
       secondary: "#5C6B54",
@@ -105,7 +88,6 @@ export const WORLDS = {
       surface: "rgba(255, 255, 255, 0.72)",
       text: "#241F17",
     },
-    lightColors: null,
     form: {
       /* 外壳：书封 / 环衬色 —— 比纸面略深，与书页形成"封套-内页"的关系 */
       shellBg: "linear-gradient(180deg, #F2EBDC 0%, #EDE5D3 100%)",
@@ -139,7 +121,6 @@ export const WORLDS = {
       density: "1.12",
       anim: "2.2",
       animEase: "ease-out",
-      texture: "grain",
       textureOpacity: "0.35",
       imageFilter: "sepia(0.22) saturate(0.86) contrast(0.96) brightness(1.04)",
       fontDisplay: '"Noto Serif Thai", "Chonburi", Georgia, "Times New Roman", serif',
@@ -149,156 +130,7 @@ export const WORLDS = {
     },
   },
 
-  forest: {
-    id: "forest",
-    visualMode: "forest",
-    name: "Forest Thai",
-    nameCn: "林间泰国",
-    tagline: "Chiang Mai · Mist · Nature",
-    taglineCn: "清迈 · 薄雾 · 自然",
-    style: "Lanna · Calm · Long-session",
-    base: "dark",
-    swatch: ["#0C1613", "#4E7A5E", "#C7B48A"],
-    colors: {
-      primary: "#6FA37F",
-      secondary: "#3D6B5C",
-      accent: "#C7B48A",
-      background: "#0C1613",
-      surface: "rgba(233, 240, 232, 0.055)",
-      text: "#E8EFE7",
-    },
-    lightColors: null,
-    form: {
-      /* 外壳：山林夜色，比页面更深更绿 */
-      shellBg: "rgba(7, 17, 13, 0.93)",
-      shellBorder: "rgba(111, 163, 127, 0.16)",
-      shellShadow: "20px 0 60px rgba(2, 8, 5, 0.5)",
-      shellShadowUp: "0 -12px 32px rgba(2, 8, 5, 0.5)",
-      /* 表面：自然绿玻璃，内高光更淡（山林不用锐利反光） */
-      surfaceBg: "linear-gradient(150deg, rgba(233,240,232,.072), rgba(233,240,232,.030) 60%, rgba(199,180,138,.020))",
-      surfaceBgStrong:
-        "linear-gradient(150deg, rgba(233,240,232,.098), rgba(233,240,232,.042) 60%, rgba(199,180,138,.028))",
-      surfaceInset: "inset 0 1px 0 rgba(233,240,232,.075)",
-      surfaceInsetStrong: "inset 0 1px 0 rgba(233,240,232,.11)",
-      hairline: "rgba(233,240,232,.125)",
-      selectionBg: "rgba(111,163,127,.28)",
-      scrollThumb: "rgba(233,240,232,.13)",
-      focusRing: "rgba(111,163,127,.5)",
-      radiusSm: "8px",
-      radiusMd: "14px",
-      radiusLg: "18px",
-      borderWidth: "1px",
-      borderAlpha: "0.11",
-      shadow: "0 16px 40px -22px rgba(4, 12, 9, 0.8)",
-      shadowSoft: "0 5px 18px -12px rgba(4, 12, 9, 0.65)",
-      shadowDeep: "0 34px 74px -32px rgba(4, 12, 9, 0.9)",
-      glow: "rgba(111, 163, 127, 0.18)",
-      glowAccent: "rgba(199, 180, 138, 0.16)",
-      blur: "14px",
-      density: "1.05",
-      /* 更慢：山林节奏 */
-      anim: "1.45",
-      animEase: "cubic-bezier(0.33, 0.02, 0.28, 1)",
-      texture: "mist",
-      textureOpacity: "0.42",
-      /* 低对比、偏绿的自然色 */
-      imageFilter: "saturate(0.78) contrast(0.92) brightness(0.92) hue-rotate(-6deg)",
-      fontDisplay: '"Inter", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif',
-      fontBody: '"Noto Sans Thai", ui-sans-serif, system-ui, sans-serif',
-      fontDisplayWeight: "400",
-      fontDisplayTracking: "-0.005em",
-    },
-  },
-
-  modern: {
-    id: "modern",
-    visualMode: "modern",
-    name: "Modern Thai",
-    nameCn: "现代泰国",
-    tagline: "Bangkok · AI · Professional",
-    taglineCn: "曼谷 · AI · 专业",
-    style: "Rational · Precise · Analytical",
-    base: "dark",
-    swatch: ["#0E1114", "#2FB08A", "#D8B45E"],
-    colors: {
-      primary: "#2FB08A",
-      secondary: "#2A6E7E",
-      accent: "#D8B45E",
-      background: "#0E1114",
-      surface: "rgba(255, 255, 255, 0.045)",
-      text: "#EDF1F2",
-    },
-    lightColors: null,
-    form: {
-      /* 外壳：石墨面板 + 清晰边界（专业软件的语气） */
-      shellBg: "rgba(12, 15, 18, 0.95)",
-      shellBorder: "rgba(255, 255, 255, 0.12)",
-      shellShadow: "20px 0 56px rgba(0, 0, 0, 0.5)",
-      shellShadowUp: "0 -12px 30px rgba(0, 0, 0, 0.5)",
-      /* 表面：克制的冷色面板 + 清晰边框（专业软件的语气，不要玻璃感） */
-      surfaceBg: "linear-gradient(180deg, rgba(255,255,255,.058), rgba(255,255,255,.028))",
-      surfaceBgStrong: "linear-gradient(180deg, rgba(255,255,255,.082), rgba(255,255,255,.036))",
-      surfaceInset: "inset 0 1px 0 rgba(255,255,255,.06)",
-      surfaceInsetStrong: "inset 0 1px 0 rgba(255,255,255,.09)",
-      hairline: "rgba(255,255,255,.15)",
-      selectionBg: "rgba(47,176,138,.28)",
-      scrollThumb: "rgba(255,255,255,.16)",
-      focusRing: "rgba(47,176,138,.6)",
-      radiusSm: "4px",
-      radiusMd: "8px",
-      radiusLg: "10px",
-      borderWidth: "1px",
-      /* 清晰边框：专业软件的语气 */
-      borderAlpha: "0.16",
-      shadow: "0 10px 26px -18px rgba(0, 0, 0, 0.8)",
-      shadowSoft: "0 3px 10px -8px rgba(0, 0, 0, 0.6)",
-      shadowDeep: "0 24px 56px -30px rgba(0, 0, 0, 0.88)",
-      glow: "rgba(47, 176, 138, 0.14)",
-      glowAccent: "rgba(216, 180, 94, 0.12)",
-      blur: "10px",
-      /* 紧凑：信息密度更高 */
-      density: "0.92",
-      /* 更快：精准的微交互 */
-      anim: "0.7",
-      animEase: "cubic-bezier(0.4, 0, 0.2, 1)",
-      texture: "grid",
-      textureOpacity: "0.3",
-      imageFilter: "saturate(1.02) contrast(1.14) brightness(0.98)",
-      fontDisplay: '"Inter", "Space Grotesk", ui-sans-serif, system-ui, sans-serif',
-      fontBody: '"Inter", ui-sans-serif, system-ui, sans-serif',
-      fontDisplayWeight: "600",
-      fontDisplayTracking: "-0.025em",
-    },
-  },
 };
-
-export const WORLD_ORDER = ["midnight", "paper", "forest", "modern"];
-
-export const DEFAULT_WORLD = "midnight";
-
-/**
- * 老主题 id → 最接近的新世界（不打断老用户的既有选择）。
- *
- * ⚠️ 这份映射在 `index.html` 的 <head> 引导脚本里**有一份副本**（防首屏闪烁，
- * 那段必须在 React 挂载前同步执行，没法 import 本模块）。
- * 两份必须保持一致，改这里就要改那里，否则老用户会闪一下。
- */
-export const LEGACY_WORLD_MAP = {
-  emerald: "midnight",
-  ocean: "midnight",
-  cyber: "modern",
-  bangkok: "modern",
-  chiangmai: "forest",
-  royal: "paper",
-};
-
-/** 把任意 id（含老 id）解析成一个世界 */
-export function resolveWorld(id) {
-  if (WORLDS[id]) return WORLDS[id];
-  const mapped = LEGACY_WORLD_MAP[id];
-  if (mapped && WORLDS[mapped]) return WORLDS[mapped];
-  return WORLDS[DEFAULT_WORLD];
-}
 
 /**
  * 生成某个世界的 CSS 变量表。
@@ -318,8 +150,6 @@ export function worldTokens(world) {
     "--tp-radius-sm": f.radiusSm,
     "--tp-radius-md": f.radiusMd,
     "--tp-radius-lg": f.radiusLg,
-    /* 旧变量名保留：大量组件已经在用 var(--tp-radius) */
-    "--tp-radius": f.radiusMd,
 
     "--tp-border-width": f.borderWidth,
     "--tp-border": dark
@@ -361,10 +191,7 @@ export function worldTokens(world) {
     "--tp-font-body": f.fontBody,
     "--tp-display-weight": f.fontDisplayWeight,
     "--tp-display-tracking": f.fontDisplayTracking,
-    /* 旧变量名保留 */
     "--tp-font-family": f.fontBody,
-    "--tp-glass": dark ? "1" : "0.6",
-    "--tp-bg-effect": f.texture,
   };
 }
 
@@ -380,8 +207,8 @@ export function worldTokens(world) {
    AA，同一亮度是不可能的。所以必须按世界给不同的值。
 
    用法：
-     const { world } = useTheme();
-     const tone = inkForWorld(planet.accent, world?.visualMode);
+     const { visualMode } = useTheme();
+     const tone = inkForWorld(planet.accent, visualMode);
 
    深色世界原样返回；paper 按比例压深到可读阈值。
    ========================================================= */

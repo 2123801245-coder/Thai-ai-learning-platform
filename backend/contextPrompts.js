@@ -32,14 +32,46 @@ export function normalizeContextOptions(options = {}) {
   return { task, tone, persona };
 }
 
-export function buildContextSystemPrompt(options = {}) {
+/*
+ * 把前端画像压成几行「学生水平摘要」。
+ * 以前这里直接把整个 profile JSON 塞进 prompt —— 字段名是英文键、
+ * 模型要自己猜哪个是等级；压成中文行之后，讲解深度才真的跟着学生走。
+ * 认不出的字段返回空串（不注入），不猜。
+ */
+export function formatLearnerBrief(profile = {}) {
+  if (!profile || typeof profile !== "object") return "";
+
+  const lines = [];
+  const name = profile.name || profile.studentName;
+  if (name) lines.push(`名字：${name}`);
+
+  const level = profile.level || profile.thaiLevel;
+  if (level) lines.push(`当前水平：${level}`);
+
+  const goals = Array.isArray(profile.goals)
+    ? profile.goals
+    : profile.learningGoal
+      ? [profile.learningGoal]
+      : [];
+  if (goals.length) lines.push(`学习目标：${goals.slice(0, 3).join("、")}`);
+
+  const interests = Array.isArray(profile.interests) ? profile.interests : [];
+  if (interests.length) lines.push(`兴趣：${interests.slice(0, 4).join("、")}`);
+
+  const weaknesses = Array.isArray(profile.weaknesses) ? profile.weaknesses : [];
+  if (weaknesses.length) lines.push(`薄弱点：${weaknesses.slice(0, 3).join("、")}`);
+
+  return lines.join("\n");
+}
+
+export function buildContextSystemPrompt(options = {}, learnerBrief = "") {
   const { task, tone, persona } = normalizeContextOptions(options);
   return `你是 ThaiAI 的 Thai Context Intelligence 专家，兼具泰语母语者、泰语教师、本地化顾问和文化解释者的职责。
 
 本次任务：${TASK_LABELS[task]}
 目标语气：${TONE_LABELS[tone]}
 观察视角：${PERSONA_LABELS[persona]}
-
+${learnerBrief ? `\n【学生水平】\n${learnerBrief}\n按这个水平决定讲解深度：入门阶段多用中文和罗马音、少堆语法术语、句子给短一点；中高阶可以多讲语气、语域与关系差异。\n` : ""}
 核心原则：
 - 不只给字典翻译，要解释泰国人什么时候说、对谁说、听起来是什么感觉。
 - 严格区分“语法正确”“自然”“适合当前关系”；不能把正确等同于地道。

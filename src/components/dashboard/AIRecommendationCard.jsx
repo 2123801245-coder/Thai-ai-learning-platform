@@ -21,6 +21,8 @@ import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 import { courses, getLessonHref, getCourseLessons } from "@/data/courses";
+import { heroArt } from "@/components/world/heroArt";
+import { useTheme } from "@/lib/ThemeContext";
 import { getCourseStats } from "@/lib/courseProgress";
 import { useUserProfile } from "@/lib/userProfile";
 import { useLearningProgress } from "@/hooks/useLearningProgress";
@@ -65,6 +67,7 @@ export default function AIRecommendationCard({ transparent = false }) {
   const navigate = useNavigate();
   const { profile } = useUserProfile();
   const { progress } = useLearningProgress();
+  const { isDark } = useTheme();
 
   const hasTest = hasPlacementProfile(profile);
   const abilities = useMemo(() => estimateAbilities(progress), [progress]);
@@ -128,7 +131,7 @@ export default function AIRecommendationCard({ transparent = false }) {
 
         <div className="mt-3 flex items-start gap-3 rounded-2xl border border-white/[0.06] bg-black/25 p-2.5">
           <img
-            src="/images/thai-guardian-hero.jpg"
+            src={heroArt(isDark).portrait}
             alt=""
             aria-hidden="true"
             className="h-[52px] w-[52px] shrink-0 rounded-xl object-cover object-[60%_10%] opacity-90"

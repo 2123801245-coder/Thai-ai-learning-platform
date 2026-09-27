@@ -337,7 +337,7 @@ function DramaWorld({ space, onBack }) {
         </section>
 
         {/* 右：AI 角色扮演 */}
-        <section className="rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#e05a8a]/[0.08] to-black/40 p-4 backdrop-blur-xl">
+        <section className="rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#e05a8a]/[0.08] to-black/40 p-4 backdrop-blur-xl" data-plate="panel">
           <h3 className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.2em] text-white/55">
             <Mic className="h-3.5 w-3.5" />
             AI 角色扮演
@@ -535,7 +535,7 @@ function MusicStudio({ space, onBack }) {
         {/* 右：表达分析 */}
         <section className="space-y-3">
           {song.grammar?.length ? (
-            <div className="rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#8a6ae0]/[0.08] to-black/40 p-4 backdrop-blur-xl">
+            <div className="rounded-3xl border border-white/[0.07] bg-gradient-to-b from-[#8a6ae0]/[0.08] to-black/40 p-4 backdrop-blur-xl" data-plate="panel">
               <h3 className="text-[12px] font-bold uppercase tracking-[0.2em] text-white/55">
                 表达分析 · 韵脚与叠词
               </h3>
@@ -877,6 +877,7 @@ function ScenarioTraining({ onBack }) {
             type="button"
             onClick={() => navigate(`/conversation?scene=${s.id}`)}
             className="group rounded-3xl border border-white/[0.08] bg-gradient-to-br from-emerald-400/[0.08] to-black/40 p-5 text-left backdrop-blur-xl transition hover:border-emerald-300/40"
+            data-plate="panel"
           >
             <p className="text-[30px]">{s.emoji}</p>
             <p className="mt-2 text-[16px] font-black text-white">{s.label}</p>
@@ -964,8 +965,11 @@ function SpacePicker({ onPick }) {
             transition={{ delay: i * 0.07 }}
             onClick={() => onPick(space.id)}
             className="group relative overflow-hidden rounded-3xl border border-white/[0.08] p-6 text-left backdrop-blur-xl transition hover:border-white/25"
+            /* 深色端走 var(--tp-bg)：深色世界等于原来的近黑，纸面世界自动变纸卡。
+               内联样式无法被主题层重映射，写死 rgba(5,8,7,0.85) 会让纸面模式下
+               卡面与全局墨色字同样是深色，标题直接看不见（实测对比度 1.1）。 */
             style={{
-              background: `linear-gradient(145deg, ${space.hue}1f 0%, rgba(5,8,7,0.85) 55%)`,
+              background: `linear-gradient(145deg, ${space.hue}1f 0%, var(--tp-bg, #050807) 55%)`,
             }}
           >
             <span
@@ -994,7 +998,10 @@ function SpacePicker({ onPick }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.28 }}
           onClick={() => onPick("scenario")}
-          className="group relative overflow-hidden rounded-3xl border border-emerald-300/20 bg-gradient-to-br from-emerald-400/[0.1] to-black/40 p-6 text-left backdrop-blur-xl transition hover:border-emerald-300/45 md:col-span-2"
+          /* 同样不能留着 to-black/40：Tailwind 的渐变停在 --tw-gradient-to 上，
+             浅色重映射只认 bg-black/* 的类名，渐变里的黑停永远不会被翻白。 */
+          className="group relative overflow-hidden rounded-3xl border border-emerald-300/20 p-6 text-left backdrop-blur-xl transition hover:border-emerald-300/45 md:col-span-2"
+          style={{ background: "linear-gradient(145deg, rgba(52,211,153,0.1) 0%, var(--tp-bg, #050807) 55%)" }}
         >
           <p className="text-[34px]">🎧</p>
           <p className="mt-2.5 text-[10px] font-bold uppercase tracking-[0.24em] text-emerald-300/70">
@@ -1028,11 +1035,16 @@ export default function CultureUniverse() {
   const space = universeSpaces.find((s) => s.id === spaceId);
 
   return (
+    /*
+     * 页面底色跟随世界：深色世界仍是近黑，纸面世界是米白。
+     * 这里必须用 var(--tp-bg) —— 内联样式任何 CSS 主题层都够不到，写死 #050807
+     * 会让纸面模式下整块内容区变成一张黑底板（文字被全局重映射成墨色后即不可读）。
+     */
     <div
       className="min-h-screen w-full px-4 pb-16 pt-6 sm:px-6"
       style={{
         background:
-          "radial-gradient(90% 60% at 50% -10%, rgba(52,211,153,0.07), transparent 60%), #050807",
+          "radial-gradient(90% 60% at 50% -10%, rgba(52,211,153,0.07), transparent 60%), var(--tp-bg, #050807)",
       }}
     >
       <div className="mx-auto max-w-[1180px]">

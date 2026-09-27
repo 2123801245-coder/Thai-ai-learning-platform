@@ -13,6 +13,36 @@
       content="AI驱动的泰语学习平台，融合视频课程、词汇、口语与AI对话。"
     />
 
+    <!--
+      分享卡片（微信 / Twitter / Facebook 等抓取）
+      ------------------------------------------------------------
+      og:image / og:url **必须**是绝对 URL：抓取器不会替我们补域名，
+      相对路径分享出去就是一张空图。%SITE_URL% 是占位符，由 vite.config.js
+      里的 thaiai-share-meta 插件按 .env 的 VITE_SITE_URL 替换（dev 与 build 都替换）。
+      下面这段还缺少「按页面区分卡片」的能力 —— 那是公开路由落地页的事，
+      由 scripts/build-share-pages.mjs 在构建末尾为 /login、/share、/thai-landing
+      各生成一份带自己标题与卡片的 HTML（nginx 的 try_files 会自动命中）。
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ThaiAI" />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta property="og:title" content="ThaiAI · Learn Thai with AI" />
+    <meta
+      property="og:description"
+      content="AI 泰语老师：对话陪练 · 文化宇宙 · 每日学习闭环，从发音到自由对话。"
+    />
+    <meta property="og:image" content="%SITE_URL%/brand/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ThaiAI · AI 泰语学习平台" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ThaiAI · Learn Thai with AI" />
+    <meta
+      name="twitter:description"
+      content="AI 泰语老师：对话陪练 · 文化宇宙 · 每日学习闭环。"
+    />
+    <meta name="twitter:image" content="%SITE_URL%/brand/og-image.png" />
+
     <meta
       name="theme-color"
       content="#061312"
@@ -20,8 +50,29 @@
 
     <link
       rel="icon"
+      type="image/png"
+      sizes="64x64"
+      href="/brand/thaiai-logo-64.png"
+    />
+    <link
+      rel="icon"
       type="image/svg+xml"
       href="/favicon.svg"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/brand/thaiai-logo-180.png"
+    />
+
+    <!-- PWA：Android/Chrome 的「添加到主屏幕」用 manifest 里的 192/512 图标；
+         iOS 只认上面的 apple-touch-icon，加上这几个 name 让独立窗口不带浏览器外壳。 -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="ThaiAI" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
     />
 
 
@@ -40,41 +91,37 @@
       不能因为读主题失败就让整个应用白屏。
     -->
     <script>
+      /*
+       * 首屏底色引导（防闪烁）。
+       *
+       * 主题只有深色/浅色两种（见 src/lib/ThemeContext.jsx），所以这里也只剩两个
+       * 值：深色 = 午夜世界 #050807，浅色 = 纸本世界 #F6F1E6。这段必须在 React
+       * 挂载前同步跑，所以没法 import 模块 —— 改 worlds.js 的 midnight/paper 底色
+       * 时，记得同步这里。
+       */
       (function () {
         try {
-          var id = localStorage.getItem("thaiAI_theme") || "midnight";
-          /*
-           * 老 id → 世界 的映射。
-           *
-           * ⚠️ 这里和 `src/themes/worlds.js` 的 LEGACY_WORLD_MAP 是**两份重复定义**。
-           * 必须同步：这段在 React 挂载前跑（防首屏闪烁），所以没法 import 模块。
-           * 一旦漂移，老用户会看到"首屏一个世界、挂载后另一个世界"的闪一下。
-           * 改任意一边，务必同时改另一边。当前两份已核对一致。
-           */
-          var legacy = {
-            emerald: "midnight", ocean: "midnight",
-            cyber: "modern", bangkok: "modern",
-            chiangmai: "forest", royal: "paper",
-          };
-          var known = { midnight: 1, paper: 1, forest: 1, modern: 1 };
-          var world = known[id] ? id : legacy[id] || "midnight";
+          var mode = localStorage.getItem("thaiAI_mode");
+          if (mode !== "dark" && mode !== "light") {
+            mode = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          }
 
-          var BG = {
-            midnight: "#050807",
-            paper: "#F6F1E6",
-            forest: "#0C1613",
-            modern: "#0E1114",
-          };
-
+          var light = mode === "light";
+          var bg = light ? "#F6F1E6" : "#050807";
           var root = document.documentElement;
-          root.setAttribute("data-visual-mode", world);
-          root.style.backgroundColor = BG[world] || BG.midnight;
+
+          root.setAttribute("data-visual-mode", light ? "paper" : "midnight");
+          root.setAttribute("data-mode", mode);
+          root.classList.toggle("dark", !light);
+          root.style.backgroundColor = bg;
 
           /* 让浏览器 UI（地址栏）也跟着变 */
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute("content", BG[world] || BG.midnight);
+          if (meta) meta.setAttribute("content", bg);
         } catch (e) {
-          /* 读不到就用默认世界，不影响任何功能 */
+          /* 读不到就用深色，不影响任何功能 */
         }
       })();
     </script>

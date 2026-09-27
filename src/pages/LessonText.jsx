@@ -20,6 +20,8 @@ import {
   Square,
   Crown,
 } from "lucide-react";
+import { usePageTrail } from "@/components/common/Breadcrumb";
+import { AccordionPanel } from "@/components/ui/accordion";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { lessons } from "@/data/courseTexts";
@@ -37,6 +39,7 @@ import Translate from "@/components/lessons/Translate";
 import { speakThai, getLocalTtsUrl, registerActiveAudio } from "@/lib/thaiSpeech";
 import { useAuth } from "@/lib/AuthContext";
 import VipPanel from "@/components/common/VipPanel";
+import { isLessonLocked } from "@/lib/entitlements";
 
 /* =========================================================
    朗读（统一泰语发音：选 voice + Google TTS 回退）
@@ -471,6 +474,9 @@ function LessonDetail({ lessonId }) {
   const index = lessons.findIndex((l) => l.id === lessonId);
   const lesson = lessons[index];
 
+  /* 层级：学习 › 课文教学（可点回列表）› 本课标题。课文名只有这里手上有 */
+  usePageTrail(lesson ? [{ label: lesson.title }] : []);
+
   const [showTranslation, setShowTranslation] = useState(false);
   const [expandedWord, setExpandedWord] = useState(null);
 
@@ -757,8 +763,11 @@ function LessonDetail({ lessonId }) {
   /* ==========================================================
      非 VIP 用户：显示锁定卡 + VipPanel
   ========================================================== */
-  // 免费试读课：与课程目录（lessonAudioCourses.free）门控一致，第一课免费
-  const isFreePreview = getLessonAudioById(lessonId)?.free === true;
+  // 试读判定统一走 @/lib/entitlements（音频图文课第一课免费，与课程目录一致）
+  const isFreePreview = !isLessonLocked({
+    lesson: getLessonAudioById(lessonId),
+    isVipUser: isVip,
+  });
 
   if (!isVip && !isFreePreview) {
     return (
@@ -1117,15 +1126,15 @@ function LessonDetail({ lessonId }) {
                     {expanded ? "收起讲解" : "词语讲解 · 用法"}
                   </button>
 
-                  <AnimatePresence>
-                    {expanded && note && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="space-y-2.5 border-t border-emerald-300/10 px-5 pb-4 pt-3 text-xs leading-relaxed">
+                  {/*
+                   * 展开收起走 transitions.dev 的手风琴过渡（grid-template-rows
+                   * 0fr↔1fr，纯 CSS）：换成高度动画后，「收起讲解」按钮不再
+                   * 随着内容卸载而消失，连点不丢帧。
+                   */}
+                  <AccordionPanel open={expanded && Boolean(note)}>
+                    <div className="space-y-2.5 border-t border-emerald-300/10 px-5 pb-4 pt-3 text-xs leading-relaxed">
+                      {note ? (
+                        <>
                           <p className="text-white/70">
                             <span className="font-semibold text-yellow-200/80">
                               讲解：
@@ -1138,10 +1147,10 @@ function LessonDetail({ lessonId }) {
                             </span>
                             {note.usage}
                           </p>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                        </>
+                      ) : null}
+                    </div>
+                  </AccordionPanel>
                 </div>
               );
             })}

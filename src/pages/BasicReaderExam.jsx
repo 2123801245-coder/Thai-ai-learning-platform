@@ -42,6 +42,7 @@ import {
   markCourseCompleted,
 } from "@/lib/courseProgress";
 import { useAuth } from "@/lib/AuthContext";
+import { usePageTrail } from "@/components/common/Breadcrumb";
 
 import VipPanel from "@/components/common/VipPanel";
 import SceneCertificate from "@/components/ai/SceneCertificate";
@@ -66,6 +67,13 @@ export default function BasicReaderExam() {
   const isVipUser = !!user?.isVip;
 
   const course = useMemo(() => getCourseById(courseId), [courseId]);
+
+  /* 层级：学习 › 课程名（可点回课程详情）› 结业测试 */
+  usePageTrail(
+    course
+      ? [{ label: course.title, to: `/course/${course.id}` }, { label: "结业测试" }]
+      : []
+  );
   const lessons = useMemo(
     () => (course ? getCourseLessons(course.id) : []),
     [course]

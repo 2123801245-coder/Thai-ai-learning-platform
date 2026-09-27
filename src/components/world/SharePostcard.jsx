@@ -194,6 +194,9 @@ export default function SharePostcard({ identity, planets = [], theme = null, cl
                   key={dataUrl.slice(-24)}
                   src={dataUrl}
                   alt="我的泰语世界成就卡"
+                  /* 成图本身是深空底（worldPostcard 画的是深色卡片），
+                     纸面模式下整幅转印成铜色印张 —— 深色世界不变 */
+                  data-plate="art"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.3 }}

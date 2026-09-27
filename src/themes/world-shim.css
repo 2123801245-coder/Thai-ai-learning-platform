@@ -11,7 +11,6 @@
 
    这一层按世界重映射这些类：
      · PAPER：白 → 墨褐，面板改成"比纸更亮的书页"
-     · FOREST / MODERN：轻微暖化/冷化，保留自身的材质语气
    MIDNIGHT 不需要覆盖（就是为它写的）。
 
    这是**过渡垫片**：组件逐个换成 `var(--tp-*)` token 之后，
@@ -87,142 +86,6 @@ html[data-visual-mode="paper"] .text-white\/90 { color: rgb(36 31 23 / 1.000); }
 html[data-visual-mode="paper"] .text-white\/92 { color: rgb(36 31 23 / 1.000); }
 html[data-visual-mode="paper"] .text-white\/95 { color: rgb(36 31 23 / 1.000); }
 html[data-visual-mode="paper"] .text-white\/\[0\.04\] { color: rgb(36 31 23 / 0.75); }
-
-/* ---------- FOREST ---------- */
-html[data-visual-mode="forest"] .bg-white\/10 { background-color: rgb(233 240 232 / 0.090); }
-html[data-visual-mode="forest"] .bg-white\/15 { background-color: rgb(233 240 232 / 0.135); }
-html[data-visual-mode="forest"] .bg-white\/20 { background-color: rgb(233 240 232 / 0.180); }
-html[data-visual-mode="forest"] .bg-white\/30 { background-color: rgb(233 240 232 / 0.200); }
-html[data-visual-mode="forest"] .bg-white\/40 { background-color: rgb(233 240 232 / 0.200); }
-html[data-visual-mode="forest"] .bg-white\/5 { background-color: rgb(233 240 232 / 0.045); }
-html[data-visual-mode="forest"] .bg-white\/80 { background-color: rgb(233 240 232 / 0.200); }
-html[data-visual-mode="forest"] .bg-white\/90 { background-color: rgb(233 240 232 / 0.200); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.015\] { background-color: rgb(233 240 232 / 0.013); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.018\] { background-color: rgb(233 240 232 / 0.016); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.025\] { background-color: rgb(233 240 232 / 0.023); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.02\] { background-color: rgb(233 240 232 / 0.018); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.035\] { background-color: rgb(233 240 232 / 0.032); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.03\] { background-color: rgb(233 240 232 / 0.027); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.045\] { background-color: rgb(233 240 232 / 0.041); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.04\] { background-color: rgb(233 240 232 / 0.036); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.055\] { background-color: rgb(233 240 232 / 0.050); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.05\] { background-color: rgb(233 240 232 / 0.045); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.06\] { background-color: rgb(233 240 232 / 0.054); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.07\] { background-color: rgb(233 240 232 / 0.063); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.08\] { background-color: rgb(233 240 232 / 0.072); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.09\] { background-color: rgb(233 240 232 / 0.081); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.10\] { background-color: rgb(233 240 232 / 0.090); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.12\] { background-color: rgb(233 240 232 / 0.108); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.14\] { background-color: rgb(233 240 232 / 0.126); }
-html[data-visual-mode="forest"] .bg-white\/\[0\.1\] { background-color: rgb(233 240 232 / 0.090); }
-html[data-visual-mode="forest"] .border-white\/10 { border-color: rgb(199 180 138 / 0.100); }
-html[data-visual-mode="forest"] .border-white\/12 { border-color: rgb(199 180 138 / 0.120); }
-html[data-visual-mode="forest"] .border-white\/15 { border-color: rgb(199 180 138 / 0.150); }
-html[data-visual-mode="forest"] .border-white\/16 { border-color: rgb(199 180 138 / 0.160); }
-html[data-visual-mode="forest"] .border-white\/20 { border-color: rgb(199 180 138 / 0.200); }
-html[data-visual-mode="forest"] .border-white\/25 { border-color: rgb(199 180 138 / 0.250); }
-html[data-visual-mode="forest"] .border-white\/30 { border-color: rgb(199 180 138 / 0.300); }
-html[data-visual-mode="forest"] .border-white\/5 { border-color: rgb(199 180 138 / 0.050); }
-html[data-visual-mode="forest"] .border-white\/\[0\.04\] { border-color: rgb(199 180 138 / 0.040); }
-html[data-visual-mode="forest"] .border-white\/\[0\.05\] { border-color: rgb(199 180 138 / 0.050); }
-html[data-visual-mode="forest"] .border-white\/\[0\.06\] { border-color: rgb(199 180 138 / 0.060); }
-html[data-visual-mode="forest"] .border-white\/\[0\.07\] { border-color: rgb(199 180 138 / 0.070); }
-html[data-visual-mode="forest"] .border-white\/\[0\.08\] { border-color: rgb(199 180 138 / 0.080); }
-html[data-visual-mode="forest"] .border-white\/\[0\.09\] { border-color: rgb(199 180 138 / 0.090); }
-html[data-visual-mode="forest"] .border-white\/\[0\.12\] { border-color: rgb(199 180 138 / 0.120); }
-html[data-visual-mode="forest"] .border-white\/\[0\.14\] { border-color: rgb(199 180 138 / 0.140); }
-html[data-visual-mode="forest"] .border-white\/\[0\.15\] { border-color: rgb(199 180 138 / 0.150); }
-html[data-visual-mode="forest"] .border-white\/\[0\.16\] { border-color: rgb(199 180 138 / 0.160); }
-html[data-visual-mode="forest"] .border-white\/\[0\.1\] { border-color: rgb(199 180 138 / 0.100); }
-html[data-visual-mode="forest"] .text-white\/10 { color: rgb(232 239 231 / 0.094); }
-html[data-visual-mode="forest"] .text-white\/15 { color: rgb(232 239 231 / 0.141); }
-html[data-visual-mode="forest"] .text-white\/20 { color: rgb(232 239 231 / 0.188); }
-html[data-visual-mode="forest"] .text-white\/25 { color: rgb(232 239 231 / 0.235); }
-html[data-visual-mode="forest"] .text-white\/30 { color: rgb(232 239 231 / 0.282); }
-html[data-visual-mode="forest"] .text-white\/35 { color: rgb(232 239 231 / 0.329); }
-html[data-visual-mode="forest"] .text-white\/38 { color: rgb(232 239 231 / 0.357); }
-html[data-visual-mode="forest"] .text-white\/40 { color: rgb(232 239 231 / 0.376); }
-html[data-visual-mode="forest"] .text-white\/45 { color: rgb(232 239 231 / 0.423); }
-html[data-visual-mode="forest"] .text-white\/50 { color: rgb(232 239 231 / 0.470); }
-html[data-visual-mode="forest"] .text-white\/55 { color: rgb(232 239 231 / 0.517); }
-html[data-visual-mode="forest"] .text-white\/60 { color: rgb(232 239 231 / 0.564); }
-html[data-visual-mode="forest"] .text-white\/65 { color: rgb(232 239 231 / 0.611); }
-html[data-visual-mode="forest"] .text-white\/70 { color: rgb(232 239 231 / 0.658); }
-html[data-visual-mode="forest"] .text-white\/75 { color: rgb(232 239 231 / 0.705); }
-html[data-visual-mode="forest"] .text-white\/80 { color: rgb(232 239 231 / 0.752); }
-html[data-visual-mode="forest"] .text-white\/85 { color: rgb(232 239 231 / 0.799); }
-html[data-visual-mode="forest"] .text-white\/90 { color: rgb(232 239 231 / 0.846); }
-html[data-visual-mode="forest"] .text-white\/92 { color: rgb(232 239 231 / 0.865); }
-html[data-visual-mode="forest"] .text-white\/95 { color: rgb(232 239 231 / 0.893); }
-html[data-visual-mode="forest"] .text-white\/\[0\.04\] { color: rgb(232 239 231 / 0.038); }
-
-/* ---------- MODERN ---------- */
-html[data-visual-mode="modern"] .bg-white\/10 { background-color: rgb(255 255 255 / 0.080); }
-html[data-visual-mode="modern"] .bg-white\/15 { background-color: rgb(255 255 255 / 0.120); }
-html[data-visual-mode="modern"] .bg-white\/20 { background-color: rgb(255 255 255 / 0.160); }
-html[data-visual-mode="modern"] .bg-white\/30 { background-color: rgb(255 255 255 / 0.160); }
-html[data-visual-mode="modern"] .bg-white\/40 { background-color: rgb(255 255 255 / 0.160); }
-html[data-visual-mode="modern"] .bg-white\/5 { background-color: rgb(255 255 255 / 0.040); }
-html[data-visual-mode="modern"] .bg-white\/80 { background-color: rgb(255 255 255 / 0.160); }
-html[data-visual-mode="modern"] .bg-white\/90 { background-color: rgb(255 255 255 / 0.160); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.015\] { background-color: rgb(255 255 255 / 0.012); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.018\] { background-color: rgb(255 255 255 / 0.014); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.025\] { background-color: rgb(255 255 255 / 0.020); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.02\] { background-color: rgb(255 255 255 / 0.016); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.035\] { background-color: rgb(255 255 255 / 0.028); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.03\] { background-color: rgb(255 255 255 / 0.024); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.045\] { background-color: rgb(255 255 255 / 0.036); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.04\] { background-color: rgb(255 255 255 / 0.032); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.055\] { background-color: rgb(255 255 255 / 0.044); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.05\] { background-color: rgb(255 255 255 / 0.040); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.06\] { background-color: rgb(255 255 255 / 0.048); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.07\] { background-color: rgb(255 255 255 / 0.056); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.08\] { background-color: rgb(255 255 255 / 0.064); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.09\] { background-color: rgb(255 255 255 / 0.072); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.10\] { background-color: rgb(255 255 255 / 0.080); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.12\] { background-color: rgb(255 255 255 / 0.096); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.14\] { background-color: rgb(255 255 255 / 0.112); }
-html[data-visual-mode="modern"] .bg-white\/\[0\.1\] { background-color: rgb(255 255 255 / 0.080); }
-html[data-visual-mode="modern"] .border-white\/10 { border-color: rgb(255 255 255 / 0.130); }
-html[data-visual-mode="modern"] .border-white\/12 { border-color: rgb(255 255 255 / 0.156); }
-html[data-visual-mode="modern"] .border-white\/15 { border-color: rgb(255 255 255 / 0.195); }
-html[data-visual-mode="modern"] .border-white\/16 { border-color: rgb(255 255 255 / 0.208); }
-html[data-visual-mode="modern"] .border-white\/20 { border-color: rgb(255 255 255 / 0.260); }
-html[data-visual-mode="modern"] .border-white\/25 { border-color: rgb(255 255 255 / 0.325); }
-html[data-visual-mode="modern"] .border-white\/30 { border-color: rgb(255 255 255 / 0.390); }
-html[data-visual-mode="modern"] .border-white\/5 { border-color: rgb(255 255 255 / 0.065); }
-html[data-visual-mode="modern"] .border-white\/\[0\.04\] { border-color: rgb(255 255 255 / 0.052); }
-html[data-visual-mode="modern"] .border-white\/\[0\.05\] { border-color: rgb(255 255 255 / 0.065); }
-html[data-visual-mode="modern"] .border-white\/\[0\.06\] { border-color: rgb(255 255 255 / 0.078); }
-html[data-visual-mode="modern"] .border-white\/\[0\.07\] { border-color: rgb(255 255 255 / 0.091); }
-html[data-visual-mode="modern"] .border-white\/\[0\.08\] { border-color: rgb(255 255 255 / 0.104); }
-html[data-visual-mode="modern"] .border-white\/\[0\.09\] { border-color: rgb(255 255 255 / 0.117); }
-html[data-visual-mode="modern"] .border-white\/\[0\.12\] { border-color: rgb(255 255 255 / 0.156); }
-html[data-visual-mode="modern"] .border-white\/\[0\.14\] { border-color: rgb(255 255 255 / 0.182); }
-html[data-visual-mode="modern"] .border-white\/\[0\.15\] { border-color: rgb(255 255 255 / 0.195); }
-html[data-visual-mode="modern"] .border-white\/\[0\.16\] { border-color: rgb(255 255 255 / 0.208); }
-html[data-visual-mode="modern"] .border-white\/\[0\.1\] { border-color: rgb(255 255 255 / 0.130); }
-html[data-visual-mode="modern"] .text-white\/10 { color: rgb(237 241 242 / 0.105); }
-html[data-visual-mode="modern"] .text-white\/15 { color: rgb(237 241 242 / 0.158); }
-html[data-visual-mode="modern"] .text-white\/20 { color: rgb(237 241 242 / 0.210); }
-html[data-visual-mode="modern"] .text-white\/25 { color: rgb(237 241 242 / 0.263); }
-html[data-visual-mode="modern"] .text-white\/30 { color: rgb(237 241 242 / 0.315); }
-html[data-visual-mode="modern"] .text-white\/35 { color: rgb(237 241 242 / 0.367); }
-html[data-visual-mode="modern"] .text-white\/38 { color: rgb(237 241 242 / 0.399); }
-html[data-visual-mode="modern"] .text-white\/40 { color: rgb(237 241 242 / 0.420); }
-html[data-visual-mode="modern"] .text-white\/45 { color: rgb(237 241 242 / 0.473); }
-html[data-visual-mode="modern"] .text-white\/50 { color: rgb(237 241 242 / 0.525); }
-html[data-visual-mode="modern"] .text-white\/55 { color: rgb(237 241 242 / 0.578); }
-html[data-visual-mode="modern"] .text-white\/60 { color: rgb(237 241 242 / 0.630); }
-html[data-visual-mode="modern"] .text-white\/65 { color: rgb(237 241 242 / 0.683); }
-html[data-visual-mode="modern"] .text-white\/70 { color: rgb(237 241 242 / 0.735); }
-html[data-visual-mode="modern"] .text-white\/75 { color: rgb(237 241 242 / 0.788); }
-html[data-visual-mode="modern"] .text-white\/80 { color: rgb(237 241 242 / 0.840); }
-html[data-visual-mode="modern"] .text-white\/85 { color: rgb(237 241 242 / 0.892); }
-html[data-visual-mode="modern"] .text-white\/90 { color: rgb(237 241 242 / 0.945); }
-html[data-visual-mode="modern"] .text-white\/92 { color: rgb(237 241 242 / 0.966); }
-html[data-visual-mode="modern"] .text-white\/95 { color: rgb(237 241 242 / 0.997); }
-html[data-visual-mode="modern"] .text-white\/\[0\.04\] { color: rgb(237 241 242 / 0.042); }
 
 /* ============================================================
    页面底色与前景色交给视觉世界
@@ -330,10 +193,10 @@ html[data-visual-mode="paper"] .bg-black\/\[0\.18\] { background-color: rgb(74 6
 /* ============================================================
    shadcn 语义 token 跟随视觉世界
    ------------------------------------------------------------
-   问题：ThemeContext 里 `forceLight` 依赖 `THEMES[themeId].base`，但
-   paper/forest/modern 是**世界 id**，不在 THEMES 里 → preset 为 undefined
-   → forceLight=false → data-mode 回落成 "dark"、<html> 恒带 .dark 类。
-   实测确认（三个页面一致）：PAPER 下 `class="dark theme-custom" data-mode="dark"`。
+   问题（当时）：图案层的深浅与 data-mode 曾经会错位，浅色的 PAPER 世界
+   拿到了 data-mode="dark"，于是 <html> 恒带 .dark 类。
+   现在 ThemeContext 用同一个 isDark 同时决定 .dark / data-mode / data-visual-mode，
+   不会再有这种组合。
 
    后果：全站约 30 处 `bg-background` / `text-foreground` / `bg-card` /
    `text-muted-foreground` / `border-border` 这类 shadcn 工具类，在浅色的
@@ -382,42 +245,6 @@ html[data-visual-mode="paper"] {
   --ring: 43 54% 39%;
 }
 
-/* ---------- forest ---------- */
-html[data-visual-mode="forest"] {
-  --background: 162 29% 7%;
-  --foreground: 113 20% 92%;
-  --card: 155 24% 10%;
-  --card-foreground: 113 20% 92%;
-  --popover: 155 24% 10%;
-  --popover-foreground: 113 20% 92%;
-  --muted: 150 24% 13%;
-  --muted-foreground: 137 11% 63%;
-  --border: 147 21% 21%;
-  --input: 147 21% 21%;
-  --primary: 138 22% 54%;
-  --secondary: 160 27% 33%;
-  --accent: 41 35% 66%;
-  --ring: 41 35% 66%;
-}
-
-/* ---------- modern ---------- */
-html[data-visual-mode="modern"] {
-  --background: 210 18% 7%;
-  --foreground: 192 16% 94%;
-  --card: 206 14% 10%;
-  --card-foreground: 192 16% 94%;
-  --popover: 206 14% 10%;
-  --popover-foreground: 192 16% 94%;
-  --muted: 207 13% 13%;
-  --muted-foreground: 199 10% 61%;
-  --border: 205 12% 19%;
-  --input: 205 12% 19%;
-  --primary: 162 58% 44%;
-  --secondary: 191 50% 33%;
-  --accent: 42 61% 61%;
-  --ring: 42 61% 61%;
-}
-
 /* ============================================================
    PAPER · 浅色强调文字在纸面上的可读性
    ------------------------------------------------------------
@@ -430,7 +257,7 @@ html[data-visual-mode="modern"] {
    这里按"同色系深色"重映射：保留色相（仍然读得出这是强调色），
    只把明度压到纸上可读。档位越浅压得越狠。
 
-   同样只作用于 paper；forest / modern / midnight 是深色底，浅色文字本来就对。
+   同样只作用于 paper；midnight 是深色底，浅色文字本来就对。
    ============================================================ */
 
 html[data-visual-mode="paper"] .text-cyan-200 { color: rgb(19 98 111); }
@@ -660,24 +487,12 @@ html[data-visual-mode="paper"] .placeholder\:text-white\/40::placeholder { color
    保留"层次感"（越不重要越淡），但把**下限**拉到仍可辨认的程度。
    PAPER 由 world-shim.css 单独处理（那里是反方向：压深）。
    ============================================================ */
-html[data-visual-mode="midnight"] .text-white\/15,
-html[data-visual-mode="forest"] .text-white\/15,
-html[data-visual-mode="modern"] .text-white\/15 { color: rgb(255 255 255 / 0.26); }
-html[data-visual-mode="midnight"] .hover\:text-white\/15,
-html[data-visual-mode="forest"] .hover\:text-white\/15,
-html[data-visual-mode="modern"] .hover\:text-white\/15 { color: rgb(255 255 255 / 0.44); }
-html[data-visual-mode="midnight"] .text-white\/20,
-html[data-visual-mode="forest"] .text-white\/20,
-html[data-visual-mode="modern"] .text-white\/20 { color: rgb(255 255 255 / 0.34); }
-html[data-visual-mode="midnight"] .hover\:text-white\/20,
-html[data-visual-mode="forest"] .hover\:text-white\/20,
-html[data-visual-mode="modern"] .hover\:text-white\/20 { color: rgb(255 255 255 / 0.52); }
-html[data-visual-mode="midnight"] .text-white\/25,
-html[data-visual-mode="forest"] .text-white\/25,
-html[data-visual-mode="modern"] .text-white\/25 { color: rgb(255 255 255 / 0.4); }
-html[data-visual-mode="midnight"] .hover\:text-white\/25,
-html[data-visual-mode="forest"] .hover\:text-white\/25,
-html[data-visual-mode="modern"] .hover\:text-white\/25 { color: rgb(255 255 255 / 0.58); }
+html[data-visual-mode="midnight"] .hover\:text-white\/15 { color: rgb(255 255 255 / 0.44); }
+html[data-visual-mode="midnight"] .hover\:text-white\/20 { color: rgb(255 255 255 / 0.52); }
+html[data-visual-mode="midnight"] .hover\:text-white\/25 { color: rgb(255 255 255 / 0.58); }
+html[data-visual-mode="midnight"] .text-white\/15 { color: rgb(255 255 255 / 0.26); }
+html[data-visual-mode="midnight"] .text-white\/20 { color: rgb(255 255 255 / 0.34); }
+html[data-visual-mode="midnight"] .text-white\/25 { color: rgb(255 255 255 / 0.4); }
 
 /* ------------------------------------------------------------
    PAPER · 最淡几档文字的下限（与深色世界对称的处理）
@@ -691,17 +506,22 @@ html[data-visual-mode="modern"] .hover\:text-white\/25 { color: rgb(255 255 255 
      /15 → 0.46   /20 → 0.50   /25 → 0.54
    （深色世界对应档位已在上面用白色抬升到 0.26 / 0.34 / 0.40，
      纸面需要更实一点的墨色，因为浅底上的低透明度衰减更明显。）
+   ------------------------------------------------------------
+   为什么要这么高的特异性：theme.css 的浅色重映射层
+   `html.theme-custom[data-mode="light"] [class*="text-white"]`
+   是 (0,3,0)+!important，实测压过一切特异性更低的 !important 规则
+   （包括 (0,2,1)）。这里用 html 上的两个真实属性（data-visual-mode
+   与 data-mode 同页共存，见 ThemeContext）凑出 (0,3,1)+important 胜出 ——
+   不用双写同属性、不用子串选择器（[class*="text-white/15"] 会误伤
+   text-white/150 这类不存在的类）。
    ------------------------------------------------------------ */
-html[data-visual-mode="paper"][data-visual-mode="paper"] .text-white\/15,
-html[data-visual-mode="paper"][data-visual-mode="paper"] [class*="text-white/15"] { color: rgb(36 31 23 / 0.75) !important; }
-html[data-visual-mode="paper"][data-visual-mode="paper"] .text-white\/20,
-html[data-visual-mode="paper"][data-visual-mode="paper"] [class*="text-white/20"] { color: rgb(36 31 23 / 0.75) !important; }
-html[data-visual-mode="paper"][data-visual-mode="paper"] .text-white\/25,
-html[data-visual-mode="paper"][data-visual-mode="paper"] [class*="text-white/25"] { color: rgb(36 31 23 / 0.75) !important; }
+html[data-visual-mode="paper"][data-mode] .text-white\/15 { color: rgb(36 31 23 / 0.46) !important; }
+html[data-visual-mode="paper"][data-mode] .text-white\/20 { color: rgb(36 31 23 / 0.50) !important; }
+html[data-visual-mode="paper"][data-mode] .text-white\/25 { color: rgb(36 31 23 / 0.54) !important; }
 
-/* 悬停态不要反而更淡 */
-html[data-visual-mode="paper"] .group:hover .group-hover\:text-white\/15,
-html[data-visual-mode="paper"] [class*="group-hover:text-white/"] { color: rgb(36 31 23 / 0.75); }
+/* 悬停态不要反而更淡：沿同一梯度给相邻档（/15 悬停 → 0.50，/20 悬停 → 0.54） */
+html[data-visual-mode="paper"][data-mode] .group:hover .group-hover\:text-white\/15 { color: rgb(36 31 23 / 0.50) !important; }
+html[data-visual-mode="paper"][data-mode] .group:hover .group-hover\:text-white\/20 { color: rgb(36 31 23 / 0.54) !important; }
 
 /* ------------------------------------------------------------
    PAPER · 强调文字的低透明度必须同时抬升
@@ -749,6 +569,59 @@ html[data-visual-mode="paper"] .text-yellow-300\/50 { color: rgb(144 106 19 / 84
 html[data-visual-mode="paper"] .text-yellow-300\/60 { color: rgb(144 106 19 / 88); }
 html[data-visual-mode="paper"] .text-yellow-300\/\[0\.05\] { color: rgb(144 106 19 / 0.92); }
 
+/* ============================================================
+   PAPER · 深色图幅的「转印张」通用规则（data-plate）
+   ------------------------------------------------------------
+   背景：探险者地图那类资产是「深色底画」（夜景地图、深空成图、
+   程序化黑玻璃面板），直接落在米白纸上就是一块黑板。此前只在
+   culture-paper.css 里给 .exp-map 写过一次性反相，这里把它提升为
+   **全站通用机制**：任何深色资产挂上 data-plate 即自动转纸。
+
+   三种标记，对应三类不同的处理：
+     data-plate="art"    实心深色图幅（img/canvas 成图）—— 整幅反相
+                         （invert + hue-rotate 180°，底变纸白、金线变铜线），
+                         再轻度去饱和对齐印刷感。只用于「一张图」。
+     data-plate="scrim"  压在图上的半透明深色遮罩/渐变 —— 反相没有意义
+                         （半透明黑变半透明白 ≈ 无效），直接退掉，露出浅色底。
+     data-plate="panel"  装着文字/emoji 的深色玻璃面板 —— 不反相（会连
+                         内容一起反色），把深底换成纸面色，文字交给
+                         既有 text-white 重映射变墨字。
+
+   两条硬规则：
+     · 只挂在「深色世界下的深色资产」上；浅色资产（白瓷佛像、石雕球）
+       **不要挂**，否则会被错误反相。
+     · 所有规则都带 html[data-visual-mode="paper"] 前缀，midnight
+       匹配不到任何声明 = 惰性，深色世界零变化。
+   ============================================================ */
+
+/* —— ① 实心深色图幅：整幅转印张 ——
+   双写属性抬到 (0,3,1)：theme.css 的
+   `html[data-visual-mode] img:not([data-no-theme-filter])` 是 (0,2,2)，
+   单写会输给它 —— 图幅只会拿到世界的 sepia 滤镜，转印不生效。 */
+html[data-visual-mode="paper"] [data-plate="art"][data-plate="art"] {
+  filter: invert(1) hue-rotate(180deg) saturate(0.85) contrast(1.04);
+}
+
+/* —— ② 半透明深色遮罩/渐变：退掉，露出纸底 ——
+   特异性 (0,2,0)+!important：要赢过元素上的内联 style（DigitalMuseum
+   的展厅环境光/暗角是 style={{ background }}），只能用 !important。 */
+html[data-visual-mode="paper"] [data-plate="scrim"] {
+  background: none !important;
+}
+
+/* —— ③ 深色玻璃面板：深底 → 纸面色 ——
+   用 --tp-surface-bg（纸面世界的卡片底 token），不用写死色值；
+   边框交给各世界自己的 token，不在此层重画。 */
+html[data-visual-mode="paper"] [data-plate="panel"] {
+  background: var(--tp-surface-bg, #FFFCF5);
+}
+
+/* 小字标签内联黑底（星球的「今日」徽章）：底转纸面后，里面的字
+   还是 inline style 的浅强调色 —— 用 shim 既有结论：同色系压深。 */
+html[data-visual-mode="paper"] [data-plate="panel"] {
+  color: rgb(36 31 23);
+}
+
 /* ------------------------------------------------------------
    深色世界 · /30 与 /35 档位（最后一批）
    ------------------------------------------------------------
@@ -759,14 +632,8 @@ html[data-visual-mode="paper"] .text-yellow-300\/\[0\.05\] { color: rgb(144 106 
    这里各抬 0.14：/30 → 0.44、/35 → 0.49。仍然明显弱于正文白字
    （/70、/80），层次感保留，只是不再"糊在背景里"。
    ------------------------------------------------------------ */
-html[data-visual-mode="midnight"] .text-white\/30,
-html[data-visual-mode="forest"] .text-white\/30,
-html[data-visual-mode="modern"] .text-white\/30 { color: rgb(255 255 255 / 0.44); }
 
-html[data-visual-mode="midnight"] .text-white\/35,
-html[data-visual-mode="forest"] .text-white\/35,
-html[data-visual-mode="modern"] .text-white\/35 { color: rgb(255 255 255 / 0.49); }
+html[data-visual-mode="midnight"] .hover\:text-white\/30:hover { color: rgb(255 255 255 / 0.62); }
+html[data-visual-mode="midnight"] .text-white\/30 { color: rgb(255 255 255 / 0.44); }
 
-html[data-visual-mode="midnight"] .hover\:text-white\/30:hover,
-html[data-visual-mode="forest"] .hover\:text-white\/30:hover,
-html[data-visual-mode="modern"] .hover\:text-white\/30:hover { color: rgb(255 255 255 / 0.62); }
+html[data-visual-mode="midnight"] .text-white\/35 { color: rgb(255 255 255 / 0.49); }

@@ -16,7 +16,8 @@ import {
   FileText,
   Puzzle,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { AccordionPanel } from "@/components/ui/accordion";
 
 import { preloadThaiAudio } from "@/lib/audioManager";
 import { getLocalTtsUrl } from "@/lib/thaiSpeech";
@@ -739,25 +740,9 @@ export default function Vocabulary() {
 
           </button>
 
-          <AnimatePresence>
-            {showFilters && (
-              <motion.div
-                initial={{
-                  height: 0,
-                  opacity: 0,
-                }}
-                animate={{
-                  height: "auto",
-                  opacity: 1,
-                }}
-                exit={{
-                  height: 0,
-                  opacity: 0,
-                }}
-                className="border-t border-white/[0.06]"
-              >
+          <AccordionPanel open={showFilters} className="border-t border-white/[0.06]">
 
-                <div className="space-y-4 p-4">
+            <div className="space-y-4 p-4">
 
                   <FilterRow label="词书">
                     {books.map((item) => (
@@ -810,11 +795,9 @@ export default function Vocabulary() {
                     </button>
                   )}
 
-                </div>
+            </div>
 
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </AccordionPanel>
 
         </div>
 

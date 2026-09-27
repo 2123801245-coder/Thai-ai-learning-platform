@@ -22,6 +22,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { tmpdir } from "os";
 import { join } from "path";
+import { existsSync } from "fs";
 import { readFile, unlink, writeFile } from "fs/promises";
 import WebSocket from "ws";
 
@@ -41,6 +42,38 @@ const WSS_URL =
 // 注意：Edge 服务端只接受 MP3 格式（其他格式一律 1007 拒绝）；
 // 96kbps 是稳定且质量较好的选择，48kHz 格式连接不稳定。
 const OUTPUT_FORMAT = "audio-24khz-96kbitrate-mono-mp3";
+
+// 转换器路径：绝不能只写 "ffmpeg" 依赖 PATH。后端常由 GUI/nohup/服务脚本
+// 启动，PATH 可能只有 /usr/bin:/bin（实测本机就是这样）——那样 ffmpeg 会 ENOENT，
+// 转换静默失败后直接返回未限幅的原始 Edge MP3（听感发燥、且响应头写着 wav）。
+const AFCONVERT_BIN = "/usr/bin/afconvert"; // macOS 系统自带，绝对路径最稳
+const FFMPEG_CANDIDATES = [
+  process.env.FFMPEG_PATH,
+  "/opt/homebrew/bin/ffmpeg", // Apple Silicon Homebrew
+  "/usr/local/bin/ffmpeg", // Intel Homebrew
+  "/usr/bin/ffmpeg",
+].filter(Boolean);
+
+function resolveFfmpeg() {
+  for (const p of FFMPEG_CANDIDATES) {
+    if (existsSync(p)) return p;
+  }
+  return "ffmpeg"; // 都不在 → 交给 PATH（Docker 镜像里装的就是这种）
+}
+
+// 转换结果有效性校验：必须是真的 RIFF/WAV 且能定位到 PCM 数据块。
+// afconvert 偶发写出不可用文件、ffmpeg 被 SIGKILL 等情况都靠这一步拦住。
+function isUsableWav(buf) {
+  return (
+    buf &&
+    buf.length > 1024 &&
+    buf[0] === 0x52 && // R
+    buf[1] === 0x49 && // I
+    buf[2] === 0x46 && // F
+    buf[3] === 0x46 && // F
+    findPcmOffset(buf) > 0
+  );
+}
 
 const MAX_TEXT_BYTES = 4096; // edge-tts 的分包上限（UTF-8 字节）
 const MAX_TOTAL_TEXT_BYTES = 12000;
@@ -272,7 +305,11 @@ async function synthesize(text, options = {}) {
   const pitchNum = Number(options.pitchNum) || 1; // say 用的数字音调（0.5~2.0）
   // engine=edge：强制走神经语音路线（跳过 say）。用于预生成课文音频等
   // 需要「与线上在线 TTS 同一声源」的场景。
-  const engine = options.engine === "edge" ? "edge" : "auto";
+  // engine=google：走谷歌翻译 TTS（必须由服务器中转，见 synthesizeWithGoogle）。
+  const engine =
+    options.engine === "edge" || options.engine === "google"
+      ? options.engine
+      : "auto";
 
   const clean = removeIncompatibleChars(String(text || ""));
   if (!clean.trim()) throw new Error("文本为空");
@@ -287,9 +324,14 @@ async function synthesize(text, options = {}) {
   //    · say 在 <155wpm 进入平读模式（实测声调起伏 CV 0.206→0.137，五声调被压扁），
   //      且 155~175wpm 字节级相同（say 自身钳制到自然语速）→ 慢速档（rate < 0.9）
   //      走 Edge prosody（-30% 真变慢且神经语音保声调）
+  // format=aac：限幅后的音频再编码成 M4A/AAC（移动端体积优化，见 convertToAac）。
+  // 默认 wav。注意：这是「所有声源共用」的后处理，say 路线也不能绕过——
+  // 否则 macOS 上 rate≥0.9 的请求会一边被前端标成 fmt=aac、一边拿到 WAV。
+  const format = options.format === "aac" ? "aac" : "wav";
+
   if (engine === "auto" && pitchNum === 1 && rateNum >= 0.9) {
     try {
-      return await synthesizeWithSay(clean, rateNum);
+      return maybeEncodeAac(await synthesizeWithSay(clean, rateNum), format);
     } catch (err) {
       console.warn("[tts] say 合成失败，回退 Edge:", err.message);
     }
@@ -299,7 +341,219 @@ async function synthesize(text, options = {}) {
     );
   }
 
-  // 2) Edge TTS 路线（备用）
+  // 2) 谷歌翻译 TTS 路线（仅显式指定时）：服务器代拉，客户端在国内也能用
+  if (engine === "google") {
+    return maybeEncodeAac(
+      await toWavWithRetry(
+        () => synthesizeWithGoogle(clean, { slow: rateNum < 0.9 }),
+        "谷歌"
+      ),
+      format
+    );
+  }
+
+  // 3) Edge 神经语音路线（默认备用）
+  return maybeEncodeAac(
+    await toWavWithRetry(() => synthesizeMp3(clean, { voice, rate, pitch }), "Edge"),
+    format
+  );
+}
+
+/* 谷歌翻译 TTS（非官方 translate_tts 接口）——只能由服务器中转。
+
+   为什么必须中转：translate.google.com / translate.googleapis.com 在大陆网络不可达，
+   浏览器直连一定失败（前端 speakThaiWithGoogle 只是历史兜底，实际命中率极低）。
+   客户端只请求我们自己的 /api/tts，由服务器去取——能否取到取决于「服务器所在网络」：
+
+   · 服务器在墙外（香港/日本等）：直连即可，用默认 base。
+   · 服务器在大陆：机房出口同样被墙，直连必然失败。此时必须把 TTS_GOOGLE_BASE
+     指向你自己的境外中转（例：TTS_GOOGLE_BASE=https://relay.example.com，
+     中转把 /translate_tts?... 原样转发给 translate.googleapis.com）。
+     没配中转时该路线会直接报错，上游会按 502 返回，不会拖垮默认路线。
+
+   另两个硬约束：① tw-ob 接口每请求只接受约 200 字符，超了直接报错，
+   这里按 180 字符切段后拼接（拼接处可能有极短的断续，长句慎用）；
+   ② 输出是 64kbps/24kHz 单声道 MP3，音质与带宽都不如 Edge 神经语音，
+   建议只当备用声源，不要当主力。 */
+const GOOGLE_TTS_MAX_CHARS = 180;
+const GOOGLE_TTS_HOSTS = ["https://translate.googleapis.com", "https://translate.google.com"];
+
+function googleTtsBases() {
+  const relay = String(process.env.TTS_GOOGLE_BASE || "").trim().replace(/\/+$/, "");
+  return relay ? [relay] : GOOGLE_TTS_HOSTS;
+}
+
+// 按 180 字符切段：优先在空格/换行处断开，避免把词切两半（泰语词间无空格，
+// 兜底硬切——Google 对任意片段都能合成，只是接缝处可能听得出停顿）
+function splitGoogleText(text) {
+  const chars = [...text];
+  const out = [];
+  let rest = chars;
+  while (rest.length > GOOGLE_TTS_MAX_CHARS) {
+    let cut = -1;
+    for (let i = GOOGLE_TTS_MAX_CHARS; i > GOOGLE_TTS_MAX_CHARS - 40 && i > 0; i -= 1) {
+      if (rest[i] === " " || rest[i] === "\n") {
+        cut = i;
+        break;
+      }
+    }
+    if (cut <= 0) cut = GOOGLE_TTS_MAX_CHARS;
+    out.push(rest.slice(0, cut).join("").trim());
+    rest = rest.slice(cut);
+  }
+  const tail = rest.join("").trim();
+  if (tail) out.push(tail);
+  return out.filter(Boolean);
+}
+
+async function synthesizeWithGoogle(text, { slow = false } = {}) {
+  const parts = splitGoogleText(text);
+  const buffers = [];
+
+  for (const part of parts) {
+    const query =
+      "?ie=UTF-8&client=tw-ob&tl=th" +
+      `&ttsspeed=${slow ? "0.24" : "1"}` +
+      `&q=${encodeURIComponent(part)}`;
+
+    let lastErr = null;
+    let got = null;
+    for (const base of googleTtsBases()) {
+      try {
+        const res = await fetch(`${base}/translate_tts${query}`, {
+          headers: { "User-Agent": USER_AGENT, Referer: "https://translate.google.com/" },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buf = Buffer.from(await res.arrayBuffer());
+        // Google 失败时会返回很短的 HTML 错误页/空体，用长度做一道粗筛
+        if (buf.length < 512) throw new Error(`返回内容过短（${buf.length}B）`);
+        got = buf;
+        break;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    if (!got) {
+      throw new Error(`谷歌 TTS 取音失败：${lastErr ? lastErr.message : "未知错误"}`);
+    }
+    buffers.push(got);
+  }
+
+  return Buffer.concat(buffers);
+}
+
+/* 把「合成 MP3」与「转 WAV + 限幅」解耦：转换失败时重新合成一次再转。
+
+   为什么需要这一层：实测 afconvert 会拒收约 1/3 的 Edge 分片流
+   （"Couldn't open input file ('dta?')"，同样长度的两份流一份能转一份不能，
+   与具体分片有关），而回退的原始 MP3 没有经过峰值限幅——听感发燥，
+   且与 WAV 采样率不同。宁可多花一次合成，也不要回退成未限幅 MP3。
+
+   极端情况下两个转换器都不行 → 返回原始 MP3，由路由层按实际字节标 audio/mpeg
+   （不能一律标 audio/wav：helmet 带 nosniff，错标 MIME 会被部分浏览器拒播）。 */
+async function toWavWithRetry(makeMp3, label) {
+  ttsStats.synthTotal += 1;
+  let mp3 = await makeMp3();
+  try {
+    return await convertToWav(mp3);
+  } catch (err) {
+    ttsStats.wavRetry += 1;
+    console.warn(
+      `[tts] ${label} 转 WAV 失败（afconvert/ffmpeg 都没产出可用 WAV），重新合成一次:`,
+      err.message
+    );
+  }
+  try {
+    mp3 = await makeMp3();
+    return await convertToWav(mp3);
+  } catch (err) {
+    ttsStats.mp3Fallback += 1;
+    console.warn(
+      `[tts] ${label} 重试后仍无法转 WAV，回退未限幅原始 MP3（按 audio/mpeg 返回）:`,
+      err.message
+    );
+    return mp3;
+  }
+}
+
+/* 把已限幅的 WAV 再编码成 M4A/AAC（48kbps 单声道）——移动端体积优化。
+
+   为什么需要：动态 TTS 返回的是 24kHz 未压缩 WAV = 48KB/s，一句话 5 秒就
+   240KB；4G/微信 WebView 里边下边播容易卡（课文音频早就为同样原因统一
+   换成 M4A/AAC 48kbps，移动端解码兼容性有现成验证）。AAC 48kbps 约 6KB/s，
+   体积降到 1/8。
+
+   顺序：先限幅（PCM 域）再编码，绝不把未限幅音频编码后发出去。
+   两个转换器都失败 → 抛错，由 maybeEncodeAac 回退返回 WAV（功能不受影响，
+   只是文件大）；极端情况下连 WAV 都没有（已是 MP3 降级）→ 直接返回 MP3。 */
+async function convertToAac(wavBuf) {
+  const tag = crypto.randomBytes(8).toString("hex");
+  const inPath = join(tmpdir(), `thaiai-aac-${tag}.wav`);
+  const outPath = join(tmpdir(), `thaiai-aac-${tag}.m4a`);
+  try {
+    await writeFile(inPath, wavBuf);
+    try {
+      await execFileAsync(
+        AFCONVERT_BIN,
+        ["-f", "m4af", "-d", "aac", "-b", "48000", inPath, outPath],
+        { timeout: 20000 }
+      );
+      const out = await readFile(outPath).catch(() => null);
+      if (!isUsableM4a(out)) throw new Error("afconvert 产出不可用");
+      return out;
+    } catch (e) {
+      console.warn("[tts] afconvert 转 AAC 失败，改用 ffmpeg:", e.message);
+    }
+    await execFileAsync(
+      resolveFfmpeg(),
+      [
+        "-y", "-i", inPath,
+        "-c:a", "aac",
+        "-b:a", "48k",
+        "-ac", "1",
+        "-movflags", "+faststart",
+        outPath,
+      ],
+      { timeout: 30000 }
+    );
+    const out = await readFile(outPath).catch(() => null);
+    if (!isUsableM4a(out)) throw new Error("ffmpeg 产出不可用");
+    return out;
+  } finally {
+    await unlink(inPath).catch(() => {});
+    await unlink(outPath).catch(() => {});
+  }
+}
+
+// M4A 粗校验：ISO-BMFF 文件第 4~8 字节是 'ftyp'（与 RIFF 的 'RIFF' 同位）
+function isUsableM4a(buf) {
+  return (
+    buf &&
+    buf.length > 512 &&
+    buf.slice(4, 8).toString("latin1") === "ftyp"
+  );
+}
+
+async function maybeEncodeAac(audio, format) {
+  if (format !== "aac") return audio;
+  // 已经是 MP3 降级（转换器全不可用）→ 没有 WAV 可编，直接返回，别把事情搞糟
+  if (!isUsableWav(audio)) return audio;
+  try {
+    const m4a = await convertToAac(audio);
+    ttsStats.aacEncoded += 1;
+    return m4a;
+  } catch (err) {
+    ttsStats.aacFailed += 1;
+    console.warn("[tts] AAC 编码失败，回退 WAV（体积大但可播）:", err.message);
+    return audio;
+  }
+}
+
+/* 把文本分包合成 Edge 神经语音，返回拼接后的 MP3。
+   内含连接级重试与 403 时钟偏移校正；提取成函数是为了在
+   「转换失败 → 重新合成一次」的重试路径里复用。 */
+async function synthesizeMp3(clean, { voice, rate, pitch }) {
   const parts = splitText(clean);
   const outputs = [];
 
@@ -328,15 +582,7 @@ async function synthesize(text, options = {}) {
     }
   }
 
-  const mp3 = Buffer.concat(outputs);
-
-  // 转成标准 PCM WAV（WebView 兼容），失败时回退返回原始 MP3
-  try {
-    return await convertToWav(mp3);
-  } catch (err) {
-    console.warn("[tts] afconvert 转 WAV 失败，回退 MP3:", err.message);
-    return mp3;
-  }
+  return Buffer.concat(outputs);
 }
 
 /* macOS `say -v Kanya` 合成泰语 → AIFF → afconvert 转标准 PCM WAV。
@@ -386,18 +632,30 @@ async function convertToWav(mp3Buffer) {
   const outPath = join(tmpdir(), `thaiai-tts-${tag}.wav`);
   try {
     await writeFile(inPath, mp3Buffer);
+    let wav = null;
     try {
       await execFileAsync(
-        "afconvert",
+        AFCONVERT_BIN,
         ["-f", "WAVE", "-d", "LEI16@24000", inPath, outPath],
         { timeout: 20000 }
       );
+      wav = await readFile(outPath).catch(() => null);
+      // afconvert 对 Edge 的分片 MP3 偶发拒收（实测约 1/3：同名同长文件一份能转
+      // 一份报 "Couldn't open input file"）——不能只看退出码，必须验证产物。
+      if (!isUsableWav(wav)) {
+        console.warn("[tts] afconvert 产出不可用（长度/魔数校验不通过），改用 ffmpeg");
+        wav = null;
+      }
     } catch (e) {
-      // afconvert 不存在（Linux 容器）或转换失败 → ffmpeg 兜底
-      // 优化参数：44.1kHz 采样率 + 轻度低通滤波去高频噪声
       console.warn("[tts] afconvert 不可用，改用 ffmpeg 转 WAV:", e.message);
+    }
+
+    if (!wav) {
+      // afconvert 不可用（Linux 容器）或产物不可用 → ffmpeg 兜底
+      // 优化参数：44.1kHz 采样率 + 轻度低通滤波去高频噪声
+      const ffmpegBin = resolveFfmpeg();
       await execFileAsync(
-        "ffmpeg",
+        ffmpegBin,
         [
           "-y", "-i", inPath,
           "-af", "lowpass=f=12000,aresample=44100",
@@ -408,8 +666,11 @@ async function convertToWav(mp3Buffer) {
         ],
         { timeout: 30000 }
       );
+      wav = await readFile(outPath).catch(() => null);
+      if (!isUsableWav(wav)) {
+        throw new Error(`音频转换失败：${ffmpegBin} 也未能产出可用 WAV`);
+      }
     }
-    const wav = await readFile(outPath);
     // Edge 的 MP3 响度极满（实测峰值 1.000、多处削波，听感发燥带“电音”），
     // 解码成 WAV 后仍会削波。这里做纯 PCM 增益衰减：峰值超过 0.80 就整体
     // 压到 0.80，消除削波爆音；峰值未超则原样返回（say 路线不受影响）。
@@ -475,6 +736,79 @@ export function ttsCacheSet(text, voice, rate, pitch, version, buf) {
     const firstKey = cache.keys().next().value;
     cache.delete(firstKey);
   }
+}
+
+// ----------------------------------------------------------------
+// 运行时能力与统计（供 GET /api/tts/health 巡检）
+// ----------------------------------------------------------------
+
+/* 各平台的退化点不一样，而退化以前都是静默的：
+   · macOS 开发机：afconvert 一定在（偶发拒收由 ffmpeg 接住）
+   · Linux 容器：没有 afconvert，全靠镜像里的 ffmpeg（缺了就直接发原始 MP3）
+   · Windows：两者都没有 → 必定发原始 MP3
+   把这些计数暴露出来，才能「全平台都搞好」而不是靠耳朵猜。 */
+export const ttsStats = {
+  synthTotal: 0, // 实际走合成+转换的次数
+  wavRetry: 0, // 首次转 WAV 失败、重新合成过的次数（>0 说明平台依赖不稳）
+  mp3Fallback: 0, // 最终只能返回未限幅原始 MP3 的次数（>0 必须查平台依赖）
+  aacEncoded: 0, // 成功编码 M4A/AAC 的次数
+  aacFailed: 0, // AAC 编码失败回退 WAV 的次数
+};
+
+function toolchainSnapshot() {
+  const ffmpegResolved = resolveFfmpeg();
+  return {
+    platform: `${process.platform}/${process.arch}`,
+    bins: {
+      afconvert: existsSync(AFCONVERT_BIN) ? AFCONVERT_BIN : null,
+      // null = 常见绝对路径都没命中，只能指望 PATH（容器内就是这种）
+      ffmpeg: ffmpegResolved === "ffmpeg" ? null : ffmpegResolved,
+      say: existsSync("/usr/bin/say") ? "/usr/bin/say" : null,
+    },
+    google: { relay: Boolean(process.env.TTS_GOOGLE_BASE) },
+    stats: { ...ttsStats },
+    cache: { size: cache.size, max: CACHE_MAX },
+  };
+}
+
+/* 平台能力快照。probe=true 时真跑一次完整链路（合成→转 WAV→限幅），
+   这样「这台机器到底行不行」不用靠猜：返回格式应为 wav，peak 应 ≤0.80。 */
+export async function getTtsHealth({ probe = false } = {}) {
+  const snapshot = toolchainSnapshot();
+  if (!probe) return snapshot;
+
+  const t0 = Date.now();
+  try {
+    const buf = await synthesize("สวัสดีครับ", {
+      engine: "edge", // 固定走 Edge：这才是生产默认声源
+      rate: "-28%",
+      rateNum: 0.72,
+      format: "wav",
+    });
+    const isWav = isUsableWav(buf);
+    let peak = null;
+    if (isWav) {
+      const start = findPcmOffset(buf);
+      let max = 0;
+      for (let i = start; i + 1 < buf.length; i += 2) {
+        const v = Math.abs(buf.readInt16LE(i));
+        if (v > max) max = v;
+      }
+      peak = Number((max / 32768).toFixed(3));
+    }
+    snapshot.live = {
+      ok: isWav,
+      ms: Date.now() - t0,
+      bytes: buf.length,
+      format: isWav ? "wav" : isUsableM4a(buf) ? "m4a" : "mp3（降级：转换器不可用）",
+      peak,
+      // 限幅目标是 0.80；>0.85 说明限幅没跑完，发出去就是发燥的原始音量
+      clipped: peak === null ? null : peak > 0.85,
+    };
+  } catch (err) {
+    snapshot.live = { ok: false, ms: Date.now() - t0, error: err.message };
+  }
+  return snapshot;
 }
 
 export { synthesize as synthesizeThai };

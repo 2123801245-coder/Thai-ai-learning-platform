@@ -250,7 +250,7 @@ export default function Register() {
             }`}
             style={{ fontFamily: "system-ui, sans-serif" }}
           >
-            创建账户，解锁全部课程、词汇、测验和AI对话功能。
+            创建账户，学习进度、词书数据与 AI 对话额度全端同步。
           </p>
 
           {/* Register form as liquid-glass card */}

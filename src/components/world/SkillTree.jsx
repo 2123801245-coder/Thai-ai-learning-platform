@@ -94,7 +94,11 @@ export default function SkillTree({ tree = [], summary = null }) {
         </p>
       </div>
 
-      <div className="relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-gradient-to-b from-emerald-950/25 via-black/45 to-black/60 px-2 py-4 sm:px-5">
+      <div
+        className="relative overflow-hidden rounded-[28px] border border-white/[0.07] bg-gradient-to-b from-emerald-950/25 via-black/45 to-black/60 px-2 py-4 sm:px-5"
+        /* 深色世界下是墨绿→黑的夜色底；纸面下转成纸面卡片底（world-shim data-plate） */
+        data-plate="panel"
+      >
         {/* 根部光晕 */}
         <div
           className="pointer-events-none absolute bottom-6 left-1/2 h-40 w-72 -translate-x-1/2 rounded-full opacity-60 blur-3xl"

@@ -45,7 +45,34 @@ function pickConversation(data) {
   };
 }
 
-export function useMentorVoice({ meterRef, sceneId, onExchange } = {}) {
+/* 定制课的对话目标：把课里的例句与生词明确交给老师，
+   让「去 AI 老师练这节课」真的落到这节课上（而不是普通闲聊） */
+function buildLessonStagePrompt(lesson) {
+  const sentences = (lesson?.sentences || [])
+    .slice(0, 3)
+    .map((s) => String(s?.th || "").trim())
+    .filter(Boolean);
+  const words = (lesson?.vocab || [])
+    .slice(0, 6)
+    .map((v) => String(v?.th || "").trim())
+    .filter(Boolean);
+
+  const bits = [];
+  if (sentences.length) bits.push(`一次一句带学生跟读这些例句：${sentences.join("；")}`);
+  if (words.length) bits.push(`尽量用上这节课的生词：${words.join("、")}`);
+  bits.push("学生说完一句就先纠正再往下带，别一次把课倒完");
+  return bits.join("。");
+}
+
+/**
+ * @param {object} [opts]
+ * @param {{ current: any }|null} [opts.meterRef] 波形电平挂载点（CSS 变量 --lvl）
+ * @param {string|null} [opts.sceneId] 情景场景 id
+ * @param {{ topic?: string, goal?: string, tip?: string, sentences?: any[], vocab?: any[] }|null} [opts.lesson]
+ *   「学 · AI 定制新课」交接过来的这节课（与 sceneId 二选一）
+ * @param {(exchange: { heard: string, reply: any }) => void} [opts.onExchange]
+ */
+export function useMentorVoice({ meterRef, sceneId, lesson, onExchange } = {}) {
   const [phase, setPhase] = useState("idle");
   const [heard, setHeard] = useState("");
   const [reply, setReply] = useState(null);
@@ -203,7 +230,18 @@ export function useMentorVoice({ meterRef, sceneId, onExchange } = {}) {
 
   /* 场景参数走 ref：start/stop 的 useCallback 依赖链不随场景切换重建 */
   const sceneRef = useRef({ meta: {}, stage: {} });
-  sceneRef.current = { meta: sceneId ? { id: sceneId } : {}, stage: {} };
+  sceneRef.current = lesson
+    ? {
+        /* 定制课当场景：后端 buildConversationSystemPrompt 读的就是这几个字段 */
+        meta: {
+          id: "custom-lesson",
+          title: lesson.topic || "AI 定制课",
+          description: lesson.goal || "",
+          sceneTip: lesson.tip || "",
+        },
+        stage: { stage: 1, prompt: buildLessonStagePrompt(lesson) },
+      }
+    : { meta: sceneId ? { id: sceneId } : {}, stage: {} };
 
   /* 卸载清理：麦克风、计时器、TTS 全部收干净 */
   useEffect(() => {

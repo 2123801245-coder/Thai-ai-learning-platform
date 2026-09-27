@@ -33,9 +33,11 @@ import {
   saveLessonPosition,
   COURSE_PROGRESS_CHANGE_EVENT,
 } from "@/lib/courseProgress";
+import { isLessonLocked } from "@/lib/entitlements";
 
 import { useAuth } from "@/lib/AuthContext";
 import VipPanel from "@/components/common/VipPanel";
+import { usePageTrail } from "@/components/common/Breadcrumb";
 
 
 // =========================================================
@@ -175,8 +177,18 @@ export default function LessonVideo() {
 
   const lesson = currentIndex >= 0 ? lessons[currentIndex] : null;
 
-  // VIP 课程锁定（免费用户不可看非试看节；VIP 用户全部解锁）
-  const locked = course.isVip && !lesson?.free && !isVipUser;
+  /* 层级：学习 › 课程名（可点回课程详情）› 本课标题 */
+  usePageTrail(
+    course
+      ? [
+          { label: course.title, to: `/course/${course.id}` },
+          ...(lesson ? [{ label: lesson.title }] : []),
+        ]
+      : []
+  );
+
+  // 课时锁定（统一规则，见 @/lib/entitlements）：免费用户仅可看试看节
+  const locked = isLessonLocked({ lesson, isVipUser });
 
 
   // =======================================================
@@ -623,7 +635,10 @@ export default function LessonVideo() {
     const canAutoNext =
       autoplayNext &&
       currentIndex < lessons.length - 1 &&
-      !(course.isVip && !lessons[currentIndex + 1].free && !isVipUser);
+      !isLessonLocked({
+        lesson: lessons[currentIndex + 1],
+        isVipUser,
+      });
 
     if (canAutoNext) {
       autoAdvanceRef.current = true;
@@ -766,8 +781,8 @@ export default function LessonVideo() {
 
     const next = lessons[currentIndex + 1];
 
-    // 下一节被锁定（VIP 未开通）
-    if (course.isVip && !next.free && !isVipUser) {
+    // 下一节被锁定（未开通 VIP）
+    if (isLessonLocked({ lesson: next, isVipUser })) {
       return;
     }
 
@@ -1377,10 +1392,11 @@ export default function LessonVideo() {
               onClick={goNext}
               disabled={
                 currentIndex >= lessons.length - 1 ||
-                (course.isVip &&
-                  lessons[currentIndex + 1] &&
-                  !lessons[currentIndex + 1].free &&
-                  !isVipUser)
+                (lessons[currentIndex + 1] &&
+                  isLessonLocked({
+                    lesson: lessons[currentIndex + 1],
+                    isVipUser,
+                  }))
               }
               className="flex items-center justify-center gap-1 rounded-xl bg-emerald-400/[0.08] px-3 py-2.5 text-xs text-emerald-200/70 transition hover:bg-emerald-400/[0.13] hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-20"
             >

@@ -87,3 +87,31 @@ docker compose -f docker-compose.prod.yml up -d --no-build backend
 > 若服务器之前用 `docker compose up -d --build`（不带 -f 指定文件）启动过，
 > 把上面的 `-f docker-compose.prod.yml` 换成 `-f docker-compose.yml` 或去掉，
 > 以实际启动命令为准（`docker compose ls` 可查当前使用哪个 compose 文件）。
+
+---
+
+## 5. 追加（2026-09）：平台自检 + 移动端体积
+
+这一版把「语音链路全平台可用」做成可自测的，不再靠听：
+
+```bash
+# ① 看这台机器的能力真相（不花钱、秒回）
+curl -s http://localhost:3001/api/tts/health | python3 -m json.tool
+#   关注点：
+#   · bins.afconvert / bins.ffmpeg 全为 null → 这台机器没有转换器，语音会以
+#     未限幅 MP3 发出（发燥）。容器里应看到 bins.ffmpeg=null（走 PATH，属正常），
+#     因为 Dockerfile 已 apt-get 安装 ffmpeg。
+#   · stats.wavRetry / stats.mp3Fallback > 0 → 转换不稳或完全不可用，要查平台依赖。
+
+# ② 真跑一次完整链路（合成→转 WAV→限幅，约 2–5 秒）
+curl -s "http://localhost:3001/api/tts/health?probe=1" | python3 -m json.tool | tail -12
+#   期望：live.ok=true、live.format="wav"、live.clipped=false、live.peak≈0.8
+
+# ③ 移动端体积优化：动态语音加 fmt=aac 返回 M4A/AAC（约 6KB/s，降到 1/12）
+curl -s -D - -o /dev/null "http://localhost:3001/api/tts?text=%E0%B8%AA%E0%B8%A7%E0%B8%B1%E0%B8%AA%E0%B8%94%E0%B8%B5&rate=0.75&pitch=1&fmt=aac&v=4" | grep -i "content-type\|x-tts-format"
+#   期望：Content-Type: audio/mp4、X-TTS-Format: m4a
+```
+
+前端默认已改用 `fmt=aac`（`src/lib/thaiSpeech.js` 的 `LOCAL_TTS_FORMAT`）；
+若某台设备解不了 AAC，`speakThaiWithLocal` 会自动用 WAV 重试一次（不影响功能）。
+容器里 AAC 走 ffmpeg，两边参数都已验证过可产出合法 M4A。

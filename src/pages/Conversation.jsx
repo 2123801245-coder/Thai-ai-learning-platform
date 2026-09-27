@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import SceneCertificate from "@/components/ai/SceneCertificate";
 import TeacherMemoryPanel from "@/components/ai/TeacherMemoryPanel";
 import AIAvatar from "@/components/ai/AIAvatar";
+import VipPanel from "@/components/common/VipPanel";
 import useMentorVoice from "@/hooks/useMentorVoice";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -13,12 +14,23 @@ import {
   Brain, Loader2, BookA,
 } from "lucide-react";
 import { conversationScenes, CONVERSATION_CONFIG } from "@/data/conversations";
-import { askAiTeacher, getAiTeacherQuota } from "@/api/aiTeacher";
+import {
+  askAiTeacher,
+  getAiTeacherQuota,
+  getAiTeacherToday,
+} from "@/api/aiTeacher";
 import WorldHero, { HeroChip } from "@/components/world/WorldHero";
 import { ThaiRoof } from "@/components/common/ThaiMotifs";
 import { ParticleField } from "@/components/common/ThaiDecor";
-import { speakThai, stopThaiAudio } from "@/lib/thaiSpeech";
+import {
+  speakThai,
+  speakThaiWithLocal,
+  stopThaiAudio,
+} from "@/lib/thaiSpeech";
 import { mergePlacementProfile } from "@/lib/userProfile";
+import { loadCustomLesson } from "@/lib/customLesson";
+import { getTodayLesson, patchTodayLessonProgress } from "@/api/aiTeacher";
+import { doneCount, markSentenceDone } from "@/lib/todayLesson";
 import { createAudioRecorder } from "@/lib/audioRecorder";
 import { transcribeSpeech } from "@/api/aiTeacher";
 
@@ -70,12 +82,43 @@ export default function Conversation() {
     if (q) setInput(q);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* 「学 · AI 定制新课」交接过来的这节课（/conversation?lesson=1 + sessionStorage）：
+     老师会拿它的主题 / 例句 / 生词当场景，练习不跑题 */
+  const [lesson, setLesson] = useState(null);
+  useEffect(() => {
+    if ((searchParams.get("lesson") || "").trim()) setLesson(loadCustomLesson());
+    // 只在首帧读一次（之后由用户自己换场景/闲聊）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  /* 服务端存档兑底：从 /loop「接着上次练」或刷新后回来，?lesson=1 还在而
+     sessionStorage 已空（关标签页/换设备），从 today_lessons 表把这节课
+     拉回来接着练。门控在 ?lesson=1：普通进对话室不吃服务端存档，
+     免得用户明明想闲聊却被注入一节课；静默失败，不影响普通聊天。 */
+  useEffect(() => {
+    if (!(searchParams.get("lesson") || "").trim()) return;
+    let alive = true;
+    getTodayLesson()
+      .then((res) => {
+        const saved = res?.data?.data;
+        if (alive && saved?.lesson && !loadCustomLesson()) setLesson(saved.lesson);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [lessonDone, setLessonDone] = useState(() => doneCount());
   const [currentStage, setCurrentStage] = useState(0);
   const [currentDialogueIndex, setCurrentDialogueIndex] = useState(0);
   const [score, setScore] = useState({ vocabLearned: 0, stagesComplete: 0 });
   const [completed, setCompleted] = useState(false);
   const [quota, setQuota] = useState(null);       // { freeChatDaily, usedToday, remainingToday, isVip }
   const [aiNotice, setAiNotice] = useState("");   // AI 模式状态提示（不可用/配额用尽）
+  /* 老师眼里的「今天」（GET /ai/teacher/today，与注入 prompt 的那份同源） */
+  const [todayStats, setTodayStats] = useState(null);
+  const [showVip, setShowVip] = useState(false);
 
   const [scenes, setScenes] = useState(conversationScenes);
   const bottomRef = useRef(null);
@@ -106,13 +149,15 @@ export default function Conversation() {
       chinese: scene.greeting.chinese,
       speakRate: scene.greeting.speakRate,
       isGreeting: true,
+      /* 老师开口第一句先看一眼你的真实记录（前端拼，不额外叫模型） */
+      note: buildTeacherNote(todayStats, quota),
     }]);
     setCurrentStage(1);
     setCurrentDialogueIndex(0);
     setScore({ vocabLearned: 0, stagesComplete: 0 });
     setCompleted(false);
     setAiNotice("");
-  }, []);
+  }, [todayStats, quota]);
 
   /* 首页/每日任务直达场景：/conversation?scene=travel
      （任务卡里的「练 1 个旅行场景 / 商务场景 / 台词跟读」都走这个入口） */
@@ -137,9 +182,17 @@ export default function Conversation() {
     stopThaiAudio();
   }, []);
 
+  /*
+   * 老师的声音走本地 TTS 管线（与新闻/课文/学习循环同一套）：
+   * 客户端直连 Edge TTS 代理，不依赖系统是否装了泰语语音，也不会和
+   * 其他模块的音频叠着响（audioManager 单实例）。系统语音只在
+   * 本地 TTS 失败时当兜底。
+   */
   const speak = useCallback((text) => {
     if (!text) return;
-    speakThai(text, { rate: 0.72 });
+    speakThaiWithLocal(text, { rate: 0.72 }).then((ok) => {
+      if (!ok) speakThai(text, { rate: 0.72 });
+    });
   }, []);
 
   /* ── 获取当前阶段数据 ── */
@@ -262,6 +315,9 @@ export default function Conversation() {
       getAiTeacherQuota()
         .then((res) => setQuota(res?.data || null))
         .catch(() => {});
+      getAiTeacherToday()
+        .then((res) => setTodayStats(res?.data || null))
+        .catch(() => {});
       return;
     }
 
@@ -327,15 +383,44 @@ export default function Conversation() {
 
   useEffect(() => () => stopThaiAudio(), []);
 
-  /* ── 拉取 AI 老师对话配额（判断自由对话是否可用）── */
+  /* ── 拉取 AI 老师对话配额 + 今日状态 ──
+     两个都读同一份后端数据（quota / today），所以状态牌上的数字
+     与学生开口后老师看到的数字绝对不会对不上。 */
   useEffect(() => {
     let cancelled = false;
-    getAiTeacherQuota()
-      .then((res) => {
-        if (!cancelled) setQuota(res?.data || null);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+
+    const loadQuota = () =>
+      getAiTeacherQuota()
+        .then((res) => {
+          if (!cancelled) setQuota(res?.data || null);
+        })
+        .catch(() => {});
+
+    const loadToday = () =>
+      getAiTeacherToday()
+        .then((res) => {
+          if (!cancelled) setTodayStats(res?.data || null);
+        })
+        .catch(() => {});
+
+    loadQuota();
+    loadToday();
+
+    /* 从别处练完回来 / 切回标签页：数字可能已经变了 */
+    const onVisible = () => {
+      if (!document.hidden) {
+        loadQuota();
+        loadToday();
+      }
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   /* ════════════════════════════════════════
@@ -359,7 +444,7 @@ export default function Conversation() {
           focus="46% 42%"
           accent="#6ee7a8"
           ariaLabel="AI 对话室"
-          badge={<AiStatusBadge />}
+          badge={<AiStatusBadge stats={todayStats} />}
           stats={[
             { Icon: MessageCircle, value: `${scenes.length} 个场景`, label: "情景对话场景", tone: "text-emerald-300" },
             {
@@ -387,7 +472,7 @@ export default function Conversation() {
                 className="group flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-400/[0.14] px-4 py-2.5 text-[12px] font-bold text-emerald-50 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-emerald-300/45 hover:bg-emerald-400/[0.22]"
               >
                 <Mic className="h-4 w-4 text-emerald-300 transition group-hover:scale-110" />
-                直接开口和老师说话
+                {lesson ? "直接练这节课" : "直接开口和老师说话"}
               </button>
               <button
                 type="button"
@@ -410,9 +495,69 @@ export default function Conversation() {
           }
         />
 
+        {/* ══ 学 · AI 定制新课 交接过来的这节课：
+               让「去 AI 老师练这节课」落地成具体的一句话，而不是一句口号 ══ */}
+        {lesson && (
+          <motion.section
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            data-plate="panel"
+            aria-label="本节课"
+            className="rounded-3xl border border-emerald-300/[0.14] bg-gradient-to-br from-emerald-400/[0.08] via-white/[0.02] to-transparent p-5"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold tracking-[0.14em] text-emerald-200">
+                AI 定制课
+              </span>
+              <h2 className="font-thai-serif text-base font-semibold text-white">{lesson.topic}</h2>
+            </div>
+            {lesson.goal && <p className="mt-1.5 text-xs leading-5 text-white/55">{lesson.goal}</p>}
+            {lesson.tip && <p className="mt-1 text-[11px] leading-5 text-emerald-200/60">{lesson.tip}</p>}
+
+            {lesson.sentences.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[10px] tracking-[0.18em] text-white/35">先点一句听，然后照那句开口</div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {lesson.sentences.map((s, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        speak(s?.th);
+                        setLessonDone(markSentenceDone(null, i));
+                        patchTodayLessonProgress(i + 1).catch(() => {});
+                      }}
+                      title={s?.cn || ""}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition ${
+                        i < lessonDone
+                          ? "border-emerald-300/25 bg-emerald-400/[0.1] text-emerald-100"
+                          : "border-white/10 bg-black/25 text-white/75 hover:border-emerald-300/25 hover:text-emerald-100"
+                      }`}
+                    >
+                      <Volume2 className="h-3 w-3 text-emerald-300/70" />
+                      <span className="font-thai-serif">{s?.th}</span>
+                      {s?.cn && <span className="text-[10px] text-white/35">{s.cn}</span>}
+                    </button>
+                  ))}
+                  {lessonDone > 0 && (
+                    <p className="mt-2 text-[11px] text-emerald-200/70">
+                      已练 {lessonDone}/{lesson.sentences.length} 句
+                      {lessonDone >= lesson.sentences.length ? " · 这节课已练完，可以学下一节" : " · 刷新后回来会从这里接着练"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <p className="mt-3 text-[11px] leading-5 text-white/40">
+              老师已经拿到这节课的主题、例句和生词——按住下面的麦克风直接说，说得不完整也没关系，老师会纠正后再往下带。
+            </p>
+          </motion.section>
+        )}
+
         {/* ══ 直接和老师说话（合并自 AI Speaking Room）══ */}
         <div ref={voiceRef} className="scroll-mt-6">
-          <VoiceLobby onOpenMemory={() => setShowMemory(true)} />
+          <VoiceLobby onOpenMemory={() => setShowMemory(true)} lesson={lesson} />
         </div>
 
         <div className="flex items-start gap-3 rounded-2xl border border-yellow-300/[0.08] bg-gradient-to-r from-yellow-300/[0.05] via-white/[0.02] to-emerald-400/[0.04] p-4">
@@ -558,7 +703,7 @@ export default function Conversation() {
             <Brain className="h-4 w-4" />
             <span className="hidden sm:inline">老师的记忆</span>
           </button>
-          <AiStatusBadge compact />
+          <AiStatusBadge compact stats={todayStats} />
         </div>
       </motion.div>
 
@@ -619,7 +764,20 @@ export default function Conversation() {
           <p className="mt-2 text-[10px] text-white/20">💡 {dialogue.prompt}</p>
         )}
         {aiNotice && (
-          <p className="mt-2 text-[10px] text-yellow-200/70">⚠️ {aiNotice}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <p className="text-[10px] text-yellow-200/70">⚠️ {aiNotice}</p>
+
+            {/* 额度用尽就地给升级入口（全站同一个 VIP 面板） */}
+            {quota && !quota.isVip && quota.remainingToday <= 0 && (
+              <button
+                type="button"
+                onClick={() => setShowVip(true)}
+                className="rounded-lg border border-yellow-300/25 bg-yellow-300/[0.1] px-2.5 py-1 text-[10px] font-bold text-yellow-100 transition hover:bg-yellow-300/[0.18]"
+              >
+                开通 VIP · 无限对话
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -660,7 +818,12 @@ export default function Conversation() {
       {/* 消息区 */}
       <div className="relative overflow-hidden rounded-[28px] border border-white/[0.08] premium-glass shadow-2xl">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute inset-0 bg-gradient-to-b from-[#071512]/55 via-transparent to-[#071512]/40" />
+          {/* 聊天区的夜色压暗层：深色世界保留，纸上退掉
+              （通用机制见 world-shim.css 的 data-plate="scrim"） */}
+          <div
+            className="absolute inset-0 bg-gradient-to-b from-[#071512]/55 via-transparent to-[#071512]/40"
+            data-plate="scrim"
+          />
           {CHAT_STARS.map((star, i) => (
             <span key={i} className="thai-dust absolute rounded-full bg-white"
               style={{ left: star.left, top: star.top, width: star.size, height: star.size, animationDelay: star.delay }} />
@@ -747,6 +910,9 @@ export default function Conversation() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* VIP 面板（额度用尽时在对话室里直接开通） */}
+      <VipPanel open={showVip} onClose={() => setShowVip(false)} />
     </div>
   );
 }
@@ -756,7 +922,7 @@ export default function Conversation() {
    场景选择页顶部的「直接和老师说话」区。
    AIAvatar + 按住说话 + 老师语音回复，不进场景也能聊。
 ════════════════════════════════════════ */
-function VoiceLobby({ onOpenMemory }) {
+function VoiceLobby({ onOpenMemory, lesson = null }) {
   const meterRef = useRef(null);
   const [exchanges, setExchanges] = useState([]);
 
@@ -767,7 +933,9 @@ function VoiceLobby({ onOpenMemory }) {
     ]);
   }, []);
 
-  const voice = useMentorVoice({ meterRef, sceneId: null, onExchange });
+  /* lesson：从「学 · AI 定制新课」交接过来的这节课——老师以此当场景开口，
+     不说它就是「老师不知道你在学什么」的普通闲聊 */
+  const voice = useMentorVoice({ meterRef, sceneId: null, lesson, onExchange });
   const phase = voice.phase;
   const busy = phase !== "idle";
 
@@ -776,6 +944,7 @@ function VoiceLobby({ onOpenMemory }) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className="relative overflow-hidden rounded-3xl border border-emerald-300/[0.12] bg-gradient-to-br from-emerald-950/60 via-black/50 to-[#050807]/80 p-5 sm:p-6"
+      data-plate="panel"
       aria-label="直接和老师说话"
     >
       <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-400/[0.07] blur-3xl" />
@@ -800,7 +969,9 @@ function VoiceLobby({ onOpenMemory }) {
             <div>
               <h2 className="text-base font-bold text-white">直接和老师说话</h2>
               <p className="mt-1 text-[11.5px] leading-relaxed text-white/40">
-                不用选场景，开口就行。老师会记住你的目标、接住你的话题，还能给你的发音打分。
+                {lesson
+                  ? `老师知道你这节定制课「${lesson.topic}」，会用课里的例句和生词带你开口，说错先纠正再往下。`
+                  : "不用选场景，开口就行。老师会记住你的目标、接住你的话题，还能给你的发音打分。"}
               </p>
             </div>
             <button
@@ -1033,7 +1204,7 @@ function UserBubble({ text }) {
 /* ════════════════════════════════════════
    AI 消息气泡（带打字机效果）
    ════════════════════════════════════════ */
-function AiBubble({ text, roman, chinese, vocab, grammar, culturalNote, onSpeak, isGreeting }) {
+function AiBubble({ text, roman, chinese, vocab, grammar, culturalNote, onSpeak, isGreeting, note }) {
   const { display: displayText, done: textDone } = useTypewriter(text, 25, !isGreeting);
 
   return (
@@ -1049,6 +1220,13 @@ function AiBubble({ text, roman, chinese, vocab, grammar, culturalNote, onSpeak,
             <Bot className="h-3 w-3 text-teal-300" />
             <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-teal-200/60">AI 老师</span>
           </div>
+
+          {/* 老师开口前先看一眼你的真实记录（仅开场白） */}
+          {note ? (
+            <p className="mb-2.5 rounded-xl border border-emerald-300/[0.12] bg-emerald-400/[0.06] px-2.5 py-2 text-[10.5px] leading-relaxed text-emerald-100/75">
+              {note}
+            </p>
+          ) : null}
 
           <div className="flex items-start justify-between gap-3">
             <p className="font-thai text-lg font-semibold leading-relaxed text-white">
@@ -1114,8 +1292,21 @@ function AiBubble({ text, roman, chinese, vocab, grammar, culturalNote, onSpeak,
 /*
  * AI 状态牌。底色改深（bg-black/45）：它现在挂在首屏那张世界照片上，
  * 原来那层很淡的翡翠底在亮部寺庙前读不出来。
+ *
+ * stats（GET /ai/teacher/today）：把老师真正看到的今日数据写进牌子里 ——
+ * 「还剩几次」不再只藏在侧边一条配额，而是与今日进度放在同一处。
  */
-function AiStatusBadge({ compact = false }) {
+function AiStatusBadge({ compact = false, stats = null }) {
+  const bits = [];
+  if (stats) {
+    if (stats.plan) bits.push(`今日任务 ${stats.plan.completed}/${stats.plan.total}`);
+    if (stats.todayLessons > 0) bits.push(`已上 ${stats.todayLessons} 节课`);
+    if (stats.mastered > 0) bits.push(`约 ${stats.mastered} 词`);
+    if (stats.quota) {
+      bits.push(stats.quota.isVip ? "对话无限" : `剩 ${stats.quota.remainingToday} 次`);
+    }
+  }
+
   return (
     <div className={`flex items-center gap-2.5 rounded-xl border border-emerald-300/15 bg-black/45 backdrop-blur-xl ${compact ? "px-3 py-2" : "px-4 py-2.5"}`}>
       <span className="relative flex h-2.5 w-2.5">
@@ -1124,10 +1315,39 @@ function AiStatusBadge({ compact = false }) {
       </span>
       <div className="leading-tight">
         <div className="text-[10px] font-bold text-emerald-200">AI Teacher Online</div>
-        <div className="mt-0.5 text-[9px] text-white/30">AI 泰语老师在线</div>
+        <div className="mt-0.5 text-[9px] text-white/30">
+          {compact && bits.length ? bits.join(" · ") : "AI 泰语老师在线"}
+        </div>
+        {!compact && bits.length ? (
+          <div className="mt-0.5 text-[9px] text-emerald-100/50">{bits.join(" · ")}</div>
+        ) : null}
       </div>
     </div>
   );
+}
+
+/* ========================================================
+   老师开场白：把「今天真实做到哪了」说两句
+   --------------------------------------------------------
+   数据来自 GET /ai/teacher/today（与注入老师 prompt 的那份同源），
+   在前端拼句子 —— 不额外调一次模型，进场景即时出现。
+   没有任何记录时说白话，不编数据。
+======================================================== */
+
+function buildTeacherNote(stats = null, quota = null) {
+  if (!stats) return "";
+
+  const bits = [];
+  if (stats.plan) bits.push(`今日任务 ${stats.plan.completed}/${stats.plan.total}`);
+  if (stats.todayLessons > 0) bits.push(`今天上完 ${stats.todayLessons} 节课`);
+  if (stats.mastered > 0) bits.push(`累计掌握约 ${stats.mastered} 词`);
+
+  const q = stats.quota || quota;
+  if (q) bits.push(q.isVip ? "对话不限次数" : `今天还能自由对话 ${q.remainingToday} 次`);
+
+  if (!bits.length) return "";
+
+  return `先看一眼你的记录：${bits.join(" · ")}。这个场景我们慢一点，先把第一句说顺。`;
 }
 
 /* ── 输入中气泡 ── */

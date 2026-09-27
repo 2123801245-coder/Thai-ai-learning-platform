@@ -20,7 +20,10 @@ import db from "../database.js";
 import { authenticate } from "./auth.js";
 import { getQuotaSetting } from "./features.js";
 import { createNotification } from "./notifications.js";
-import { buildContextSystemPrompt } from "../contextPrompts.js";
+import {
+  buildContextSystemPrompt,
+  formatLearnerBrief,
+} from "../contextPrompts.js";
 import {
   buildLearnerGuidance,
   getUserProfile,
@@ -129,6 +132,126 @@ async function quotaPayload(userId) {
 }
 
 /* ============================================================
+   今日状态（注入 system prompt）
+   ------------------------------------------------------------
+   老师此前只知道「画像 + 长期记忆」，不知道学生**今天做到哪了** ——
+   于是会出现「今天已经看过一课了，还在推你去看课」这种不看着人的回答。
+   这里把真实记录读出来交给它：
+
+     lesson_progress      今日完成课时 / 最近在学的课
+     vocabulary_progress  累计掌握词汇
+     daily_plan_records   今日任务完成数
+     ai_teacher_usage     今日对话次数（额度）
+
+   读不到（未登录早期 / 表为空 / 查询出错）就当没有，绝不让对话失败。
+============================================================ */
+
+function dbGet(sql, params = []) {
+  return new Promise((resolve) => {
+    db.get(sql, params, (err, row) => resolve(err ? null : row || null));
+  });
+}
+
+/* 结构化读数：提示词与前端（GET /teacher/today）共用同一份，
+   所以「对话室状态牌显示的数字」= 「老师被告知的数字」 */
+async function readTodayStats(userId) {
+  const day = todayBangkok();
+
+  const [todayLessons, mastered, lastLesson, plan] = await Promise.all([
+    dbGet(
+      "SELECT COUNT(*) AS n FROM lesson_progress WHERE user_id = ? AND completed = 1 AND DATE(updated_at) = ?",
+      [userId, day]
+    ),
+    dbGet(
+      "SELECT COUNT(*) AS n FROM vocabulary_progress WHERE user_id = ? AND mastered = 1",
+      [userId]
+    ),
+    dbGet(
+      "SELECT course_id, lesson_id, updated_at FROM lesson_progress WHERE user_id = ? ORDER BY datetime(updated_at) DESC LIMIT 1",
+      [userId]
+    ),
+    dbGet(
+      "SELECT completed_tasks, total_tasks, plan_completed FROM daily_plan_records WHERE user_id = ? AND plan_date = ?",
+      [userId, day]
+    ),
+  ]);
+
+  return {
+    date: day,
+    todayLessons: Number(todayLessons?.n) || 0,
+    mastered: Number(mastered?.n) || 0,
+    lastLesson: lastLesson?.lesson_id
+      ? {
+          courseId: lastLesson.course_id,
+          lessonId: lastLesson.lesson_id,
+          updatedAt: lastLesson.updated_at || null,
+        }
+      : null,
+    plan:
+      plan && (plan.total_tasks || 0) > 0
+        ? {
+            completed: plan.completed_tasks || 0,
+            total: plan.total_tasks,
+            done: Boolean(plan.plan_completed),
+          }
+        : null,
+  };
+}
+
+function formatTodayStatus(stats, { isVip = false, used = 0, limit = 0 } = {}) {
+  const lines = [`今天是（泰国时间）：${stats.date}`];
+  lines.push(`今日完成课时：${stats.todayLessons} 节`);
+
+  if (stats.plan) {
+    lines.push(
+      `今日任务：完成 ${stats.plan.completed} / ${stats.plan.total}${stats.plan.done ? "（今日计划已全部完成）" : ""}`
+    );
+  }
+
+  lines.push(`累计掌握词汇：约 ${stats.mastered} 词`);
+
+  if (stats.lastLesson) {
+    lines.push(
+      `最近在学：${stats.lastLesson.courseId} / ${stats.lastLesson.lessonId}（${stats.lastLesson.updatedAt || "时间未知"}）`
+    );
+  }
+
+  lines.push(
+    isVip
+      ? "会员状态：VIP —— AI 对话不限次数，全部课程、全部视频与完整口语训练都已解锁"
+      : `会员状态：免费用户 —— AI 对话每日 ${limit} 次，今天已用 ${used} 次、还剩 ${Math.max(0, limit - used)} 次；课程每门只有前几节可试看`
+  );
+
+  return lines.join("\n");
+}
+
+async function buildTodayStatus(userId, quota = {}) {
+  try {
+    const stats = await readTodayStats(userId);
+    return formatTodayStatus(stats, quota);
+  } catch (e) {
+    /* 读不到就当没有：对话不因状态读取失败而挂掉 */
+    return "";
+  }
+}
+
+/* 角色与声音：对话室的老师与聊天老师是同一个人（阿泰）
+   —— 口头禅、纠错风格、语言比例在这里统一定死，不随场景漂 */
+const TEACHER_PERSONA = `【老师人设（所有场景共用）】
+- 你就是「阿泰」：耐心、幽默、鼓励为主，像坐在对面的泰语老师，不像翻译机器。
+- 语言比例：泰语主体 + 中文讲解。每句泰语都给罗马音与中文，别堆术语。
+- 礼貌词示范到底：说给学生听的话里，该用 ครับ/ค่ะ/นะ/จ้า 就用上，让学生听习惯。
+- 纠错风格：先肯定「说对了什么」，再只改最关键的一处（一次不超一个），给一遍对照朗读。
+- 学生听不懂或卡住：降一级重说（更短、更慢、更多中文），不要重复同一句原话。
+- 不编泰语词、不编文化事实；不确定就说不确定。`;
+
+/* 怎么用这些数据：不念数字、不编数据、权益如实说但不推销 */
+const TODAY_STATUS_RULES = `【怎么用【今日状态】】
+- 只在相关时自然引用（学生问「我学得怎么样」「今天该练什么」，或你要给建议时），不要每轮都报一遍数字。
+- 数字以【今日状态】为准；没有的数据不要说，也不要编造排名、百分比或其他学生的数据。
+- 权益说明要如实：免费用户每门课只能试看前几节、AI 对话有每日次数上限；VIP 是全部课程与无限对话。学生问起就解释清楚，不要主动催促开通、也不要重复推销。`;
+
+/* ============================================================
    学生长期记忆（跨会话）
    记住学生名字/水平/兴趣/常见错误，每次对话注入 system prompt
 ============================================================ */
@@ -198,7 +321,7 @@ async function saveAiMemory(userId, memory = {}, touchedTypes = null) {
  * memory 既可以是 loadAiMemory() 返回的记忆上下文（推荐，含分类提示词），
  * 也可以是一块旧的扁平对象（向后兼容，自动转成分类提示词）。
  */
-function buildTeacherSystemPrompt(action, profile, memory, learnerGuidance = "") {
+function buildTeacherSystemPrompt(action, profile, memory, learnerGuidance = "", todayStatus = "") {
   const base = SYSTEM_PROMPTS[action] || SYSTEM_PROMPTS.chat;
   const parts = [base];
 
@@ -224,6 +347,12 @@ function buildTeacherSystemPrompt(action, profile, memory, learnerGuidance = "")
         updatedAt: null,
       })));
   if (memoryPrompt) parts.push(memoryPrompt);
+
+  /* 今天真实做到哪了（课时 / 掌握词量 / 今日任务 / 剩余额度）+ 使用规则 */
+  if (todayStatus) {
+    parts.push(`【今日状态（系统读到的真实记录，不是学生自述）】\n${todayStatus}`);
+    parts.push(TODAY_STATUS_RULES);
+  }
 
   /* 入学测评画像 → 教学指令（等级难度上限 / 目标场景 / 纠错重点 / 学习方式）。
      放在画像与长期记忆之后、最接近 user 消息的位置：指令优先级最高 */
@@ -351,6 +480,8 @@ function buildConversationSystemPrompt(scene, stage) {
   const charLine = roleplay ? `\n【角色扮演】你正在扮演「${roleplay.character}」。请完全沉浸在这个角色中，用符合角色身份的语气和行为来回应。例如：机场工作人员要专业礼貌、餐厅服务员要热情周到、出租车司机要随和健谈、夜市摊主要亲切会砍价。` : "";
   return `你叫「阿泰」，是 ThaiAI 学习平台的 AI 泰语老师。学生正在「对话练习」页面和你进行场景化自由对话。
 
+${TEACHER_PERSONA}
+
 【当前场景】${sceneTitle}${sceneDesc ? " - " + sceneDesc : ""}
 ${sceneTip ? "【场景提示】" + sceneTip : ""}${charLine}
 ${stagePrompt ? "【当前对话目标】" + stagePrompt : ""}
@@ -441,8 +572,9 @@ function parseRecommendJson(content) {
   };
 }
 
-/* 根据学生画像 + 长期记忆 + 当日进度 生成个性化每日学习计划 */
-function buildPlanSystemPrompt(profile, memory) {
+/* 根据学生画像 + 长期记忆 + 当日进度 生成个性化每日学习计划
+   （todayStatus 就是那句「当日进度」——此前注释里有、参数里没有） */
+function buildPlanSystemPrompt(profile, memory, todayStatus = "") {
   const lines = [];
   if (profile?.name) lines.push(`名字：${profile.name}`);
   if (profile?.level) lines.push(`当前水平：${profile.level}`);
@@ -460,7 +592,7 @@ function buildPlanSystemPrompt(profile, memory) {
 
 【学生画像】
 ${profileDesc}
-
+${todayStatus ? `\n【今日状态（系统真实记录）】\n${todayStatus}\n` : ""}
 必须只返回一个 JSON 对象（不要任何其他文字，不要 markdown 围栏），结构如下：
 {
   "focus": "今日学习主题（中文，1 句话，贴合学生兴趣）",
@@ -479,6 +611,8 @@ ${profileDesc}
 - 任务的 title/description/goal 要显式体现本篇某个现实量（如 5 词、1 节、5 分钟），便于学生对照完成。
 - 难度严格匹配水平：beginner 用小量高频任务；中高阶适当提升量并加入听说/阅读。
 - 至少保留 vocab 与 speaking 两类基础任务。
+- 如果【今日状态】显示某项今天已经做过（已完成课时、已完成的今日任务），不要原样重复布置，改成加量、换角度或补上没做的那一项。
+- 学生是免费用户时不要布置需要 VIP 才能完成的任务（例如「看第 5 节课」这类非试看课时）。
 - tip 要结合学生常见错误，语气温暖、自然。`;
 }
 
@@ -638,8 +772,14 @@ router.post("/teacher", authenticate, async (req, res) => {
       const placement = await getUserProfile(req.userId);
       const profile = mergeProfileForPrompt(frontProfile, placement);
       const memory = (await loadAiMemory(req.userId)).legacy;
+      /* 今日真实进度：计划要接着今天做过的事排，而不是从零重来 */
+      const todayStatus = await buildTodayStatus(req.userId, {
+        isVip,
+        used: isVip ? 0 : await getChatUsage(req.userId),
+        limit: isVip ? 0 : await getFreeChatDaily(),
+      }).catch(() => "");
       const systemPrompt = [
-        buildPlanSystemPrompt(profile, memory),
+        buildPlanSystemPrompt(profile, memory, todayStatus),
         buildLearnerGuidance(placement),
       ]
         .filter(Boolean)
@@ -764,7 +904,12 @@ router.post("/teacher", authenticate, async (req, res) => {
 
     // ── context：Thai Context Intelligence（Explain Like Thai / Make It Natural / Explain the Culture）
     if (action === "context") {
-      const profile = req.body?.profile || {};
+      /* 前端运行时画像 + 后端入学测评画像（等级/目标以后端为准） */
+      const placement = await getUserProfile(req.userId);
+      const profile = mergeProfileForPrompt(
+        req.body?.profile || {},
+        placement
+      );
       const options = {
         task: req.body?.task,
         tone: req.body?.tone,
@@ -775,9 +920,14 @@ router.post("/teacher", authenticate, async (req, res) => {
         : [];
       const memory = await loadAiMemory(req.userId);
 
-      const systemPrompt = `${buildContextSystemPrompt(options)}\n\n学生画像：${JSON.stringify(
-        profile
-      )}${memory.prompt ? `\n\n${memory.prompt}` : ""}`;
+      /* 画像压成中文摘要再注入（原来是把 profile JSON 整个塞进去），
+         讲解深度才真的跟着学生水平走 */
+      const systemPrompt = [
+        buildContextSystemPrompt(options, formatLearnerBrief(profile)),
+        memory.prompt || "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
 
       const messages = [
         { role: "system", content: systemPrompt },
@@ -809,11 +959,19 @@ router.post("/teacher", authenticate, async (req, res) => {
     const profile = mergeProfileForPrompt(frontProfile, placement);
     // 分类长期记忆（顺带把入学画像同步进来）→ 注入 system prompt
     const memory = await loadAiMemory(req.userId);
+    /* 今日状态：老师「看得见今天」（已完成课时 / 词量 / 今日任务 / 剩余额度） */
+    const todayStatus = await buildTodayStatus(req.userId, {
+      isVip,
+      used: isVip ? 0 : await getChatUsage(req.userId),
+      limit: isVip ? 0 : await getFreeChatDaily(),
+    }).catch(() => "");
+
     const systemPrompt = buildTeacherSystemPrompt(
       action,
       profile,
       memory,
-      buildLearnerGuidance(placement)
+      buildLearnerGuidance(placement),
+      todayStatus
     );
 
     const messages = [
@@ -1056,6 +1214,27 @@ router.put("/teacher/memory", authenticate, async (req, res) => {
    GET /api/ai/teacher/quota
    今日 AI 老师免费对话额度
 ============================================================ */
+
+/* ============================================================
+   GET /api/ai/teacher/today
+   老师眼里的「今天」：今日课时 / 掌握词量 / 今日任务 / 最近在学 + 额度
+
+   与注入 system prompt 的 buildTodayStatus 同源（readTodayStats），
+   所以对话室状态牌上显示的数字，就是老师被告知的数字。
+============================================================ */
+
+router.get("/teacher/today", authenticate, async (req, res) => {
+  try {
+    const [stats, quota] = await Promise.all([
+      readTodayStats(req.userId),
+      quotaPayload(req.userId),
+    ]);
+    return res.json({ success: true, ...stats, quota });
+  } catch (err) {
+    console.error("[aiTeacher] 读取今日状态失败:", err?.message || err);
+    return res.status(500).json({ message: "读取今日状态失败" });
+  }
+});
 
 router.get("/teacher/quota", authenticate, async (req, res) => {
   try {

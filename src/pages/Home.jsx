@@ -49,17 +49,11 @@ import AIRecommendationCard from "@/components/dashboard/AIRecommendationCard";
 
 /* =========================================================
    ThaiAI World · 沉浸式世界的四层空间
-   （英雄守护者 / 学习星系 / 技能树 / 数字博物馆 + AI 教室）
+   （英雄守护者 + 星球行 / AI 教室；技能树与数字博物馆在 /universe）
 ========================================================= */
 import AITeacherSpace from "@/components/world/AITeacherSpace";
-import LearningGalaxy from "@/components/world/LearningGalaxy";
 // SkillTree / DigitalMuseum / SharePostcard 已随板块迁移到 /universe（LearningUniverse）
-import {
-  buildIdentity,
-  buildPlanets,
-  buildWorldTheme,
-  currentPlanet,
-} from "@/lib/worldData";
+import { buildIdentity, buildPlanets } from "@/lib/worldData";
 import { generateLearningPath } from "@/lib/learningPath";
 import { useMediaProgress } from "@/lib/mediaProgress";
 import { useTodayActivity } from "@/lib/useTodayActivity";
@@ -71,6 +65,7 @@ import TodayRecap from "@/components/home/TodayRecap";
 import { useLearningProgress } from "@/hooks/useLearningProgress";
 import { courses, getCourseLessons, getLessonHref } from "@/data/courses";
 import { getCourseStats, getCourseProgress } from "@/lib/courseProgress";
+import { isLessonLocked } from "@/lib/entitlements";
 import { useAuth } from "@/lib/AuthContext";
 import { API_BASE_URL } from "@/lib/api";
 import { speakThai } from "@/lib/thaiSpeech";
@@ -191,13 +186,13 @@ function LegacyHome() {
   /* =====================================================
      ThaiAI World：世界层的真实数据
      -----------------------------------------------------
-     英雄 HUD / 学习星系由现有画像与学习记录推导（见 src/lib/worldData.js），
+     英雄 HUD / 星球行由现有画像与学习记录推导（见 src/lib/worldData.js），
      技能树/博物馆等深层板块已搬到学习宇宙页（/universe）。
   ===================================================== */
 
   /*
    * 老链接 /#universe 的兼容滚动：学习宇宙已改独立页，这里只在有人还
-   * 带着旧锚点进来时，把首页滚到星系板块（id="universe"）兜底。
+   * 带着旧锚点进来时，把首页滚到星球行（id="universe"）兜底。
    */
   useEffect(() => {
     if (location.hash !== "#universe") return undefined;
@@ -225,17 +220,10 @@ function LegacyHome() {
     [profile, hasTest]
   );
 
-  /*
-   * 世界主题：画像 → 配色 / 命名 / 卫星分布 / 博物馆主展厅。
-   * 这是「同一个 URL，不同账号看到不同世界」的单一开关。
-   */
-  const worldTheme = useMemo(() => buildWorldTheme(profile), [profile]);
-
   const worldPlanets = useMemo(
     () => buildPlanets(worldPath, profile),
     [worldPath, profile]
   );
-  const focusPlanet = useMemo(() => currentPlanet(worldPlanets), [worldPlanets]);
 
   /* 技能树 / 博物馆 / 能力评估已搬到学习宇宙页（/universe），数据在那边装配 */
 
@@ -329,7 +317,8 @@ function LegacyHome() {
       (lesson) => lesson.id === item.entry?.lastLessonId
     );
 
-    if (isVipUser || last.free || !item.course.isVip) {
+    /* 课时锁定规则统一在 @/lib/entitlements：找不到记录 / 未解锁 → 回课程页 */
+    if (last && !isLessonLocked({ lesson: last, isVipUser })) {
       navigate(getLessonHref(item.course.id, last));
     } else {
       navigate(`/course/${item.course.id}`);
@@ -1123,26 +1112,16 @@ function LegacyHome() {
         <AITeacherSpace
           identity={worldIdentity}
           progress={progress}
+          /* 免费额度用完时教室里就能开通，不必再去找入口 */
+          onUpgrade={() => setShowVipPanel(true)}
           guidance={
             <TodayRecap today={todayActivity} onOpenPlan={() => navigate("/plan")} />
           }
         />
 
         {/* =====================================================
-            学习星系（取代课程卡片列表）
-            五颗星球 = 学习路线五大块，当前阶段发光；下方是真实阶段明细
-        ===================================================== */}
-
-        <LearningGalaxy
-          planets={livePlanets}
-          path={worldPath}
-          theme={worldTheme}
-          today={todayActivity}
-        />
-
-        {/* =====================================================
             泰语技能树 / 数字博物馆 / 成就卡 / 能力评估
-            → 已整体搬到学习宇宙（/universe）。首页留佛像 + 星系，
+            → 已整体搬到学习宇宙（/universe）。首页留佛像 + 星球行，
             深层世界探索归宇宙页，两边共用同一份数据源。
         ===================================================== */}
 

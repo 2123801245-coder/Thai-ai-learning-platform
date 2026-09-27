@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { AccordionPanel } from "@/components/ui/accordion";
 import {
   Volume2,
   RotateCcw,
@@ -334,20 +335,11 @@ export default function ListenChoose({ words }) {
 
             {/* 提示（中文释义） */}
 
-            <AnimatePresence>
-              {showHint && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="mt-4 rounded-xl border border-yellow-300/15 bg-yellow-300/[0.06] px-4 py-2.5 text-center text-sm text-yellow-200/80">
-                    提示：{current.target.chinese_meaning}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <AccordionPanel open={showHint}>
+              <div className="mt-4 rounded-xl border border-yellow-300/15 bg-yellow-300/[0.06] px-4 py-2.5 text-center text-sm text-yellow-200/80">
+                提示：{current.target.chinese_meaning}
+              </div>
+            </AccordionPanel>
 
             {/* 四个选项 */}
 

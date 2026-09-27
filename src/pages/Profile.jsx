@@ -2065,7 +2065,7 @@ export default function Profile() {
           <Achievement
             icon="👑"
             title="VIP 会员"
-            description="解锁全部高级功能"
+            description="全部课程与无限练习"
             unlocked={!!authUser?.isVip}
           />
         </div>

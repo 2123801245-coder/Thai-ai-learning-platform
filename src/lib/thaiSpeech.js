@@ -104,14 +104,27 @@ function speakThaiWithSynthesis(text, options = {}) {
   window.speechSynthesis.speak(utterance);
 }
 
+/* 动态语音的默认容器格式：M4A/AAC。
+
+   为什么用 AAC 而不是 WAV：WAV 是 24kHz 未压缩 PCM（48KB/s），一句话 5 秒就
+   240KB，4G/微信 WebView 里边下边播容易卡；AAC 48kbps 约 6KB/s（实测同一句
+   330KB → 26.8KB，降到 1/12，时长不变）。课文音频早就为同一原因统一换成
+   M4A/AAC，iOS/Android/微信/桌面浏览器与预览内核均实测可播。
+
+   想回到 WAV（体积大但最保险）：把这里改成 "wav" 即可，后端两种格式
+   都支持且缓存互不干扰；speakThaiWithLocal 还带“AAC 失败自动退回 WAV”保险。 */
+export const LOCAL_TTS_FORMAT = "aac";
+
 /* 生成本地后端 /api/tts 的完整 URL（speakThaiWithLocal 与课文朗读器共用，
    保证版本号与参数一致，避免缓存旧音频）。rate/pitch 均为数字：
-   rate 0.5~2（0.65 慢速 / 0.78 常速 / 1.0 快速），pitch 0.5~2（1 为标准）。 */
-export function getLocalTtsUrl(text, rate = 0.75, pitch = 1) {
+   rate 0.5~2（0.65 慢速 / 0.78 常速 / 1.0 快速），pitch 0.5~2（1 为标准）。
+   format 省略时用 LOCAL_TTS_FORMAT（可显式传 "wav" 做退回重试）。 */
+export function getLocalTtsUrl(text, rate = 0.75, pitch = 1, format = LOCAL_TTS_FORMAT) {
   return (
     `${API_BASE_URL}/tts?text=${encodeURIComponent(text)}` +
     `&rate=${encodeURIComponent(rate)}` +
     `&pitch=${encodeURIComponent(pitch)}` +
+    `&fmt=${encodeURIComponent(format)}` +
     "&v=4"
   );
 }
@@ -160,20 +173,42 @@ export function speakThaiWithLocal(text, options = {}) {
       resolve(false);
       return;
     }
-    playThaiAudio(getLocalTtsUrl(text, rate, pitch), {
-      directFirst: true,
-      onStart: () => {
-        onStart?.();
-      },
-      onEnd: () => {
-        onEnd?.();
-        resolve(true);
-      },
-      onError: (err) => {
-        onError?.(err);
-        resolve(false);
-      },
-    });
+
+    // 每次尝试都带序号：退回重试时，旧一次的回调（尤其 audioManager 在切源时
+    // 会回调旧 onEnd）必须被忽略，否则会误报“播完”并复位按钮状态。
+    let attempt = 0;
+
+    const play = (format, isRetry) => {
+      const mine = ++attempt;
+      playThaiAudio(getLocalTtsUrl(text, rate, pitch, format), {
+        directFirst: true,
+        onStart: () => {
+          if (mine !== attempt) return;
+          onStart?.();
+        },
+        onEnd: () => {
+          if (mine !== attempt) return;
+          onEnd?.();
+          resolve(true);
+        },
+        onError: (err) => {
+          if (mine !== attempt) return;
+          // AAC 在个别老 WebView/系统上可能解不了 → 立刻用 WAV 重试一次
+          // （体积大但通吃）。只退一次，避免死循环。
+          // NotAllowedError = 自动播放被策略拦住，换格式也放不了，不值得退。
+          const decodable = err?.name !== "NotAllowedError";
+          if (!isRetry && format !== "wav" && decodable) {
+            console.warn("[tts] 本地语音播放失败，退回 WAV 重试:", err?.message || err);
+            play("wav", true);
+            return;
+          }
+          onError?.(err);
+          resolve(false);
+        },
+      });
+    };
+
+    play(LOCAL_TTS_FORMAT, false);
   });
 }
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { AccordionPanel } from "@/components/ui/accordion";
 import {
   ArrowLeft,
   Check,
@@ -862,21 +863,12 @@ export default function VocabQuiz({ words, onExit, source = "book" }) {
             </div>
 
             {/* 提示面板 */}
-            <AnimatePresence>
-              {showHint && !answered && hintText && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
-                >
-                  <div className="tv-quiz-hint mb-5 rounded-2xl border border-amber-300/15 bg-amber-400/[0.06] px-4 py-3 text-center text-xs leading-5 text-amber-100/80">
-                    <span className="mr-1">💡</span>
-                    {hintText}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <AccordionPanel open={showHint && !answered && !!hintText}>
+              <div className="tv-quiz-hint mb-5 rounded-2xl border border-amber-300/15 bg-amber-400/[0.06] px-4 py-3 text-center text-xs leading-5 text-amber-100/80">
+                <span className="mr-1">💡</span>
+                {hintText}
+              </div>
+            </AccordionPanel>
 
             {quizType === "spell" ? (
               <form

@@ -1,10 +1,49 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-export default defineConfig({
+/* ============================================================
+   分享卡片（og:image / og:url）需要**绝对 URL**
+   ------------------------------------------------------------
+   微信、Twitter、Facebook 的抓取器不会替我们把 /brand/og-image.png
+   补成完整域名 —— 相对路径在分享出去后就是一张空图。所以站点地址
+   必须由环境决定，不能写死在 index.html 里：
+
+     VITE_SITE_URL=https://thai-ai.online
+
+   index.html 里写占位符 %SITE_URL%，这里在 dev 与 build 时一起替换。
+   没配置时（例如新克隆的仓库、CI 里忘了设）故意替换成空串 —— 页面
+   退化成相对路径仍然可用，同时构建时打一条醒目警告，而不是静默产出
+   一个「%SITE_URL%」字样跑进分享卡片的坏 URL。
+   ============================================================ */
+function siteUrlPlugin(mode) {
+  const env = loadEnv(mode, process.cwd(), 'VITE_')
+  /* 先看进程环境（CI / 一次性 `VITE_SITE_URL=… npm run build`），再看 .env */
+  const siteUrl = (process.env.VITE_SITE_URL || env.VITE_SITE_URL || '')
+    .trim()
+    .replace(/\/+$/, '')
+  const isBuild = mode === 'production'
+
+  if (!siteUrl && isBuild) {
+    console.warn(
+      '\n[thaiai-share-meta] 未配置 VITE_SITE_URL：index.html 的 og:image 会是相对路径，' +
+        '微信 / Twitter 抓取分享卡片时会取不到图。\n' +
+        '  修复：在 .env 里写 VITE_SITE_URL=https://你的域名\n'
+    )
+  }
+
+  return {
+    name: 'thaiai-share-meta',
+    transformIndexHtml(html) {
+      return html.replaceAll('%SITE_URL%', siteUrl)
+    },
+  }
+}
+
+export default defineConfig(({ mode }) => ({
   plugins: [
-    react()
+    react(),
+    siteUrlPlugin(mode),
   ],
   resolve: {
     alias: {
@@ -57,4 +96,4 @@ export default defineConfig({
     // 不在 script/link 标签上加 crossorigin（同源资源不需要）
     cssCodeSplit: true,
   },
-})
+}))

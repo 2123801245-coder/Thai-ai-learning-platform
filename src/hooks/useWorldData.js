@@ -5,8 +5,7 @@
 // =========================================================
 //
 // 原来 Home.jsx 里装配一份「世界数据」（画像 → 路线 → 星球 → 技能树 →
-// 博物馆 → 今日活动）， LearningGalaxy / SkillTree / DigitalMuseum /
-// SharePostcard 全都吃它。板块搬到 /universe 后，两个页面要**同一份**
+// 博物馆 → 今日活动）， SkillTree / DigitalMuseum / SharePostcard 全都吃它。板块搬到 /universe 后，两个页面要**同一份**
 // 数据（否则首页星球发光状态和宇宙页对不上），所以抽成共享 hook：
 //
 //   Home 用   planets + today（星球行 + 今日活动）+ identity

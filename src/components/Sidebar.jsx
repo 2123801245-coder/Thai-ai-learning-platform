@@ -18,7 +18,7 @@ import {
   ThaiDivider,
   ThaiRoof,
 } from "@/components/common/ThaiMotifs";
-import ThemeQuickSwitcher from "@/components/theme/ThemeQuickSwitcher";
+import ThemeToggle from "@/components/motion/theme-toggle";
 
 import { SERVER_BASE_URL } from "@/lib/api";
 
@@ -227,7 +227,7 @@ export default function Sidebar() {
           "
         >
 
-          {/* 品牌 Logo：泰式尖顶 + 金色光环 + AI 核心 */}
+          {/* 品牌 Logo：App 图标版（金色神庙 + 国旗色飘带） */}
 
           <div className="relative">
 
@@ -244,45 +244,21 @@ export default function Sidebar() {
             <div
               className="
                 relative
-                flex
                 h-11
                 w-11
-                items-center
-                justify-center
+                overflow-hidden
                 rounded-2xl
-
                 border
-                border-emerald-300/20
-
-                bg-gradient-to-br
-                from-emerald-400/20
-                via-[#8a5e30]/10
-                to-[#050A14]
-
+                border-emerald-300/25
                 shadow-lg
-                shadow-emerald-400/15
+                shadow-emerald-400/20
               "
             >
-              {/* 泰式尖顶装饰 */}
-
-              <svg viewBox="0 0 40 40" className="absolute inset-0 h-full w-full" fill="none">
-                <path
-                  d="M 20 6 L 34 12 L 33 14 L 20 9.5 L 7 14 L 6 12 Z"
-                  fill="#F5D67B"
-                  opacity="0.5"
-                />
-                <path
-                  d="M 20 10 L 31 15 L 30 17 L 20 13 L 10 17 L 9 15 Z"
-                  fill="#F5D67B"
-                  opacity="0.3"
-                />
-              </svg>
-
-              <span className="relative text-sm font-black text-white/90">ไทย</span>
-
-              {/* 核心光点 */}
-
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(200,145,74,0.9)]" />
+              <img
+                src="/brand/thaiai-logo-512.png"
+                alt="ThaiAI"
+                className="h-full w-full object-cover"
+              />
             </div>
 
           </div>
@@ -321,11 +297,16 @@ export default function Sidebar() {
 
         <ThaiDivider compact className="mt-4" />
 
-        {/* 快捷主题切换 */}
+        {/* 主题：只有深色 / 浅色 */}
 
         <div className="mt-3 flex items-center justify-between gap-2 pl-1">
           <span className="theme-quick-label text-[9px] font-bold tracking-[0.18em] text-white/30">主题</span>
-          <ThemeQuickSwitcher compact />
+          {/* start=top-left：揭示从这颗按钮本身（侧栏中上部）扩散出去 */}
+          <ThemeToggle
+            start="top-left"
+            className="rounded-xl border border-white/10 bg-white/[0.05] p-2 transition hover:border-emerald-300/30 hover:bg-white/[0.08]"
+            iconClassName="h-3.5 w-3.5 text-emerald-300/80"
+          />
         </div>
 
       </div>

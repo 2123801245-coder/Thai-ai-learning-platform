@@ -28,6 +28,11 @@ import aiTeacherRouter from "./routes/aiTeacher.js";
 import planRouter from "./routes/plan.js";
 import profileRouter from "./routes/profile.js";
 import professionalRouter from "./routes/professional.js";
+import todayLessonRouter from "./routes/todayLesson.js";
+import bilingualRouter, {
+  y2aVideoHandler,
+  y2aCoverHandler,
+} from "./routes/bilingual.js";
 const app = express();
 
 // 端口：显式忽略 PORT=0。否则 express 会静默监听一个随机端口——
@@ -208,7 +213,14 @@ app.use(
 // ============================================================
 // 视频静态服务
 // /videos/xxx.mp4 → backend/videos/xxx.mp4
+//
+// /videos/y2a/<taskId>.mp4 是例外：它指向 y2a-auto 流水线下载的原片
+// （见 routes/bilingual.js），所以排在上面那条静态之前。走同一个 /videos
+// 前缀，前端与开发代理（vite.config.js）都不用改。
 // ============================================================
+
+app.get("/videos/y2a/:taskId.mp4", y2aVideoHandler);
+app.get("/videos/y2a/:taskId.webp", y2aCoverHandler);
 
 app.use(
   "/videos",
@@ -247,6 +259,10 @@ app.get(
 app.use(
   "/api/auth",
   authRouter
+);
+app.use(
+  "/api/bilingual",
+  bilingualRouter
 );
 app.use(
   "/api/speaking",
@@ -311,6 +327,10 @@ app.use(
 app.use(
   "/api/professional",
   professionalRouter
+);
+app.use(
+  "/api/ai",
+  todayLessonRouter
 );
 // ============================================================
 // 首页

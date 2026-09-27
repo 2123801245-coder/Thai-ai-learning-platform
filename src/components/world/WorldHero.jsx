@@ -20,6 +20,8 @@
 
 import React from "react";
 import { Sparkles } from "lucide-react";
+import { useTheme } from "@/lib/ThemeContext";
+import { heroArt } from "./heroArt";
 
 /*
  * 灯笼光点：与首页同一套坐标语言（固定坐标 + 不同时长，不做随机数，
@@ -104,32 +106,37 @@ export default function WorldHero({
   ariaLabel,
 }) {
   const rgb = rgbTriplet(accent);
+  const { isDark } = useTheme();
+  const hero = heroArt(isDark);
 
   return (
     <section
       aria-label={ariaLabel || title}
-      className="world-scene world-band relative isolate overflow-hidden rounded-[26px] border border-white/[0.07] bg-[#050807] shadow-2xl shadow-black/45"
+      className="world-scene world-band relative isolate overflow-hidden rounded-[26px] border border-white/[0.07] shadow-2xl shadow-black/45"
       style={{
         "--hero-focus": focus,
         "--hero-accent-soft": `rgba(${rgb}, 0.16)`,
+        /* 照片没贴上时的底色：浅色主题给纸本米白，深色保持近黑 */
+        background: "var(--tp-bg, #050807)",
       }}
     >
       {/* ================= 背景：与首页同一张素材（窄屏竖幅 / 桌面宽幅） ============== */}
       <div className="pointer-events-none absolute inset-0" aria-hidden="true">
         <picture>
-          <source
-            media="(min-width: 1100px)"
-            srcSet="/images/thai-guardian-hero-wide.webp"
-            type="image/webp"
-          />
-          <source
-            media="(min-width: 1100px)"
-            srcSet="/images/thai-guardian-hero-wide.jpg"
-            type="image/jpeg"
-          />
-          <source srcSet="/images/thai-guardian-hero.webp" type="image/webp" />
+          <source media="(min-width: 1100px)" srcSet={hero.wide} type="image/webp" />
+          {hero.wideFallback && (
+            <source
+              media="(min-width: 1100px)"
+              srcSet={hero.wideFallback.src}
+              type={hero.wideFallback.type}
+            />
+          )}
+          <source srcSet={hero.portrait} type="image/webp" />
+          {hero.portraitFallback && (
+            <source srcSet={hero.portraitFallback.src} type={hero.portraitFallback.type} />
+          )}
           <img
-            src="/images/thai-guardian-hero.jpg"
+            src={hero.portrait}
             alt=""
             className="world-scene-subject world-band-subject absolute inset-0 h-full w-full object-cover"
             fetchPriority="high"

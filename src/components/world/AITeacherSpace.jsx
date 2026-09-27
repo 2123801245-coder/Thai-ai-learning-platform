@@ -24,9 +24,19 @@
 import { useTheme } from "@/lib/ThemeContext";
 import { inkForWorld } from "@/themes/worlds";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Mic, MicOff, Sparkles, Waves } from "lucide-react";
+import {
+  Crown,
+  MessageCircle,
+  Mic,
+  MicOff,
+  Sparkles,
+  Waves,
+} from "lucide-react";
 
+import { getAiTeacherQuota } from "@/api/aiTeacher";
+import { useAuth } from "@/lib/AuthContext";
 import { useWorldQuality } from "./WorldStage";
 
 /* =========================================================
@@ -169,24 +179,71 @@ export default function AITeacherSpace({
   progress,
   guidance = null,
   className = "",
+  /* 免费额度用完时的升级入口（由首页传入，打开 VipPanel） */
+  onUpgrade = null,
 }) {
 
   /*
    * 强调色按世界调整后再用。
    * 这些是 inline style（CSS 重映射够不到），原色 #6ee7a8 / #8ab4ff 落在
    * 米白纸上实测对比度约 1.4，纸面主题下基本看不见。
+   * 用 visualMode（真正画出来的世界）而不是 world：浅色模式下用户选的
+   * 可能是 night 世界，实际渲染的却是纸本，取错就会把浅色字放上白底。
    */
-  const { world } = useTheme();
+  const { visualMode } = useTheme();
   const accentInk = React.useCallback(
-    (c) => inkForWorld(c, world?.visualMode),
-    [world?.visualMode]
+    (c) => inkForWorld(c, visualMode),
+    [visualMode]
   );
+  const isPaper = visualMode === "paper";
+  const navigate = useNavigate();
+  const { user, token } = useAuth();
+  const isVip = !!user?.isVip;
+
   const quality = useWorldQuality();
   const [listening, setListening] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [micError, setMicError] = useState("");
   const [analyser, setAnalyser] = useState(null);
   const [inView, setInView] = useState(true);
+
+  /*
+   * 今日 AI 对话额度。
+   * 教室是「今天还能练什么」的地方，额度必须在这里看得见 —— 不然免费用
+   * 户只会在对话室里撞到 429，更不知道 VIP 与免费差在哪。
+   * 依赖 progress：练完一项就会被上层重建，顺带刷新额度。
+   */
+  const [quota, setQuota] = useState(null);
+
+  useEffect(() => {
+    if (!token) {
+      setQuota(null);
+      return undefined;
+    }
+
+    let alive = true;
+
+    const load = () => {
+      getAiTeacherQuota()
+        .then((res) => alive && setQuota(res?.data || null))
+        .catch(() => {});
+    };
+
+    load();
+
+    /* 从对话室回来 / 切回本标签页：额度可能已经变了 */
+    const onVisible = () => {
+      if (!document.hidden) load();
+    };
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [token, progress]);
 
   const sectionRef = useRef(null);
   const streamRef = useRef(null);
@@ -287,6 +344,24 @@ export default function AITeacherSpace({
     }
   };
 
+  /*
+   * 情绪球的两种形态。
+   * 深色世界：带光晕的夜球（暗底 + 彩雾）。
+   * 纸面世界：**印章**（浅底 + 彩环）—— 原样的 rgba(6,10,14,0.9) 落在米白
+   * 纸上就是一块近黑的墨饼，这是「深色资产在纸面发黑」的又一例。
+   * 声波条同用 orbInk：canvas 是画上去的像素，拿不到主题的着色器重映射，
+   * 原色 #8ab4ff 在白底上对比度只有 1.9，必须自己换墨色。
+   */
+  const orbInk = accentInk(emotion.color);
+
+  /* 今日 AI 对话额度（未登录 / 读不到时为 null，不显示假数字） */
+  const remaining = quota?.remainingToday ?? 0;
+  const dailyLimit = quota?.freeChatDaily ?? 0;
+  const orbBackground = isPaper
+    ? `radial-gradient(circle at 34% 30%, ${orbInk}2e, rgba(255,252,245,0.95) 70%)`
+    : `radial-gradient(circle at 34% 30%, ${emotion.color}55, rgba(6,10,14,0.9) 68%)`;
+  const orbBorder = isPaper ? orbInk : `${emotion.color}66`;
+
   return (
     <section ref={sectionRef} className={`relative my-10 ${className}`}>
       <div className="mb-3 px-1">
@@ -314,13 +389,26 @@ export default function AITeacherSpace({
               animate={
                 quality.reducedMotion
                   ? {}
-                  : { scale: [1, 1.045, 1], boxShadow: [`0 0 30px ${emotion.color}44`, `0 0 46px ${emotion.color}77`, `0 0 30px ${emotion.color}44`] }
+                  : {
+                      scale: [1, 1.045, 1],
+                      boxShadow: isPaper
+                        ? [
+                            `0 0 0 1px ${orbInk}20, 0 6px 16px rgba(60,48,30,0.10)`,
+                            `0 0 0 1px ${orbInk}40, 0 9px 22px rgba(60,48,30,0.15)`,
+                            `0 0 0 1px ${orbInk}20, 0 6px 16px rgba(60,48,30,0.10)`,
+                          ]
+                        : [
+                            `0 0 30px ${emotion.color}44`,
+                            `0 0 46px ${emotion.color}77`,
+                            `0 0 30px ${emotion.color}44`,
+                          ],
+                    }
               }
               transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}
               className="flex h-24 w-24 items-center justify-center rounded-full text-3xl"
               style={{
-                background: `radial-gradient(circle at 34% 30%, ${emotion.color}55, rgba(6,10,14,0.9) 68%)`,
-                border: `1px solid ${emotion.color}66`,
+                background: orbBackground,
+                border: `1px solid ${orbBorder}`,
               }}
             >
               {emotion.emoji}
@@ -355,7 +443,7 @@ export default function AITeacherSpace({
                 listening={listening}
                 analyser={analyser}
                 active={inView && !quality.reducedMotion}
-                accent={emotion.color}
+                accent={orbInk}
               />
             </div>
 
@@ -378,6 +466,80 @@ export default function AITeacherSpace({
                 {micError}
               </p>
             ) : null}
+
+            {/* ── 今日额度 + 下一步 ──
+                教室要能回答「今天还能问几次」与「下一步点哪」；
+                额度来自 /ai/teacher/quota，与对话室的计数同一份 */}
+            <div className="mt-3 w-full rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-[10px] text-white/45">
+                  {isVip ? (
+                    <Crown className="h-3 w-3 text-yellow-300/80" />
+                  ) : (
+                    <MessageCircle className="h-3 w-3" />
+                  )}
+                  {isVip ? "VIP · 对话不限次数" : "今日 AI 对话额度"}
+                </span>
+
+                {quota && !isVip ? (
+                  <span className="text-[10px] font-semibold text-white/70">
+                    剩 {remaining} / {dailyLimit} 次
+                  </span>
+                ) : null}
+              </div>
+
+              {quota && !isVip ? (
+                <>
+                  {/* 额度点阵：已用的压暗、还剩的亮着（超过 12 次就不画点，免得一条长蛇） */}
+                  {dailyLimit > 0 && dailyLimit <= 12 ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {Array.from({ length: dailyLimit }).map((_, index) => (
+                        <span
+                          key={index}
+                          className={`h-1.5 w-4 rounded-full ${
+                            index < remaining ? "bg-emerald-400/85" : "bg-slate-400/25"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <p className="mt-2 text-[10px] leading-5 text-white/45">
+                    {remaining > 0
+                      ? "练完一项少一次；VIP 不限次数，还能解开全部课时。"
+                      : "今天的免费对话用完了，明天重置；开通 VIP 可以无限问。"}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-1.5 text-[10px] leading-5 text-white/45">
+                  {isVip
+                    ? "全部课程与视频已解锁，随时开口。"
+                    : "登录后老师会记住你，并显示每日额度。"}
+                </p>
+              )}
+
+              <div className="mt-2.5 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate("/conversation")}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-emerald-300/25 bg-emerald-400/[0.1] px-3 py-2 text-[11px] font-bold text-emerald-100 transition hover:bg-emerald-400/[0.18]"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  去对话室
+                </button>
+
+                {!isVip && quota && remaining <= 0 && onUpgrade ? (
+                  <button
+                    type="button"
+                    onClick={onUpgrade}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-yellow-300/25 bg-yellow-300/[0.1] px-3 py-2 text-[11px] font-bold text-yellow-100 transition hover:bg-yellow-300/[0.18]"
+                  >
+                    <Crown className="h-3.5 w-3.5" />
+                    开通 VIP
+                  </button>
+                ) : null}
+              </div>
+            </div>
 
             {/* 老师手里的事实（不是装饰数字） */}
             <div className="mt-4 grid w-full grid-cols-3 gap-2 border-t border-white/[0.06] pt-3 text-center">

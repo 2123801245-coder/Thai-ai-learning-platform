@@ -36,7 +36,13 @@ import {
   getCourseCertificate,
 } from "@/lib/courseProgress";
 
+import {
+  isLessonLocked,
+  firstAccessibleLesson,
+} from "@/lib/entitlements";
+
 import { useAuth } from "@/lib/AuthContext";
+import { usePageTrail } from "@/components/common/Breadcrumb";
 
 import VipPanel from "@/components/common/VipPanel";
 import { AIOrb } from "@/components/ui/premium";
@@ -66,6 +72,9 @@ export default function CourseDetail() {
     () => getCourseById(courseId),
     [courseId]
   );
+
+  /* 课程名只有本页手里有：交给面包屑，层级才到「学习 › 基础泰语精读」 */
+  usePageTrail(course ? [{ label: course.title }] : []);
 
 
   // =======================================================
@@ -106,7 +115,7 @@ export default function CourseDetail() {
     const first = lessons.find(
       (lesson) =>
         !isLessonCompleted(course.id, lesson.id) &&
-        !(course.isVip && !lesson.free && !isVipUser)
+        !isLessonLocked({ lesson, isVipUser })
     );
 
     return first ? first.id : null;
@@ -180,16 +189,14 @@ export default function CourseDetail() {
         (lesson) => lesson.id === stats.lastLessonId
       );
 
-      if (last && (last.free || !course.isVip)) {
+      if (last && !isLessonLocked({ lesson: last, isVipUser })) {
         navigate(getLessonHref(course.id, last));
         return;
       }
     }
 
-    // 否则从第一节可看的开始
-    const firstAvailable = lessons.find(
-      (lesson) => lesson.free || !course.isVip
-    );
+    // 否则从第一节可看的开始（锁定规则见 @/lib/entitlements）
+    const firstAvailable = firstAccessibleLesson(lessons, isVipUser);
 
     if (firstAvailable) {
       navigate(getLessonHref(course.id, firstAvailable));
@@ -443,7 +450,6 @@ export default function CourseDetail() {
                     <LessonRow
                       key={lesson.id}
                       lesson={lesson}
-                      course={course}
                       index={lessonIndex}
                       isVipUser={isVipUser}
                       completed={isLessonCompleted(course.id, lesson.id)}
@@ -613,7 +619,6 @@ export default function CourseDetail() {
 
 function LessonRow({
   lesson,
-  course,
   index,
   isVipUser = false,
   completed,
@@ -623,12 +628,12 @@ function LessonRow({
 }) {
 
   /*
-   * VIP 课程：
+   * 课时锁定（统一规则，见 @/lib/entitlements）：
    * 免费用户仅允许试看节（lesson.free）；
    * VIP 用户解锁全部课时。
    */
 
-  const locked = course.isVip && !lesson.free && !isVipUser;
+  const locked = isLessonLocked({ lesson, isVipUser });
 
   // 时间线节点状态：完成（绿光）→ 当前（金光呼吸）→ 未解锁（暗色）
   const railState = locked

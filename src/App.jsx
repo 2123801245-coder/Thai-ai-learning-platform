@@ -15,6 +15,7 @@ import {
 
 // 布局与核心依赖保持同步加载（首屏必需）
 import MainLayout from "@/layouts/MainLayout";
+import AuthDepthLayout from "@/layouts/AuthDepthLayout";
 
 import { useAuth } from "@/lib/AuthContext";
 
@@ -49,6 +50,8 @@ const BasicReaderExam = lazy(() => import("@/pages/BasicReaderExam"));
 const PlacementTest = lazy(() => import("@/pages/PlacementTest"));
 const ThaiProfessionalHub = lazy(() => import("@/pages/ThaiProfessionalHub"));
 const Login = lazy(() => import("@/pages/Login"));
+/* 分享链接的公开落地页：证书/成就卡分享出去后，收件人落在这里（不需要登录） */
+const ShareLanding = lazy(() => import("@/pages/ShareLanding"));
 const ThaiLanding = lazy(() => import("@/pages/ThaiLanding"));
 const Register = lazy(() => import("@/pages/Register"));
 const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
@@ -252,12 +255,15 @@ export default function App() {
 
 
         {/* =================================================
-            登录
+            分享落地（/share?scene=&vocab=&from=）
+            —— 站外分享链接的入口，因此必须公开可达；
+               构建期还会为它单独生成带产品卡片的 index.html
+               （见 scripts/build-share-pages.mjs）。
         ================================================= */}
 
         <Route
-          path="/login"
-          element={<Login />}
+          path="/share"
+          element={<ShareLanding />}
         />
 
         <Route
@@ -270,33 +276,35 @@ export default function App() {
 
 
         {/* =================================================
-            注册
+            认证流程：登录 / 注册 / 忘记密码 / 重置密码
+            —— 这四页是一段连续的路程（全屏营销页，不走 MainLayout），
+               共用 AuthDepthLayout 提供的景深过渡：新页面立刻挂载、
+               旧页面失焦退场，过渡时长比应用内换页更短。
         ================================================= */}
 
-        <Route
-          path="/register"
-          element={<Register />}
-        />
+        <Route element={<AuthDepthLayout />}>
 
+          <Route
+            path="/login"
+            element={<Login />}
+          />
 
-        {/* =================================================
-            忘记密码
-        ================================================= */}
+          <Route
+            path="/register"
+            element={<Register />}
+          />
 
-        <Route
-          path="/forgot-password"
-          element={<ForgotPassword />}
-        />
+          <Route
+            path="/forgot-password"
+            element={<ForgotPassword />}
+          />
 
+          <Route
+            path="/reset-password"
+            element={<ResetPassword />}
+          />
 
-        {/* =================================================
-            重置密码
-        ================================================= */}
-
-        <Route
-          path="/reset-password"
-          element={<ResetPassword />}
-        />
+        </Route>
 
 
         {/* =================================================

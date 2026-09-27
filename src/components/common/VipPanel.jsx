@@ -4,13 +4,6 @@ import {
   Crown,
   Check,
   X,
-  BookOpen,
-  Video,
-  Mic,
-  MessageCircle,
-  Sparkles,
-  BarChart3,
-  Headphones,
   KeyRound,
   Loader2,
   CheckCircle2,
@@ -42,6 +35,13 @@ import {
   PURCHASE_URL,
   copyText,
 } from "@/lib/vipConfig";
+import {
+  VIP_BENEFITS,
+  COMPARE_ROWS,
+  FREE_FOREVER,
+  FREE_NOTE,
+  VIP_COURSE_COUNT,
+} from "@/lib/entitlements";
 
 /* =========================================================
    VIP 权益面板（共享组件）
@@ -52,75 +52,14 @@ import {
       未配置时在线支付自动隐藏，只保留激活码。
    2. 激活码 —— 管理员发码，后端启动时生成演示码，
       也可用环境变量 VIP_CODES 自定义（CODE:天数）。
-   3. 权益内容与 Course.jsx / CourseDetail.jsx 保持一致。
+   3. 权益文案统一来自 @/lib/entitlements（单一数据源），
+      与本文件的实现改动必须同步改那里，不再在这里手写。
 ========================================================= */
 
-const benefits = [
-  {
-    icon: MessageCircle,
-    text: "AI 老师无限对话",
-    desc: "免费版每日 10 次；VIP 不限次数，随时问",
-  },
-  {
-    icon: Video,
-    text: "全部课程与视频",
-    desc: "5 门 VIP 进阶课程 + 全部课时全开放",
-  },
-  {
-    icon: Mic,
-    text: "完整口语训练",
-    desc: "句子/段落跟读 + Azure 专业发音评测（免费版仅单词模式）",
-  },
-  {
-    icon: Headphones,
-    text: "新闻听力无限题",
-    desc: "免费版每日 10 题；VIP 无限听音填空练习",
-  },
-  {
-    icon: Sparkles,
-    text: "高级词汇与词书",
-    desc: "进阶词库、错题本智能复习全开放",
-  },
-  {
-    icon: BarChart3,
-    text: "完整学习数据",
-    desc: "能力雷达、成长曲线、口语评分趋势全展示",
-  },
-];
-
-/* 免费 vs VIP 对比表（与后端配额逻辑一致） */
-const compareRows = [
-  {
-    label: "AI 泰语老师",
-    free: "每日 10 次对话",
-    vip: "无限对话 · 语音输入",
-  },
-  {
-    label: "新闻听力练习",
-    free: "每日 10 题",
-    vip: "无限听音填空",
-  },
-  {
-    label: "口语训练",
-    free: "仅单词模式",
-    vip: "句子+段落+专业评分",
-  },
-  {
-    label: "进阶课程视频",
-    free: "试看部分课时",
-    vip: "全部解锁",
-  },
-  {
-    label: "高级词库",
-    free: "基础词书",
-    vip: "29 本词书全开放",
-  },
-  {
-    label: "学习数据分析",
-    free: "基础统计",
-    vip: "雷达+趋势+错题复盘",
-  },
-];
+/* 权益列表 / 对比表 / 永久免费清单 / 免费说明
+   全部来自 @/lib/entitlements —— 文案与实现只有一处真值 */
+const benefits = VIP_BENEFITS;
+const compareRows = COMPARE_ROWS;
 
 /* 到期时间格式化：YYYY-MM-DD HH:mm → 显示日期 */
 function formatExpiry(value) {
@@ -449,8 +388,8 @@ export default function VipPanel({ open, onClose }) {
 
                   <p className="mt-0.5 text-xs text-yellow-200/50">
                     {isVip
-                      ? "已开通 · 全部进阶内容已解锁"
-                      : "解锁全部进阶学习内容"}
+                      ? `已开通 · 全部 ${VIP_COURSE_COUNT} 门课程与无限练习已解锁`
+                      : "解锁全部课程、全部视频与无限练习"}
                   </p>
                 </div>
               </div>
@@ -940,6 +879,10 @@ export default function VipPanel({ open, onClose }) {
                       </div>
                     ))}
                   </div>
+
+                  <p className="mt-2 text-[10px] leading-4 text-white/25">
+                    表里只列有差异的部分；词书、能力雷达与成长曲线两边都免费开放。
+                  </p>
                 </div>
               )}
 
@@ -974,16 +917,37 @@ export default function VipPanel({ open, onClose }) {
                 })}
               </div>
 
-              {/* 免费说明 */}
+              {/* 免费说明：永久免费的部分，不当作 VIP 权益卖 */}
 
-              <div className="mt-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
-                <p className="text-[11px] leading-5 text-white/35">
-                  免费用户仍可学习
-                  <span className="text-white/60"> 3 门基础课程 </span>
-                  与
-                  <span className="text-white/60"> VIP 课程试看视频</span>
-                  ，随时可以升级。
+              <div className="mt-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3.5">
+                <p className="text-[11px] font-semibold text-white/55">
+                  {FREE_NOTE.title}
                 </p>
+
+                <p className="mt-1 text-[11px] leading-5 text-white/35">
+                  {FREE_NOTE.body}
+                </p>
+
+                <div className="mt-3 space-y-1.5">
+                  {FREE_FOREVER.map((item) => (
+                    <div
+                      key={item.text}
+                      className="flex items-start gap-2 rounded-xl border border-emerald-300/10 bg-emerald-400/[0.04] px-3 py-2"
+                    >
+                      <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-300/60" />
+
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold text-emerald-100/80">
+                          {item.text}
+                        </p>
+
+                        <p className="mt-0.5 text-[10px] text-white/30">
+                          {item.desc}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>

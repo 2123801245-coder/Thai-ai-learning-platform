@@ -13,9 +13,9 @@
      · 纸面（浅底）：var(--tp-border) / var(--tp-border-subtle)
        —— 这两个是 worldTokens() 里 PAPER 自己的边框 token（ink @ .26 / .13），
           “边框”属于形不属于配色，用它等于沿用世界已有的描边，不是新调色。
-     · 探险者面板（深底）：rgba(232,198,132,*) —— 探险者那套 .exp-* 本身
-       就写死了这套金色细线（.exp-seal / .exp-tag / .exp-rail-thumb 都在用），
-       深底上 var(--tp-border) 是深墨色，画出来看不见，只能沿用面板自己的金线。
+     · 探险者（.exp-*）：纸面模式下整块地图板已经是纸底（见 C 段），所以
+       细线一律用 var(--tp-border) / --tp-border-subtle；只有"金"本身
+       （栏目名、卷目、印章、金针）用 var(--tp-accent)。
 
    关于 theme.css 里那 4 条 !important（别照着旧注释走错路）
    --------------------------------------------------------
@@ -364,11 +364,10 @@ html[data-visual-mode="paper"] .culp-empty.culp-empty {
 /* =========================================================
    B. /culture-universe（ThailandExplorer）· 展区目录 + 图录面板
    ---------------------------------------------------------
-   探险者的地图板 / 轨道 / 面板本身是一块“深色展柜”（.exp-board 底 #040706、
-   .exp-rail / .exp-panel 都是深玻璃，文字硬编码白色）——那是它的设计，
-   四个世界共用，**不属于本次版式改造**，所以下面一律不碰板的底色和文字色，
-   只把“展柜外围的目录与图录”做成纸本目录的语言：
-   方角（世界 token）、金细线分节、大字距栏目名、展区编号。
+   探险者的地图板 / 轨道 / 面板原本是一块“深色展柜”（.exp-board 底 #040706、
+   .exp-rail / .exp-panel 都是深玻璃，文字硬编码白色）。纸面模式下它已经整块
+   改为纸底（地图图幅反相成铜色印张、控件与图录面板一并转纸），配色见 C 段。
+   本节只负责"形"：方角（世界 token）、细线分节、大字距栏目名、展区编号。
    尺寸继续沿用 .exp-* 的 `calc(var(--exp-u) * x)` 约定（整块板随容器等比缩放），
    不复用 rem，否则缩放比例会断。
    ========================================================= */
@@ -380,13 +379,13 @@ html[data-visual-mode="paper"] .culp-exp .exp-rail {
 html[data-visual-mode="paper"] .culp-exp .exp-rail-head {
   letter-spacing: 0.3em;
   padding-bottom: calc(var(--exp-u) * 0.005);
-  border-bottom: 1px solid rgba(232, 198, 132, 0.28);
+  border-bottom: 1px solid var(--tp-border);
 }
 html[data-visual-mode="paper"] .culp-exp .exp-rail-row {
   /* 方角 + 行底线：目录里一行一座城的读法 */
   border-radius: var(--tp-radius-sm);
   letter-spacing: 0.04em;
-  border-bottom-color: rgba(232, 198, 132, 0.16);
+  border-bottom-color: var(--tp-border-subtle);
 }
 /* 缩略图 → 图版：细金框 + 白纸边（padding 由 border-box 收窄图片本身，形成卡纸边） */
 html[data-visual-mode="paper"] .culp-exp .exp-rail-thumb {
@@ -414,12 +413,12 @@ html[data-visual-mode="paper"] .culp-exp .exp-panel {
 /* 每个栏目变成“上细线分节”的图录段 */
 html[data-visual-mode="paper"] .culp-exp .exp-panel-block {
   padding-top: calc(var(--exp-u) * 0.009);
-  border-top: 1px solid rgba(232, 198, 132, 0.18);
+  border-top: 1px solid var(--tp-border-subtle);
 }
 html[data-visual-mode="paper"] .culp-exp .exp-panel-label {
   letter-spacing: 0.3em;
   padding-bottom: calc(var(--exp-u) * 0.003);
-  border-bottom: 1px solid rgba(232, 198, 132, 0.22);
+  border-bottom: 1px solid var(--tp-border);
 }
 html[data-visual-mode="paper"] .culp-exp .exp-tag,
 html[data-visual-mode="paper"] .culp-exp .exp-scene {
@@ -428,7 +427,7 @@ html[data-visual-mode="paper"] .culp-exp .exp-scene {
 }
 html[data-visual-mode="paper"] .culp-exp .exp-line {
   border-radius: var(--tp-radius-sm);
-  border-bottom-color: rgba(232, 198, 132, 0.16);
+  border-bottom-color: var(--tp-border-subtle);
 }
 html[data-visual-mode="paper"] .culp-exp .exp-volumes {
   border-radius: var(--tp-radius-sm);
@@ -444,5 +443,287 @@ html[data-visual-mode="paper"] .culp-exp .exp-era-head {
   letter-spacing: 0.06em;
 }
 html[data-visual-mode="paper"] .culp-exp .exp-panel-foot {
-  border-top-color: rgba(232, 198, 132, 0.2);
+  border-top-color: var(--tp-border);
+}
+
+
+/* =========================================================
+   C. /culture-universe 探索者 · 地图板纸面化
+   ---------------------------------------------------------
+   本节只管颜色（形在 B 段）。深色世界保持原样的办法：下面每一条都带
+   html[data-visual-mode="paper"]，midnight 一条都匹配不到。
+
+   图幅是本次的关键：那张地图艺术图是夜景（深底+暗金线+暖色灯火），
+   直接放到纸底上就是一块黑板。处理办法是整幅反相后把色相回旋 180°——
+   深底变纸白、暗金线变铜色墨线、暖色灯火变焦赭色印点，再用纸本世界的
+   旧金（--tp-accent #9A7B2E）与苔绿（--tp-primary #3A4A3C）接住配色。
+   ========================================================= */
+
+/* 纸面上的"金"分两支：结构线 / 印章底用 --tp-accent（旧金 #9A7B2E），
+   **文字**用这枚更暗的墨金 —— --tp-accent 在米白上只有 3.55:1，做小字偏弱。 */
+html[data-visual-mode="paper"] .culp-exp {
+  --exp-gold-ink: #7a5f22;
+}
+
+/* ---------- C1 地图板 ---------- */
+html[data-visual-mode="paper"] .culp-exp .exp-board {
+  border-radius: var(--tp-radius-sm);
+  border-color: var(--tp-border);
+  background: var(--tp-bg);
+  box-shadow: var(--tp-shadow-deep);
+}
+
+/* 图幅转印已升级为全站通用机制：exp-map 挂了 data-plate="art"，
+   规则收编在 world-shim.css 的 data-plate 段（同为 (0,2,0)，本文件
+   比 shim 晚加载，此处无需再双写）。这里只保留一条防叠层声明：
+   纸本世界的 --tp-img-filter（sepia/brightness）不再叠上反相，
+   否则图幅会发灰。 */
+html[data-visual-mode="paper"] .culp-exp .exp-map.exp-map {
+  filter: invert(1) hue-rotate(180deg) saturate(0.85) contrast(1.04) !important;
+}
+
+/* 已探索航路：金色发光虚线 → 铜色墨线 */
+html[data-visual-mode="paper"] .culp-exp .exp-route-line {
+  stroke: rgba(154, 123, 46, 0.72);
+  filter: drop-shadow(0 1px 2px rgba(60, 48, 30, 0.2));
+}
+
+/* ---------- C2 板上的控件与标签 ---------- */
+html[data-visual-mode="paper"] .culp-exp .exp-chip {
+  border-color: var(--tp-border);
+  background: linear-gradient(180deg, rgba(255, 253, 248, 0.95), rgba(247, 240, 226, 0.97));
+  box-shadow: 0 calc(var(--exp-u) * 0.008) calc(var(--exp-u) * 0.03) rgba(60, 48, 30, 0.3);
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-chip:hover {
+  border-color: rgba(154, 123, 46, 0.55);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-chip[data-active] {
+  border-color: rgba(58, 74, 60, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(58, 74, 60, 0.2),
+    0 calc(var(--exp-u) * 0.01) calc(var(--exp-u) * 0.034) rgba(60, 48, 30, 0.32);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-chip-icon {
+  /* 城市色块：从"压在黑玻璃上"改成"压在纸面上" */
+  background: color-mix(in srgb, var(--exp-city, #9a7b2e) 18%, rgba(255, 253, 248, 0.92));
+}
+html[data-visual-mode="paper"] .culp-exp .exp-chip-title em {
+  color: rgba(36, 31, 23, 0.6);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-chip-tags {
+  color: var(--exp-gold-ink);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-chip-done {
+  border-color: rgba(154, 123, 46, 0.45);
+  background: rgba(154, 123, 46, 0.14);
+  color: var(--exp-gold-ink);
+}
+
+/* 罗盘：SVG 里的金渐变不动，整枚压暗成铜色（比逐个改 stop-color 少一层耦合） */
+html[data-visual-mode="paper"] .culp-exp .exp-compass {
+  opacity: 0.95;
+  filter: brightness(0.72) saturate(1.1) drop-shadow(0 2px 6px rgba(60, 48, 30, 0.2));
+}
+
+html[data-visual-mode="paper"] .culp-exp .exp-title .exp-eyebrow {
+  color: var(--exp-gold-ink);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-h1 {
+  background: linear-gradient(180deg, #4a3f22 6%, #9a7b2e 52%, #6b5120 100%);
+  /* 必须重decl background-clip：`background` 简写会把它重置成 border-box，
+     否则渐变文字会变成一整块实心色块 */
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+html[data-visual-mode="paper"] .culp-exp .exp-sub {
+  color: rgba(36, 31, 23, 0.72);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-orn i {
+  background: linear-gradient(90deg, transparent, rgba(154, 123, 46, 0.7));
+}
+
+/* 圆按钮 / 提示条 / 缩放：深玻璃 → 纸面浮层 */
+html[data-visual-mode="paper"] .culp-exp .exp-round,
+html[data-visual-mode="paper"] .culp-exp .exp-badge,
+html[data-visual-mode="paper"] .culp-exp .exp-zoom {
+  border-color: var(--tp-border);
+  background: rgba(255, 253, 247, 0.88);
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-round:hover,
+html[data-visual-mode="paper"] .culp-exp .exp-badge:hover {
+  border-color: rgba(58, 74, 60, 0.5);
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-zoom button {
+  color: rgba(36, 31, 23, 0.72);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-zoom button:hover {
+  background: rgba(58, 74, 60, 0.14);
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-zoom-value {
+  color: rgba(36, 31, 23, 0.6);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-badge-go {
+  color: var(--tp-secondary);
+}
+
+/* ---------- C3 探索路线栏与进度卡 ---------- */
+html[data-visual-mode="paper"] .culp-exp .exp-rail,
+html[data-visual-mode="paper"] .culp-exp .exp-progress {
+  border-color: var(--tp-border);
+  background: var(--tp-surface-bg);
+  box-shadow: var(--tp-shadow);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-head {
+  color: var(--exp-gold-ink);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-row {
+  color: rgba(36, 31, 23, 0.8);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-row:hover {
+  background: rgba(36, 31, 23, 0.05);
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-row[data-active] {
+  border-color: rgba(58, 74, 60, 0.45);
+  background: linear-gradient(90deg, rgba(58, 74, 60, 0.16), rgba(58, 74, 60, 0.04));
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-row[data-active]::before {
+  background: var(--tp-primary);
+  box-shadow: 0 0 8px 2px rgba(58, 74, 60, 0.3);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-name em,
+html[data-visual-mode="paper"] .culp-exp .exp-rail-arrow {
+  color: rgba(36, 31, 23, 0.5);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-check {
+  color: var(--exp-gold-ink);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-rail-thumb {
+  border-color: rgba(154, 123, 46, 0.45);
+  box-shadow: var(--tp-shadow-soft);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-ring-track {
+  stroke: rgba(36, 31, 23, 0.16);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-ring-fill {
+  stroke: var(--tp-primary);
+  filter: none;
+}
+html[data-visual-mode="paper"] .culp-exp .exp-ring-value,
+html[data-visual-mode="paper"] .culp-exp .exp-progress-label {
+  color: var(--exp-gold-ink);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-progress-count {
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-progress-sub {
+  color: rgba(36, 31, 23, 0.55);
+}
+
+/* ---------- C4 城市志面板（展签） ---------- */
+html[data-visual-mode="paper"] .culp-exp .exp-panel {
+  border-color: var(--tp-border);
+  background: var(--tp-surface-bg);
+  box-shadow: var(--tp-shadow-deep);
+}
+
+/* 文字按原来的三档透明度搬成墨色三档：主标 → 正墨，正文 → 灰墨，弱标 → 淡墨 */
+html[data-visual-mode="paper"] .culp-exp .exp-panel-en,
+html[data-visual-mode="paper"] .culp-exp .exp-panel-name,
+html[data-visual-mode="paper"] .culp-exp .exp-culture-title,
+html[data-visual-mode="paper"] .culp-exp .exp-line-thai,
+html[data-visual-mode="paper"] .culp-exp .exp-era-head {
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-panel-tagline,
+html[data-visual-mode="paper"] .culp-exp .exp-intro,
+html[data-visual-mode="paper"] .culp-exp .exp-line-cn,
+html[data-visual-mode="paper"] .culp-exp .exp-culture-text,
+html[data-visual-mode="paper"] .culp-exp .exp-culture-p,
+html[data-visual-mode="paper"] .culp-exp .exp-era-text,
+html[data-visual-mode="paper"] .culp-exp .exp-fact {
+  color: rgba(36, 31, 23, 0.72);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-panel-thai,
+html[data-visual-mode="paper"] .culp-exp .exp-panel-roman,
+html[data-visual-mode="paper"] .culp-exp .exp-panel-label,
+html[data-visual-mode="paper"] .culp-exp .exp-panel-foot,
+html[data-visual-mode="paper"] .culp-exp .exp-seal-meta,
+html[data-visual-mode="paper"] .culp-exp .exp-volume,
+html[data-visual-mode="paper"] .culp-exp .exp-line-icon {
+  color: rgba(36, 31, 23, 0.55);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-seal-meta em {
+  color: rgba(36, 31, 23, 0.42);
+}
+
+/* 金（栏目名 / 卷目 / 印章）用纸本旧金；翠（情景签 / 要点）换苔绿 */
+html[data-visual-mode="paper"] .culp-exp .exp-tag,
+html[data-visual-mode="paper"] .culp-exp .exp-seal-th,
+html[data-visual-mode="paper"] .culp-exp .exp-volume[data-active="1"] {
+  color: var(--exp-gold-ink);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-tag {
+  border-color: rgba(154, 123, 46, 0.35);
+  background: rgba(154, 123, 46, 0.08);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-seal {
+  border-color: rgba(154, 123, 46, 0.32);
+  background: linear-gradient(90deg, rgba(154, 123, 46, 0.12), transparent 78%);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-volume[data-active="1"] {
+  background: rgba(154, 123, 46, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(154, 123, 46, 0.34);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-volume:hover {
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-scene {
+  border-color: rgba(58, 74, 60, 0.35);
+  background: rgba(58, 74, 60, 0.1);
+  color: #3a4a3c;
+}
+html[data-visual-mode="paper"] .culp-exp .exp-scene:hover {
+  background: rgba(58, 74, 60, 0.2);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-line-cn em,
+html[data-visual-mode="paper"] .culp-exp .exp-fact b {
+  color: #4f6349;
+}
+html[data-visual-mode="paper"] .culp-exp .exp-era-head::before {
+  background: linear-gradient(180deg, #b5934a, #6b5120);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-line,
+html[data-visual-mode="paper"] .culp-exp .exp-volumes {
+  border-color: var(--tp-border-subtle);
+  background: rgba(36, 31, 23, 0.03);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-line:hover {
+  border-color: rgba(58, 74, 60, 0.4);
+  background: rgba(58, 74, 60, 0.08);
+}
+
+/* ---------- C5 面板里剩下的小件（饰品 / 段落符 / 风味条） ---------- */
+html[data-visual-mode="paper"] .culp-exp .exp-orn b,
+html[data-visual-mode="paper"] .culp-exp .exp-dish-th,
+html[data-visual-mode="paper"] .culp-exp .exp-culture-p::before {
+  color: var(--exp-gold-ink);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-dish {
+  border-color: var(--tp-border-subtle);
+  background: rgba(36, 31, 23, 0.03);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-dish-name {
+  color: var(--tp-text);
+}
+html[data-visual-mode="paper"] .culp-exp .exp-dish-roman {
+  color: #4f6349;
+}
+html[data-visual-mode="paper"] .culp-exp .exp-dish-note {
+  color: rgba(36, 31, 23, 0.55);
 }

@@ -37,6 +37,8 @@ import {
 } from "lucide-react";
 
 import useGuardianVoice from "@/hooks/useGuardianVoice";
+import { useTheme } from "@/lib/ThemeContext";
+import { heroArt } from "./heroArt";
 
 /* 灯笼光点：固定坐标 + 不同时长，省掉随机数带来的重新布局 */
 const LANTERNS = [
@@ -94,6 +96,10 @@ export default function GuardianScene({
   const meterRef = useRef(null);
   const faceRef = useRef(false);
 
+  /* 英雄区的佛像：深色是青黑陶瓷守护者，浅色是白瓷浮雕（见 heroArt.js） */
+  const { isDark } = useTheme();
+  const hero = heroArt(isDark);
+
   const [nearFace, setNearFace] = useState(false);
   const [showReply, setShowReply] = useState(false);
 
@@ -146,8 +152,15 @@ export default function GuardianScene({
       ref={sceneRef}
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
-      className="world-scene relative isolate overflow-hidden rounded-[26px] border border-white/[0.07] bg-[#050807] shadow-2xl shadow-black/50 min-[1100px]:min-h-[100svh] min-[1100px]:rounded-none min-[1100px]:border-0"
-      style={{ "--gx": "50%", "--gy": "38%", "--px": "0", "--py": "0" }}
+      className="world-scene relative isolate overflow-hidden rounded-[26px] border border-white/[0.07] shadow-2xl shadow-black/50 min-[1100px]:min-h-[100svh] min-[1100px]:rounded-none min-[1100px]:border-0"
+      style={{
+        "--gx": "50%",
+        "--gy": "38%",
+        "--px": "0",
+        "--py": "0",
+        /* 照片没贴上时的底色：浅色主题给纸本米白，深色保持近黑 */
+        background: "var(--tp-bg, #050807)",
+      }}
     >
       {/* ================= 背景：同一张照片的两层（写真景深） ============== */}
       {/*
@@ -163,20 +176,21 @@ export default function GuardianScene({
       <div className="pointer-events-none absolute inset-0" aria-hidden="true">
         <picture>
           {/* 桌面：宽幅合成图（webp 优先，jpg 兜底） */}
-          <source
-            media="(min-width: 1100px)"
-            srcSet="/images/thai-guardian-hero-wide.webp"
-            type="image/webp"
-          />
-          <source
-            media="(min-width: 1100px)"
-            srcSet="/images/thai-guardian-hero-wide.jpg"
-            type="image/jpeg"
-          />
+          <source media="(min-width: 1100px)" srcSet={hero.wide} type="image/webp" />
+          {hero.wideFallback && (
+            <source
+              media="(min-width: 1100px)"
+              srcSet={hero.wideFallback.src}
+              type={hero.wideFallback.type}
+            />
+          )}
           {/* 手机 / 平板：竖幅原图 */}
-          <source srcSet="/images/thai-guardian-hero.webp" type="image/webp" />
+          <source srcSet={hero.portrait} type="image/webp" />
+          {hero.portraitFallback && (
+            <source srcSet={hero.portraitFallback.src} type={hero.portraitFallback.type} />
+          )}
           <img
-            src="/images/thai-guardian-hero.jpg"
+            src={hero.portrait}
             alt=""
             className="world-scene-subject absolute inset-0 h-full w-full object-cover object-[42%_8%]"
             fetchPriority="high"
@@ -190,7 +204,7 @@ export default function GuardianScene({
 
         {/* 外圈那一层：同一张图，模糊 + 只在外围可见（桌面端已烘进宽幅图，故隐藏） */}
         <img
-          src="/images/thai-guardian-hero.webp"
+          src={hero.portrait}
           alt=""
           className="world-scene-dof absolute inset-0 h-full w-full object-cover object-[42%_8%] min-[1100px]:hidden"
           loading="lazy"

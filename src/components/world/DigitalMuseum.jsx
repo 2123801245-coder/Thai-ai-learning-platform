@@ -184,9 +184,10 @@ export default function DigitalMuseum({ rooms = [] }) {
                 transition: "transform 220ms ease-out",
               }}
             >
-              {/* 远景：环境光 + 巨型字形 */}
+              {/* 远景：环境光 + 巨型字形（环境层在深色世界含一层夜色渐变，纸上退掉） */}
               <div
                 className="pointer-events-none absolute inset-0 -z-10"
+                data-plate="scrim"
                 style={{
                   transform: "translateZ(-60px)",
                   background: `radial-gradient(70% 60% at 22% 18%, ${active.accent}2e, transparent 62%), radial-gradient(60% 60% at 84% 78%, ${active.accent}1a, transparent 66%), linear-gradient(180deg, rgba(6,10,12,0.2), rgba(4,7,10,0.75))`,
@@ -277,9 +278,10 @@ export default function DigitalMuseum({ rooms = [] }) {
                 </div>
               </div>
 
-              {/* 近景：暗角，把所有内容压进「展厅」里 */}
+              {/* 近景：暗角，把所有内容压进「展厅」里（纸面下退掉：纸上不需要暗角） */}
               <div
                 className="pointer-events-none absolute inset-0 -z-10"
+                data-plate="scrim"
                 style={{
                   transform: "translateZ(30px)",
                   background:

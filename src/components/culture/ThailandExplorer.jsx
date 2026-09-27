@@ -23,7 +23,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+/* 展开动效统一用全站的 .t-acc 手风琴过渡（见 src/themes/theme.css 尾部），不再引 framer-motion */
 import {
   ArrowLeft,
   ArrowRight,
@@ -375,6 +375,8 @@ export default function ThailandExplorer({ onBack, initialCity, onCity }) {
             className="exp-map"
             src={THAILAND_MAP_IMAGE}
             alt="泰国地图：从北到南标出九座可以探索的城市"
+            /* 夜景地图艺术图：纸面下整幅转印（通用规则见 world-shim.css data-plate） */
+            data-plate="art"
             draggable={false}
             decoding="async"
           />
@@ -494,17 +496,20 @@ export default function ThailandExplorer({ onBack, initialCity, onCity }) {
         </span>
       </header>
 
-      {/* ── 城市面板：语言 / 文化 / 场景对话 ── */}
-      <AnimatePresence>
-        {panelOpen ? (
-          <motion.aside
-            className="exp-panel"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.22 }}
-            aria-label={`${city.name} 的语言与文化`}
-          >
+      {/* ── 城市面板：语言 / 文化 / 场景对话 ──
+          展开收起走全站统一的 .t-acc 手风琴过渡（grid-template-rows 0fr↔1fr，
+          纯 CSS）。面板本体始终挂载：城市切换时面板保持开、内容即时更新，
+          不再有卸载-挂载的闪烁；高度动画由 .t-acc-panel 包裹承接。 */}
+      <div className="t-acc exp-panel-acc" data-open={panelOpen ? "true" : "false"}>
+        <div className="t-acc-panel">
+          <div className="t-acc-panel-inner">
+            {/* 收起时面板整体不可聚焦（内部按钮多，Tab 会掉进看不见的面板） */}
+            <aside
+              className="exp-panel"
+              aria-label={`${city.name} 的语言与文化`}
+              aria-hidden={!panelOpen}
+              {...(panelOpen ? {} : { inert: "" })}
+            >
             <div className="exp-panel-head">
               <div>
                 <p className="exp-panel-en" style={{ color: city.color }}>
@@ -672,9 +677,10 @@ export default function ThailandExplorer({ onBack, initialCity, onCity }) {
                 ? `已探索 ${explored.visits} 次 · 最近：${explored.lastAction}`
                 : "还没在这里做过练习——听一句或进一次场景对话就算探索过"}
             </p>
-          </motion.aside>
-        ) : null}
-      </AnimatePresence>
+            </aside>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

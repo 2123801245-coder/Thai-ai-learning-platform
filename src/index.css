@@ -819,121 +819,6 @@
   100% { opacity: 0; }
 }
 
-/* =========================================================
-   星系画布的背景视频
-   ---------------------------------------------------------
-   真实星空素材铺在 WebGL 画布下层（WorldCanvas 的 gl.alpha = true，
-   且 GalaxyScene 里原来那个不透明背景球已移除）。
-   视频本身在动，所以不再叠加 CSS 位移动画。
-========================================================= */
-
-.galaxy-bg-video {
-  object-position: center;
-  /* 首帧解码前的底色，避免闪一下透明 */
-  background-color: #04090c;
-  /*
-   * 压暗 + 降饱和 + **大半径模糊**。
-   *
-   * 关键原因（用户三次反馈，最后一次原话："被星空挡住了"）：
-   * 这段素材本身就是一片**锐利、极密的银河星点**。只压亮度是没用的 ——
-   * 密密麻麻的小白点在近黑底上，哪怕只剩 15% 亮度也依然是一屏明显星点，
-   * 而星座星点（加光、尺寸小）永远抢不过它，主体立不出来。
-   * 实测：brightness 0.55 时整屏仍是密集星点；
-   *      blur 2px 仍能看清星点；blur 9px 才退成"一层银河薄雾"。
-   *
-   * 于是策略改为：**视频只管氛围（虚），锐利星点全部交给 3D 星场与星座。**
-   * 背景 = 一层柔和的银河薄雾，而不是第二片星空。
-   * 缩放 1.06 是为了盖住模糊后边缘的透明羽化。
-   */
-  filter: saturate(0.5) brightness(0.5) blur(9px);
-  transform: scale(1.06);
-}
-
-/* 窄屏直接不上视频：整屏 blur 是移动端最贵的一笔 GPU 开销，
-   而手机上画布本来就小，氛围靠底色 + 压暗层足够。 */
-@media (max-width: 640px) {
-  .galaxy-bg-video {
-    display: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .galaxy-bg-video {
-    display: none;
-  }
-}
-
-/* =========================================================
-   电影层：胶片颗粒 / 开场揭示 / 方向光雾
-   ---------------------------------------------------------
-   目标（用户原话）：不是"一个漂亮的学习星系"，而是
-   "一段可以被暂停的电影画面"。三件事都不能用 WebGL 做：
-     · 颗粒是**全屏均匀**的噪声，用后处理（Pass）成本高且要动渲染管线；
-     · 开场揭示是 CSS 一行动画就能完成的事；
-     · 方向光雾只是一层极淡的渐变，与 3D 灯光无关。
-   全部静态/一次性动画：不产生持续重绘，移动端同样安全。
-========================================================= */
-
-/* 胶片颗粒：SVG feTurbulence 噪声铺满画布，soft-light 叠加。
-   强度必须"看不见"——用户该感觉到的是"不像纯数字渲染"，不是"有颗粒特效"。 */
-.galaxy-grain {
-  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");
-  background-size: 160px 160px;
-  opacity: 0.05;
-  mix-blend-mode: soft-light;
-}
-
-/*
- * 底部详情面板的玻璃模糊。
- * ---------------------------------------------------------
- * 为什么不用 Tailwind 的 `backdrop-blur-xl` 而要单写一条：
- * **backdrop-filter 会让元素成为 `position: fixed` 后代的包含块**。
- * 手机上的全屏详情弹窗就挂在这个面板里，于是被锁进面板的盒子
- * （实测 334px，而视口 390px —— 看起来像"弹窗比屏幕窄"）。
- * 所以窄屏一律不做背景模糊：既让弹窗回到视口坐标系，
- * 也省掉移动端最大的一块 GPU 开销。
- */
-.galaxy-panel {
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
-}
-
-@media (max-width: 639px) {
-  .galaxy-panel {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-}
-
-/* 纸上星图：颗粒要更轻（纸本身有纹理，再叠就脏了） */
-[data-galaxy-mode="paper"] .galaxy-grain {
-  opacity: 0.03;
-}
-
-/* 开场揭示：从更深更近的地方"浮"出来，约 1 秒。只播一次。 */
-@keyframes galaxyReveal {
-  from {
-    opacity: 0;
-    transform: scale(1.015);
-    filter: brightness(0.72);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-    filter: brightness(1);
-  }
-}
-
-.galaxy-reveal {
-  animation: galaxyReveal 0.95s cubic-bezier(0.22, 0.61, 0.36, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .galaxy-reveal {
-    animation: none;
-  }
-}
-
 .site-bg-a {
   animation: bgCrossA 72s ease-in-out infinite;
 }
@@ -1437,6 +1322,35 @@ animation:gradientMove 6s ease infinite;
   animation: trainBob 3s ease-in-out infinite;
 }
 
+/* ===== 登录 / 落地页：Apple 软件风排版 =====
+   系统字体（SF Pro / 苹方）+ 紧字距 + 抗锯齿，贴近 Apple 官网观感 */
+.apple-ui {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 说明：营销页通过 useWorldThemeIsolation 在挂载期间摘掉 <html> 上的世界
+   主题开关，所以这里不需要再和 theme.css 的 `html[data-visual-mode] h1`
+   抢字体/字距 —— 那些规则根本不匹配了。 */
+.apple-ui h1,
+.apple-ui h2,
+.apple-ui h3 {
+  letter-spacing: -0.02em;
+}
+
+@keyframes heroCue {
+  0%, 100% { transform: translateY(0); opacity: .55; }
+  50% { transform: translateY(5px); opacity: 1; }
+}
+
+.animate-hero-cue {
+  animation: heroCue 2s ease-in-out infinite;
+}
+
 @keyframes bobUp {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
@@ -1567,27 +1481,9 @@ animation:gradientMove 6s ease infinite;
 
 /* ===== 数字佛像沉浸主页 ===== */
 
-/* ===== ThaiAI World · 今日活动（静态星图里的今日脉冲） =====
-   与 WebGL 版同义：向外扩散的环 = 今天练过这颗星球。
-   没有 WebGL 的设备走这条路，不能被降级成「看不出今天做过什么」。 */
-@keyframes worldTodayPulse {
-  0% { transform: translate(-50%, -50%) scale(0.65); opacity: 0.75; }
-  70% { opacity: 0.28; }
-  100% { transform: translate(-50%, -50%) scale(1.55); opacity: 0; }
-}
-/* ⚠️ .world-today-ring 的语义是唯一的：「今天练过的那颗星球」。
-   静态星图的核对就靠数它，所以徽标上的小圆点必须用下面这个 -dot 类。 */
-.world-today-ring {
-  opacity: 0.7;
-  animation: worldTodayPulse 2.4s ease-out infinite;
-}
-.world-today-dot {
-  animation: worldTodayPulse 2.4s ease-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .world-today-ring { animation: none; opacity: 0.5; }
-  .world-today-dot { animation: none; }
-}
+/* 「今天的星球」脉冲环（world-today-ring / -dot）随照片星球一起下线：
+   现在五个世界的视觉是 WebGL 石雕（components/home/UniverseRow.jsx），
+   「今日」以徽标形式呈现，不再需要 DOM 脉冲层。 */
 /* =========================================================
    首页守护者场景（真实照片 + 真景深 + AI HUD）
    ---------------------------------------------------------
@@ -1599,9 +1495,8 @@ animation:gradientMove 6s ease infinite;
 
 .world-scene-subject {
   will-change: transform;
-  /* 素材是「青黑陶瓷 + 傍晚」本来就暗，这里补回一点亮度，
-     否则叠上压暗层就什么都看不见了。 */
-  filter: brightness(1.28) contrast(1.05) saturate(1.04);
+  /* 亮度滤镜按主题模式给（深色的青黑陶瓷照片要补光、浅色的白瓷浮雕不能补），
+     见 src/themes/theme.css 的「照片英雄区」段。 */
 }
 
 /* 宽幅版（桌面 ≥1100px）：
@@ -1615,8 +1510,6 @@ animation:gradientMove 6s ease infinite;
     /* 宽幅图（2000×1120）里主体已经是垂直居中的全身像，上下各留 7% 余量，
        所以 50% 50% 即可——任何比例的宽屏裁切都只是横向的，主体不会被切。 */
     object-position: 50% 50%;
-    /* 宽幅图是电影调色，补一点亮度把佛像从暗部里提出来 */
-    filter: brightness(1.12) contrast(1.04) saturate(1.04);
   }
 
   /* 满屏英雄区：左侧文案给到 40px，并在上方空白里居中。
@@ -1675,7 +1568,6 @@ animation:gradientMove 6s ease infinite;
    全身像版：桌面主体层改 contain 后，这一层仍 cover 填满两侧，
    遮罩中心挖空处透出清晰的全身佛像。 */
 .world-scene-dof {
-  filter: blur(11px) saturate(1.05) brightness(0.9);
   transform: scale(1.05);
   -webkit-mask-image: radial-gradient(
     ellipse 50% 72% at 50% 52%,
@@ -2039,29 +1931,10 @@ animation:gradientMove 6s ease infinite;
     animation: none;
   }
 }
-/* =========================================================
-   学习宇宙：透明轨道 + 小型卫星
-   （星球本体是真实照片，见 components/home/UniverseRow.jsx）
-========================================================= */
-
-.world-orbit {
-  border-width: 1px;
-  border-style: solid;
-  pointer-events: none;
-}
-
-.world-satellite {
-  animation: worldSatellite 6.5s ease-in-out infinite;
-}
-
-@keyframes worldSatellite {
-  0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.85; }
-  50% { transform: translate3d(4px, -5px, 0); opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .world-satellite { animation: none; }
-}
+/* 五个世界从「真实照片星球 + DOM 轨道/卫星」（.world-orbit / .world-satellite）
+   换成了白色石雕 Orb：材质、浮雕、光照、动画都在 WebGL 里，见
+   components/world/StoneOrbCanvas.jsx 与 stoneOrbArt.js。
+   那两组规则已无引用，随即删除。 */
 
 /* =========================================================
    AI Teacher Avatar · 数字守护者（components/ai/AIAvatar.jsx）
@@ -2756,6 +2629,13 @@ animation:gradientMove 6s ease infinite;
 }
 
 /* ── 城市面板 ── */
+/* 城市面板的手风琴包裹层：展开/收起高度动画由 .t-acc 承接（--acc-* 令牌见 theme.css）。
+   面板本体在 .t-acc-panel-inner 内部继续自己的 max-height 滚动 —— 内层 grid
+   1fr 与内部滚动互不干扰（滚动条留在面板上，不落在外层动画容器上）。 */
+.exp-panel-acc {
+  width: 100%;
+}
+
 .exp-panel {
   width: 100%;
   /* 面板内容较长（城市志三卷）：桌面端同时受板宽与视口高度约束，
@@ -3069,7 +2949,9 @@ animation:gradientMove 6s ease infinite;
     z-index: 3;
   }
 
-  .exp-panel {
+  /* 浮动定位落在手风琴包裹层上：面板本体保持文档流，
+     .t-acc 的 grid 行才能由内容撑开（绝对定位会脱离轨道，1fr 恒为 0） */
+  .exp-panel-acc {
     position: absolute;
     left: 2%;
     top: 22%;
@@ -3121,7 +3003,9 @@ animation:gradientMove 6s ease infinite;
   .exp-zoom button { width: 30px; height: 30px; }
   .exp-zoom-value { min-width: 42px; font-size: 11px; }
 
-  .exp-panel { order: 2; max-height: none; }
+  /* order 跟随文档流子元素：现在流里是手风琴包裹层，不是面板本体 */
+  .exp-panel-acc { order: 2; }
+  .exp-panel { max-height: none; }
 
   .exp-title .exp-h1 { font-size: 26px; }
   .exp-title .exp-eyebrow { font-size: 10px; letter-spacing: 0.32em; }
@@ -3173,60 +3057,3 @@ animation:gradientMove 6s ease infinite;
   .exp-round { transition: none !important; }
 }
 
-/* =========================================================
-   学习星系 · 世界化的画布皮
-   ---------------------------------------------------------
-   只加规则、不改上面任何一条。所有选择器都带
-   `[data-galaxy-mode="..."]`（这个属性写在 LearningGalaxy 的 <section> 上），
-   默认世界（midnight）不写任何规则 —— 基准世界的观感由组件内联样式保证。
-
-   为什么这些必须在 CSS 而不是内联：
-     · 纸世界的视频必须**不上**（display:none）—— 内联只能改透明度，
-       视频解码与首帧仍然白跑一路，还可能在切换瞬间闪一下；
-     · 古典网格的印刷质感（细线、mix-blend-mode）内联写不进
-       currentColor 的继承链，也不好维护；
-     · 世界切换是 <html data-visual-mode> 级别的变化，用 CSS 跟它对齐，
-       组件不必为"哪些世界要网格"再长出一堆分支。
-========================================================= */
-
-/* ---------- 纸上星图：视频关掉，深色底换成纸面 ---------- */
-[data-galaxy-mode="paper"] .galaxy-bg-video {
-  display: none;
-}
-/* 视频没上时（纸上 / 减弱动效），露出的必须是纸色，而不是原来那层深蓝黑 */
-[data-galaxy-mode="paper"] .galaxy-frame {
-  background-color: #f6f1e6;
-}
-
-/* ---------- 纸上星图：古典天文图的网格皮 ---------- */
-/* currentColor 决定线的颜色：给一层古铜金，透明度已经在 SVG 的 opacity 里，
-   这里再整体压一档，避免细线在纸面上"跳"出来。 */
-.galaxy-paper-grid {
-  color: #8a6b28;
-  opacity: 0.5;
-  mix-blend-mode: multiply;
-}
-
-/* ---------- 现代世界：理性坐标系（画布层，在 3D 之下） ---------- */
-.galaxy-tech-grid {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
-  background-size: 28px 28px;
-  /* 中心留空：网格不该压住星系中心（那里是数据的主体） */
-  mask-image: radial-gradient(62% 70% at 50% 46%, transparent 24%, #000 78%);
-  -webkit-mask-image: radial-gradient(62% 70% at 50% 46%, transparent 24%, #000 78%);
-}
-
-/* ---------- 林间世界：一层很轻的雾（画布层，在 3D 之下） ---------- */
-.galaxy-mist-layer {
-  background:
-    radial-gradient(72% 66% at 32% 74%, rgba(150, 196, 160, 0.11), transparent 68%),
-    radial-gradient(58% 52% at 78% 24%, rgba(190, 214, 196, 0.08), transparent 70%);
-  mix-blend-mode: screen;
-}
-
-/* ---------- 减弱动效：纸上网格不再依赖混合（部分浏览器下 multiply 会拖慢合成） ---------- */
-@media (prefers-reduced-motion: reduce) {
-  .galaxy-paper-grid { mix-blend-mode: normal; opacity: 0.4; }
-}

@@ -100,7 +100,7 @@ export const cityAtlas = [
       { id: "restaurant", label: "餐厅点餐" },
       { id: "convenience", label: "便利店" },
     ],
-    cultureIds: ["songkran", "mangorice", "wai", "monk"],
+    cultureIds: ["songkran", "mangorice", "wai", "monk", "yipeng", "khaosoi"],
     language: [
       { th: "นั่งชิล ๆ อยู่เชียงใหม่", roman: "nâang chill-chill yùu siiang-mài", cn: "在清迈悠闲地坐着" },
       { th: "ขอคาปูชิโน่แก้วใหญ่ค่ะ", roman: "khɔ̌ɔ kaapuu-chi-nôo gɛ̂ɛo yài khâ", cn: "要一杯大杯卡布奇诺" },
@@ -124,7 +124,7 @@ export const cityAtlas = [
       { id: "hotel", label: "酒店入住" },
       { id: "nightmarket", label: "火车夜市" },
     ],
-    cultureIds: ["songkran", "loykrathong", "wai", "tomyum", "streetfood"],
+    cultureIds: ["songkran", "loykrathong", "wai", "tomyum", "streetfood", "trutjin", "khon", "queue"],
     language: [
       { th: "ไปที่นี่ครับ", roman: "pai thîi nîi kráp", cn: "去这里（给司机看地址）" },
       { th: "เปิดแอร์ได้ไหมครับ", roman: "pəət aa dâai mǎi kráp", cn: "可以开空调吗" },
@@ -148,7 +148,7 @@ export const cityAtlas = [
       { id: "travel", label: "城际出行" },
       { id: "restaurant", label: "河边餐厅" },
     ],
-    cultureIds: ["monk", "wai", "krab", "tambun"],
+    cultureIds: ["monk", "wai", "krab", "tambun", "templedress"],
     language: [
       { th: "วัดนี้เก่าแก่มาก", roman: "wát níi kào-kɛ̀ɛ mâak", cn: "这座庙非常古老" },
       { th: "ซื้อตั๋วเข้าชมที่ไหน", roman: "sʉ́ʉ dtǔa khâo chom thîi nǎi", cn: "在哪儿买参观票" },
@@ -169,7 +169,7 @@ export const cityAtlas = [
     tagline: "安达曼明珠：海、船与日落",
     scenario: { id: "travel", label: "旅行出行" },
     extraScenarios: [{ id: "shopping", label: "市场购物" }],
-    cultureIds: ["wai", "tomyum", "somtam", "padthai"],
+    cultureIds: ["wai", "tomyum", "somtam", "padthai", "durian"],
     language: [
       { th: "ไปเกาะนี้กี่โมง", roman: "pai kɔ̀ níi kìi moong", cn: "几点去这个岛" },
       { th: "ขอเช่ามอเตอร์ไซค์วันหนึ่ง", roman: "khɔ̌ɔ châo mɔɔ-dtəə-sai wan nùeng", cn: "租一天摩托车" },
@@ -241,7 +241,7 @@ export const cityAtlas = [
       { id: "daily", label: "日常寒暄" },
       { id: "shopping", label: "市集购物" },
     ],
-    cultureIds: ["somtam", "tomyum", "luktung", "streetfood"],
+    cultureIds: ["somtam", "tomyum", "luktung", "streetfood", "morlam", "mookrata"],
     language: [
       { th: "แซบหลาย", roman: "sɛ̂ɛp lǎai", cn: "太好吃了（伊善话）" },
       { th: "ไปไส", roman: "pai sǎi", cn: "去哪儿（伊善话）" },
@@ -286,7 +286,7 @@ export const cityAtlas = [
       { id: "daily", label: "小城寒暄" },
       { id: "hotel", label: "民宿入住" },
     ],
-    cultureIds: ["monk", "tambun", "wai", "krab"],
+    cultureIds: ["monk", "tambun", "wai", "krab", "lotus"],
     language: [
       { th: "เช่าจักรยานเท่าไหร่", roman: "châo jàk-grà-yaan thâo-rài", cn: "租自行车多少钱" },
       { th: "อุทยานประวัติศาสตร์อยู่ไหน", roman: "ùt-thá-yaan bprà-wàt-tì-sàat yùu nǎi", cn: "历史公园在哪儿" },
