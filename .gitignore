@@ -37,6 +37,10 @@ certs/
 backend/users.db
 backend/uploads
 
+# Python（字幕流水线 scripts/thai_asr_subtitles.py 运行时产生）
+__pycache__/
+*.pyc
+
 # 生成物 / 大文件（不入库）
 _extract/
 # 一次性字幕提取产物（scratch，不入库）
@@ -44,6 +48,8 @@ subtitles/
 subtitle_refine.py
 backend/videos/
 backend/thaiai.db
+# AI 逐句解析缓存（付费生成结果，按 taskId 落盘；换机器重生成即可）
+backend/cache/
 .freebuff/
 
 # .env.example 是公开模板，允许入库
@@ -55,3 +61,4 @@ deploy/deploy.env
 # 用户数据库及其备份（含真实用户数据，严禁入库）
 backend/users.db*
 backend/*.db
+backend/*.sqlite
