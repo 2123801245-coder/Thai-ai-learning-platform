@@ -64,6 +64,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Capacitor 模板的 android/.gitignore 排除了两个由 cap sync 本地生成的目录：
+      #   capacitor-cordova-android-plugins（app/capacitor.build.gradle 无条件 apply 它）
+      #   ../node_modules/@capacitor/android（capacitor.settings.gradle 指向的壳库本体）
+      # 全新 checkout 上两者都不存在，直接 gradlew 必炸，所以 CI 里先补齐：
+      # 装 npm 依赖 + 用 capacitor 的 android 模板生成 cordova 模块骨架。
+      - name: 安装 npm 依赖
+        run: npm ci
+
+      - name: 生成 Capacitor 安卓支撑模块
+        run: |
+          set -e
+          npx cap add android 2>/dev/null || true   # 已存在时幂等报错，忽略
+          npx cap sync android
+          test -f android/capacitor-cordova-android-plugins/cordova.variables.gradle \
+            || { echo '::error::cap sync 未生成 cordova.variables.gradle'; exit 1; }
+
       - name: 校验版本号一致性
         run: node scripts/check-android-app.mjs
 
@@ -102,6 +118,12 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle', 'android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-
+
+      - name: 缓存 node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: 准备签名材料
         id: signing
