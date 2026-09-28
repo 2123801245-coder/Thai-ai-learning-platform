@@ -1,0 +1,90 @@
+apply plugin: 'com.android.application'
+
+// 签名材料不进仓库：本地放在 android/keystore.properties（已 gitignore），
+// CI 从 secrets 生成同名文件。缺失时退回 debug 签名——能装能测，
+// 但**不是**可长期更新用户的正式密钥（debug 密钥每台机器都不同）。
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new java.util.Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+def hasReleaseSigning = keystoreProps.getProperty("storeFile") != null
+
+// 版本号唯一来源：android/version.properties（CI 也读它，并可用 -P 覆盖）。
+def versionProps = new java.util.Properties()
+rootProject.file("version.properties").withInputStream { versionProps.load(it) }
+
+// 先落成局部变量：Gradle 里 `versionCode (x ?: 1).toString().toInteger()` 会被解析成
+// 对 versionCode(...) 返回值的链式调用（而 setter 返回 null），直接报 For input string: "null"。
+def appVersionCode = (project.findProperty("appVersionCode") ?: versionProps.getProperty("versionCode") ?: "1").toString().toInteger()
+def appVersionName = (project.findProperty("appVersionName") ?: versionProps.getProperty("versionName") ?: "1.0.0").toString()
+
+android {
+    namespace = "online.thaiai.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "online.thaiai.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // 版本号可由构建命令覆盖（CI 用 run number 递增）：
+        // Android 只有 versionCode 变大才能覆盖安装，否则用户得先卸载再装，
+        // 而卸载会清掉登录态。
+        versionCode appVersionCode
+        versionName appVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword keystoreProps.getProperty("storePassword")
+                keyAlias keystoreProps.getProperty("keyAlias")
+                keyPassword keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // 不混淆：壳本身没有可优化的业务代码，而 R8 会牵连插件反射调用，
+            // 出问题只在真机上暴露。体积收益（几百 KB）不值得这个风险。
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

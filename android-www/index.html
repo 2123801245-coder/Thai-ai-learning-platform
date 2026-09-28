@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>ThaiAI</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+        background: #050807; color: #e7f5ee;
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif;
+      }
+      .mark {
+        width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center;
+        font-size: 30px; font-weight: 800; color: #04150f;
+        background: linear-gradient(140deg, #34d399, #0f766e);
+      }
+      p { margin: 0; font-size: 14px; color: rgba(231, 245, 238, 0.6); }
+      a { color: #6ee7b7; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <!-- 正常情况不会看到这一页：壳启动即加载 https://thai-ai.online。
+         万一本地资源被当作入口（调试、旧缓存），就直接把用户送回主站。 -->
+    <div class="mark">ท</div>
+    <p>正在打开 ThaiAI…</p>
+    <a href="https://thai-ai.online/">手动进入</a>
+    <script>
+      location.replace("https://thai-ai.online/");
+    </script>
+  </body>
+</html>

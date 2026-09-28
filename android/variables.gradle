@@ -1,0 +1,22 @@
+ext {
+    // Android 7.0 起步：国内存量机型覆盖够广，WebView 也是可独立升级的组件
+    minSdkVersion = 24
+    // 用新 SDK 编译，但 target 停在 34：
+    // targetSdk 35+ 会强制 edge-to-edge，状态栏与输入法都改由应用自己处理 insets，
+    // 而这是个加载远程网页的壳——网页侧拿不到可靠的 env(safe-area-inset-*)，
+    // 键盘顶起输入框的行为也会变。targetSdk 34 保持系统托管，行为可预期。
+    // 本 App 不上应用商店（侧载分发），不受 Play 的 targetSdk 政策约束。
+    compileSdkVersion = 36
+    targetSdkVersion = 34
+    androidxActivityVersion = '1.11.0'
+    androidxAppCompatVersion = '1.7.1'
+    androidxCoordinatorLayoutVersion = '1.3.0'
+    androidxCoreVersion = '1.17.0'
+    androidxFragmentVersion = '1.8.9'
+    coreSplashScreenVersion = '1.2.0'
+    androidxWebkitVersion = '1.14.0'
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.3.0'
+    androidxEspressoCoreVersion = '3.7.0'
+    cordovaAndroidVersion = '14.0.1'
+}

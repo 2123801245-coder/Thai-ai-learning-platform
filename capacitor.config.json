@@ -1,0 +1,16 @@
+{
+  "appId": "online.thaiai.app",
+  "appName": "ThaiAI 泰语",
+  "webDir": "android-www",
+  "server": {
+    "url": "https://thai-ai.online",
+    "errorPath": "offline.html",
+    "androidScheme": "https",
+    "allowNavigation": ["thai-ai.online", "*.thai-ai.online"]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}

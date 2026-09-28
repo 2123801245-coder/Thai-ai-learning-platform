@@ -53,6 +53,8 @@ const Login = lazy(() => import("@/pages/Login"));
 /* 分享链接的公开落地页：证书/成就卡分享出去后，收件人落在这里（不需要登录） */
 const ShareLanding = lazy(() => import("@/pages/ShareLanding"));
 const ThaiLanding = lazy(() => import("@/pages/ThaiLanding"));
+/* 安卓 App 下载页：发给别人、印二维码都指着它，所以同样必须公开可达 */
+const GetApp = lazy(() => import("@/pages/GetApp"));
 const Register = lazy(() => import("@/pages/Register"));
 const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
@@ -269,6 +271,21 @@ export default function App() {
         <Route
           path="/thai-landing"
           element={<ThaiLanding />}
+        />
+
+        {/* =================================================
+            安卓 App 下载页（/get-app）
+            —— 分享与二维码的目标页；/download 是顺手的别名。
+        ================================================= */}
+
+        <Route
+          path="/get-app"
+          element={<GetApp />}
+        />
+
+        <Route
+          path="/download"
+          element={<Navigate to="/get-app" replace />}
         />
 
         {/* TEMP: 素材对照页（选完图删除） */}

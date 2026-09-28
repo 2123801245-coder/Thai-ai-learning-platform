@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标（Android 8+）只有中间 66/108 是安全区，四周会被各家启动器裁掉。
+     品牌 logo 是满幅方图，所以这里用 inset 把内容压进安全区，
+     不需要为每种密度单独导出带透明留白的位图。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:bottom="21dp"
+        android:drawable="@drawable/thaiai_mark"
+        android:left="21dp"
+        android:right="21dp"
+        android:top="21dp" />
+</layer-list>

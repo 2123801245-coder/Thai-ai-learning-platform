@@ -485,6 +485,8 @@ const FOOTER_COLS = [
       { label: "词汇", to: "/vocabulary" },
       { label: "口语练习", to: "/speaking" },
       { label: "文化宇宙", to: "/culture-universe" },
+      /* 安卓下载页：落地页的访客大多在手机上，给他们一条「装成 App」的路 */
+      { label: "安卓 App 下载", to: "/get-app" },
     ],
   },
   {

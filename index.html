@@ -20,7 +20,7 @@
       相对路径分享出去就是一张空图。%SITE_URL% 是占位符，由 vite.config.js
       里的 thaiai-share-meta 插件按 .env 的 VITE_SITE_URL 替换（dev 与 build 都替换）。
       下面这段还缺少「按页面区分卡片」的能力 —— 那是公开路由落地页的事，
-      由 scripts/build-share-pages.mjs 在构建末尾为 /login、/share、/thai-landing
+      由 scripts/build-share-pages.mjs 在构建末尾为 /login、/share、/thai-landing、/get-app
       各生成一份带自己标题与卡片的 HTML（nginx 的 try_files 会自动命中）。
     -->
     <meta property="og:type" content="website" />

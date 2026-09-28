@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <!-- WebView 容器主题：网页自己画所有 UI，这里只负责「壳」的外观。
+         状态栏/导航栏与网页底色同色，深色图标关掉（白图标才看得见）。 -->
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <item name="android:windowBackground">@color/thaiai_bg</item>
+        <item name="android:statusBarColor">@color/thaiai_bg</item>
+        <item name="android:navigationBarColor">@color/thaiai_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <!-- 启动图主题：核心 splash 库的主题，窗口背景换成品牌启动图。
+         postSplashScreenTheme 让启动图结束后切回上面的正常主题（状态栏颜色才生效）。 -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+</resources>

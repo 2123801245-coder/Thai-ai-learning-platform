@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12(API 31)+ 由系统画启动画面：不再用 <item name="android:background">，
+         而是读 windowSplashScreen* 这两个属性。这里把它们也设成品牌深色 + logo，
+         否则系统会用默认白底闪一下。注意：values-v31 里的同名 style 是「整体覆盖」基础定义，
+         基础样式里需要的项要在这里再写一遍。 -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="android:windowSplashScreenBackground">@color/thaiai_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+</resources>

@@ -22,13 +22,17 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+/* 安卓版的版本号/体积只写在 src/lib/appDownload.js 里（网页侧的唯一真源），
+   下载页的卡片文案直接引用它，免得改一处版本号忘了改另一处提示。 */
+import { ANDROID_APP } from "../src/lib/appDownload.js";
+
 const DIST = path.resolve(process.cwd(), "dist");
 const SOURCE = path.join(DIST, "index.html");
 
 /* 每个公开可分享路由一张卡片。
    卡片图放在 public/brand/ 下：
      og-image.png —— 品牌版（默认，`/` 与 /thai-landing 用）
-     og-scene.png —— 产品场景版（对话界面，/login、/share 用） */
+     og-scene.png —— 产品场景版（对话界面，/login、/share、/get-app 用） */
 const PAGES = [
   {
     route: "login",
@@ -50,6 +54,13 @@ const PAGES = [
     description:
       "从认字、发音到自由对话：词汇星球、口语练习、文化宇宙与每日学习闭环。",
     image: "/brand/og-image.png",
+  },
+  {
+    /* 安卓下载页：微信里发出去要一眼看出「点开就能装」 */
+    route: "get-app",
+    title: "ThaiAI 安卓 App 下载 · 装到手机上",
+    description: `安卓版 App：朗读与跟读更稳、视频与逐句精听切后台不断。约 ${ANDROID_APP.sizeMB} MB，支持安卓 ${ANDROID_APP.minAndroid} 及以上，和网页版同一个账号。`,
+    image: "/brand/og-scene.png",
   },
 ];
 

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与网页端 #050807 底色一致：启动图、状态栏、导航栏都用它，
+         免得深色 App 里突兀地闪一块白。 -->
+    <color name="thaiai_bg">#FF050807</color>
+    <color name="thaiai_bg_soft">#FF0D1F1A</color>
+    <color name="thaiai_accent">#FF34D399</color>
+</resources>

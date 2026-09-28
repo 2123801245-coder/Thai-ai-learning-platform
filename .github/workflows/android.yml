@@ -1,0 +1,234 @@
+name: Build Android APK
+
+# ============================================================
+# 安卓壳（Capacitor）出包流水线
+#
+#   1. 校验版本号：android/version.properties 与 src/lib/appDownload.js 必须一致
+#      （不一致 = 网页面板会指向不存在的 APK，所以直接失败）
+#   2. 用 GitHub Secrets 里的密钥签名出正式包（缺密钥则退化成 debug 签名，
+#      产物能装能测，但**不能**作为正式分发版本：debug 密钥每个 runner 都不同，
+#      用户装过一版之后就再也覆盖不上）
+#   3. 校验产物：签名证书、包名、targetSdk、权限清单
+#   4. 上传 GitHub 产物，并推送到服务器的持久卷目录
+#      /opt/thaiai/data/uploads/app/thaiai-<版本>.apk
+#      —— 走的是后端已有的 /uploads 静态服务，不需要动 nginx 或编排文件，
+#      也不会被前端 dist 的整体替换冲掉（dist 每次发布是整目录 rsync --delete）。
+#
+# 需要配置的 Secrets（缺签名相关时会在摘要里明确标注「非正式包」）：
+#   ANDROID_KEYSTORE_BASE64   android/keystore/thaiai-release.jks 的 base64
+#   ANDROID_KEYSTORE_PASSWORD 生成密钥时设置的密码
+#   ANDROID_KEY_ALIAS         默认 thaiai
+#   SSH_PASSWORD              与部署流水线同一台服务器的 root 密码（发布 APK 用）
+#
+# 网页端下载入口在设置中心（src/components/common/AndroidAppCard.jsx）；
+# 直接分享给用户的地址：https://thai-ai.online/uploads/app/thaiai-<版本>.apk
+# ============================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'android-www/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/check-android-app.mjs'
+      - 'src/lib/appDownload.js'
+      - 'src/lib/nativeShell.js'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+    inputs:
+      skip_publish:
+        description: '只出 APK 产物，不上传服务器'
+        type: boolean
+        default: false
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: false
+
+env:
+  REMOTE_HOST: 8.140.225.225
+  REMOTE_USER: root
+  SITE_URL: https://thai-ai.online
+  APK_PUBLISH_DIR: /opt/thaiai/data/uploads/app
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    # 首次构建要下载 Gradle 发行版与依赖，给足余量；正常有缓存时 3-5 分钟
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 校验版本号一致性
+        run: node scripts/check-android-app.mjs
+
+      - name: 读取版本号
+        id: ver
+        run: |
+          set -e
+          VC=$(sed -n 's/^versionCode=//p' android/version.properties | tr -d ' \r')
+          VN=$(sed -n 's/^versionName=//p' android/version.properties | tr -d ' \r')
+          echo "code=$VC" >> "$GITHUB_OUTPUT"
+          echo "name=$VN" >> "$GITHUB_OUTPUT"
+          echo "版本：v$VN ($VC)"
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK
+        # GitHub 的 ubuntu 镜像自带 SDK 与 cmdline-tools，但 compileSdk 需要的
+        # platform/build-tools 不一定在，缺了就地补装（幂等）。
+        run: |
+          set -e
+          SDKM=$(command -v sdkmanager || echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager")
+          "$SDKM" --version >/dev/null 2>&1 || { echo "找不到 sdkmanager"; exit 1; }
+          yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+          "$SDKM" "platform-tools" "platforms;android-36" "build-tools;36.0.0" >/dev/null
+          echo "SDK: $ANDROID_SDK_ROOT"
+
+      - name: Gradle 缓存
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: 准备签名材料
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -e
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASS" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::缺少 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD，本次构建将退化为 debug 签名，产物不可用于正式分发。"
+            exit 0
+          fi
+          mkdir -p android/keystore
+          echo "$KEYSTORE_B64" | base64 -d > android/keystore/thaiai-release.jks
+          {
+            echo "storeFile=keystore/thaiai-release.jks"
+            echo "storePassword=$KEYSTORE_PASS"
+            echo "keyAlias=${KEY_ALIAS:-thaiai}"
+            echo "keyPassword=$KEYSTORE_PASS"
+          } > android/keystore.properties
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+          echo "✅ 已写入签名材料（密钥只在 runner 本地，构建后随 runner 销毁）"
+
+      - name: 构建 release APK
+        run: |
+          set -e
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --console=plain \
+            -PappVersionCode=${{ steps.ver.outputs.code }} \
+            -PappVersionName=${{ steps.ver.outputs.name }}
+
+      - name: 校验产物
+        id: verify
+        run: |
+          set -e
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          [ -f "$APK" ] || { echo "没有产物"; exit 1; }
+          BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
+          echo "—— 签名 ——"
+          "$BT/apksigner" verify --print-certs "$APK"
+          # 断言证书主题：确保用的一定是我们的发布密钥，而不是 debug 密钥
+          CERT=$("$BT/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate DN: //p')
+          echo "证书主题: $CERT"
+          case "$CERT" in
+            *CN=ThaiAI*) ;;
+            *) echo "::error::签名证书不是 ThaiAI 发布密钥（实际：$CERT）"; exit 1 ;;
+          esac
+          echo "—— 清单 ——"
+          BADGING=$("$BT/aapt2" dump badging "$APK")
+          echo "$BADGING" | grep -E "^package|^sdkVersion|^targetSdkVersion|uses-permission"
+          PKG=$(echo "$BADGING" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          VCO=$(echo "$BADGING" | sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p")
+          VNA=$(echo "$BADGING" | sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p")
+          [ "$PKG" = "online.thaiai.app" ] || { echo "::error::包名不对：$PKG"; exit 1; }
+          [ "$VCO" = "${{ steps.ver.outputs.code }}" ] || { echo "::error::versionCode 不对：$VCO"; exit 1; }
+          [ "$VNA" = "${{ steps.ver.outputs.name }}" ] || { echo "::error::versionName 不对：$VNA"; exit 1; }
+          # 录音权限必须在（AI 跟读），否则装了也用不了
+          echo "$BADGING" | grep -q "RECORD_AUDIO" || { echo "::error::缺少 RECORD_AUDIO 权限"; exit 1; }
+          SHA=$(shasum -a 256 "$APK" | awk '{print $1}')
+          SIZE=$(du -h "$APK" | cut -f1)
+          {
+            echo "size=$SIZE"
+            echo "sha256=$SHA"
+            echo "file=thaiai-${{ steps.ver.outputs.name }}.apk"
+          } >> "$GITHUB_OUTPUT"
+          echo "产物 OK：$SIZE / sha256 $SHA"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: thaiai-android-v${{ steps.ver.outputs.name }}
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: 发布到服务器
+        id: publish
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_publish == true) }}
+        env:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          set -e
+          if [ -z "$SSH_PASSWORD" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::缺少 SSH_PASSWORD，跳过服务器发布。APK 仍可从本次 Actions 产物下载。"
+            exit 0
+          fi
+          command -v sshpass >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq sshpass; }
+          echo "$SSH_PASSWORD" > ~/.ssp && chmod 600 ~/.ssp
+          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          export SSHPASS="$(cat ~/.ssp)"
+          FILE="thaiai-${{ steps.ver.outputs.name }}.apk"
+          SSH="sshpass -e ssh -o ConnectTimeout=20 ${REMOTE_USER}@${REMOTE_HOST}"
+          $SSH "mkdir -p ${APK_PUBLISH_DIR}" < /dev/null
+          sshpass -e scp -o StrictHostKeyChecking=no \
+            android/app/build/outputs/apk/release/app-release.apk \
+            "${REMOTE_USER}@${REMOTE_HOST}:${APK_PUBLISH_DIR}/${FILE}"
+          # 从服务器内侧验证公网可下载（runner 跨境访问自己的域名常被 SNI 干扰）
+          CODE=$($SSH "curl -sk -o /dev/null -w '%{http_code} %{content_type} %{size_download}' --max-time 30 -r 0-1024 '${SITE_URL}/uploads/app/${FILE}'" < /dev/null)
+          echo "公网自检: HTTP $CODE"
+          case "$CODE" in
+            206*|200*) ;;
+            *) echo "::error::APK 公网不可下载：$CODE"; exit 1 ;;
+          esac
+          rm -f ~/.ssp
+          echo "published=true" >> "$GITHUB_OUTPUT"
+          echo "✅ 已发布：${SITE_URL}/uploads/app/${FILE}"
+
+      - name: 清理签名材料
+        if: always()
+        run: rm -rf android/keystore android/keystore.properties ~/.ssp
+
+      - name: 构建摘要
+        if: always()
+        run: |
+          {
+            echo "## 安卓 APK v${{ steps.ver.outputs.name }} (${{ steps.ver.outputs.code }})"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "|---|---|"
+            echo "| 正式签名 | ${{ steps.signing.outputs.signed == 'true' && '✅ 是' || '⚠️ 否（debug 签名，勿分发）' }} |"
+            echo "| 体积 | ${{ steps.verify.outputs.size }} |"
+            echo "| SHA-256 | \`${{ steps.verify.outputs.sha256 }}\` |"
+            echo "| 已上服务器 | ${{ steps.publish.outputs.published == 'true' && '✅ 是' || '⚠️ 否' }} |"
+            echo ""
+            echo "下载地址：${{ steps.publish.outputs.published == 'true' && format('{0}/uploads/app/{1}', env.SITE_URL, steps.verify.outputs.file) || '见本次 Actions Artifacts' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

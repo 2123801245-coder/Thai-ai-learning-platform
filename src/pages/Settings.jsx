@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import AndroidAppCard from "@/components/common/AndroidAppCard";
 import { motion } from "framer-motion";
 import {
   Settings as SettingsIcon,
@@ -607,6 +608,9 @@ export default function Settings() {
           iconClassName="h-4 w-4 text-emerald-300/80"
         />
       </section>
+
+      {/* 安卓 App：浏览器里是下载入口，壳里是版本与更新 */}
+      <AndroidAppCard />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <button type="button" onClick={() => navigate("/plan")} className="premium-glass card-lift flex items-center justify-between rounded-2xl p-4 text-left">
