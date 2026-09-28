@@ -222,6 +222,7 @@ jobs:
             exit 0
           fi
           command -v sshpass >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq sshpass; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
           echo "$SSH_PASSWORD" > ~/.ssp && chmod 600 ~/.ssp
           ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           export SSHPASS="$(cat ~/.ssp)"
