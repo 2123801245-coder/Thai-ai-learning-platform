@@ -14,6 +14,11 @@ name: Deploy Frontend
 #        → 非 backend/ 路径有变化时 node:20 容器内构建（npmmirror）
 #        → 原子替换 /opt/thaiai/dist → 重启前端容器 → 本机验证/自动回滚
 #
+# 镜像超时保护（2026-09-28 加）：镜像步骤自带 20 分钟步级超时与「推完与否」校验 ——
+#   大文件首次入库（如 93MB 音频）把推送拖慢时，本次发布快速失败、服务器不部署，
+#   而不是拖满 job 的 30 分钟上限。补齐镜像后由服务器轮询通道自动发布，
+#   或本地直推 Gitee 应急（实测 93MB 约 2 分钟）。
+#
 # 服务器首次初始化（一次性，已完成）：/opt/thaiai-src 为 git 仓库，
 # origin 指向 Gitee 私有仓库（凭据内嵌于 .git/config，权限 600）。
 # ============================================================
@@ -54,14 +59,42 @@ jobs:
           fetch-depth: 0
 
       - name: Mirror push to Gitee
+        timeout-minutes: 20
+        continue-on-error: true # 失败/超时不终止 job：由下面的校验门决定是否部署
         run: |
           set -e
-          git remote add gitee "https://${{ secrets.GITEE_USERNAME }}:${{ secrets.GITEE_TOKEN }}@gitee.com/${GITEE_REPO}"
+          # 大包推送在 HTTP/2 下偶发停滞（实测 93MB 推 27 分钟未完）；
+          # 降回 HTTP/1.1 并加大 postBuffer 是 git 大文件推送的常规解法。
+          git config http.version HTTP/1.1
+          git config http.postBuffer 524288000
+          git remote add gitee "https://${{ secrets.GITEE_USERNAME }}:${{ secrets.GITEE_TOKEN }}@gitee.com/${GITEE_REPO}" 2>/dev/null || true
           git push gitee --force "+refs/remotes/origin/*:refs/heads/*" --tags
           echo "镜像完成: Gitee main = $(git rev-parse origin/main)"
 
+      - name: Verify Gitee mirror
+        id: mirror_check
+        if: always()
+        run: |
+          set -e
+          git remote add gitee "https://${{ secrets.GITEE_USERNAME }}:${{ secrets.GITEE_TOKEN }}@gitee.com/${GITEE_REPO}" 2>/dev/null || true
+          WANT="$(git rev-parse origin/main)"
+          HAVE="$(git ls-remote gitee refs/heads/main | cut -f1)"
+          if [ "$HAVE" = "$WANT" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Gitee main 已同步到 $WANT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Gitee main 在 ${HAVE:-<空>}，未同步到 $WANT —— 本次不部署，交给服务器轮询通道在镜像补齐后自动发布"
+          fi
+
+      - name: Mirror gate（镜像未完成则快速失败）
+        if: ${{ steps.mirror_check.outputs.ok != 'true' }}
+        run: |
+          echo "::error::Gitee 镜像未完成（超时或失败），本次发布终止。未推完的对象会在下次 push 时重试；也可本地直推 Gitee 后由服务器轮询通道发布。"
+          exit 1
+
       - name: Setup server SSH
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        if: ${{ steps.mirror_check.outputs.ok == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
         run: |
           set -e
           command -v sshpass >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq sshpass; }
@@ -72,7 +105,7 @@ jobs:
           git config --global core.quotepath off 2>/dev/null || true
 
       - name: Deploy on server (git pull + frontend/backend build + verify)
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        if: ${{ steps.mirror_check.outputs.ok == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
         run: |
           set -e
           export SSHPASS="$(cat ~/.ssh/.ssp)"
@@ -86,7 +119,7 @@ jobs:
           $SSH "chmod +x /opt/thaiai-src/deploy/build-on-server.sh && THAIAI_TRIGGER='GitHub Actions' bash /opt/thaiai-src/deploy/build-on-server.sh"
 
       - name: Public smoke check
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
+        if: ${{ steps.mirror_check.outputs.ok == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.skip_deploy == true) }}
         run: |
           set -e
           CODE=""
