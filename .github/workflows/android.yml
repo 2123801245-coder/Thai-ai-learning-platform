@@ -145,12 +145,19 @@ jobs:
           BT=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)
           echo "—— 签名 ——"
           "$BT/apksigner" verify --print-certs "$APK"
-          # 断言证书主题：确保用的一定是我们的发布密钥，而不是 debug 密钥
+          # 断言证书主题：正式包必须是我们的发布密钥；debug 退化（缺 Secrets 时）
+          # 只标记警告，让流水线走完并在摘要里标注「勿分发」——否则没有
+          # Secrets 的仓库永远红叉，连产物都拿不到（文档承诺的行为）。
           CERT=$("$BT/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate DN: //p')
           echo "证书主题: $CERT"
           case "$CERT" in
             *CN=ThaiAI*) ;;
-            *) echo "::error::签名证书不是 ThaiAI 发布密钥（实际：$CERT）"; exit 1 ;;
+            *)
+              if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+                echo "::error::签名证书不是 ThaiAI 发布密钥（实际：$CERT）"; exit 1
+              else
+                echo "::warning::debug 签名产物（缺 Secrets），仅用于测试，勿分发"
+              fi ;;
           esac
           echo "—— 清单 ——"
           BADGING=$("$BT/aapt2" dump badging "$APK")
