@@ -170,7 +170,9 @@ jobs:
           # 断言证书主题：正式包必须是我们的发布密钥；debug 退化（缺 Secrets 时）
           # 只标记警告，让流水线走完并在摘要里标注「勿分发」——否则没有
           # Secrets 的仓库永远红叉，连产物都拿不到（文档承诺的行为）。
-          CERT=$("$BT/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate DN: //p')
+          # build-tools 36 的输出是 "V2 Signer: certificate DN: …"，老版本是
+          # "Signer #1 certificate DN: …"，这里统一取第一行、剥掉前缀，两种都兼容。
+          CERT=$("$BT/apksigner" verify --print-certs "$APK" | grep -m1 'certificate DN:' | sed 's/.*certificate DN: //' | tr -d '\r')
           echo "证书主题: $CERT"
           case "$CERT" in
             *CN=ThaiAI*) ;;
