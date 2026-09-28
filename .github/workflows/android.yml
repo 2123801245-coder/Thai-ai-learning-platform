@@ -221,6 +221,13 @@ jobs:
             echo "::warning::缺少 SSH_PASSWORD，跳过服务器发布。APK 仍可从本次 Actions 产物下载。"
             exit 0
           fi
+          # debug 签名的包绝不能发到服务器：用户装过一次后永远无法覆盖升级，
+          # 还会把持久卷里现有的正式包覆盖掉。只在正式签名时才发布。
+          if [ "${{ steps.signing.outputs.signed }}" != "true" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::debug 签名包不发布到服务器（防止覆盖正式包），仅上传 Actions 产物。"
+            exit 0
+          fi
           command -v sshpass >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq sshpass; }
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           echo "$SSH_PASSWORD" > ~/.ssp && chmod 600 ~/.ssp
